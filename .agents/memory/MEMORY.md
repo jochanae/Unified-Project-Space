@@ -2,3 +2,4 @@
 - [Critical file protection](critical-files.md) — lib/db/src/index.ts and workspace.tsx must never be read/touched
 - [Axiom-Atlas backend migration](axiom-atlas-backend.md) — 68 src files, 28 DB tables, startup quirks, required API keys, drizzle push workaround
 - [ATLAS_ZERO constitution](atlas-zero.md) — June 16 strategic reset; Phase 1 = Idea→Build→Continue only; complexity must be earned; ATLAS_ZERO.md at workspace root wins over all code/features
+- [Database — Replit Postgres](database-replit.md) — DB migrated from external Supabase to Replit built-in Postgres; push-force also hits TTY bug; solution is wipe schema then plain push
