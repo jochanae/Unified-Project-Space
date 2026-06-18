@@ -1,6 +1,4 @@
-- [Axiom project architecture](axiom-architecture.md) — frontend→Cloud Run→Supabase prod; local backend DB is Replit built-in; never set DATABASE_URL secret
-- [Sync workflow](sync-workflow.md) — scripts/sync-frontend.sh pulls atlas-idk from GitHub; onboarding.tsx always needs scroll patch after sync; vite.config.ts is Replit-patched, never overwrite
-- [Database isolation](database-isolation.md) — prod Supabase is osuasytymbzurjvklhde; Lovable Supabase is lmrpnsjckljdwqudtelk; drizzle push previously hit Lovable DB by mistake
-- [Critical file protection](critical-files.md) — lib/db/src/index.ts and workspace.tsx must never be read/touched
-- [Axiom-Atlas backend migration](axiom-atlas-backend.md) — 68 src files, 28 DB tables, startup quirks, required API keys, drizzle push workaround
-- [ATLAS_ZERO constitution](atlas-zero.md) — June 16 strategic reset; Phase 1 = Idea→Build→Continue only
+- [Database isolation](database-isolation.md) — never set DATABASE_URL secret; Replit auto-provides its own isolated PostgreSQL
+- [API base and sync-protected files](api-base-sync.md) — api.ts DEFAULT_API_BASE must stay ""; vite.config.ts and src/lib/api.ts are both skip-listed in sync-frontend.sh
+- [Session auth fix](session-auth-fix.md) — App.tsx session-expired check used _originalFetch with full URL, bypassing bearer token; fixed to use relative /api/auth/me with manual bearer header
+- [Google OAuth setup](google-oauth.md) — backend fully wired in google-auth.ts; redirect URI is dynamically derived from x-forwarded-host; GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set as Replit secrets

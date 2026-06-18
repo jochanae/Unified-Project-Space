@@ -36,7 +36,7 @@ find "$TMP/extracted/$EXTRACTED/src" -type f | while read zipfile; do
     if [ "$z" != "$o" ]; then
       # Skip vite.config.ts and onboarding.tsx (Replit-patched files)
       base=$(basename "$relpath")
-      if [[ "$base" == "vite.config.ts" ]]; then
+      if [[ "$base" == "vite.config.ts" || "$relpath" == "src/lib/api.ts" ]]; then
         echo "  ⏭   SKIP (Replit-patched): $relpath"
       else
         cp "$zipfile" "$ourfile"
