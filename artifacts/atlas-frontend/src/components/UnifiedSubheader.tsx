@@ -302,6 +302,7 @@ export function UnifiedSubheader({
               onPointerCancel={handleLaunchPointerCancel}
               onMouseEnter={() => setLaunchHover(true)}
               onMouseLeave={handleLaunchMouseLeave}
+              onContextMenu={(e) => { e.preventDefault(); }}
               title={launchTitle}
               aria-label={launchAriaLabel}
               aria-expanded={expanded}
@@ -324,7 +325,9 @@ export function UnifiedSubheader({
                 transition: "background 160ms ease, color 160ms ease, border-color 160ms ease, opacity 160ms ease",
                 WebkitTapHighlightColor: "transparent",
                 boxShadow: launchHover || launchActive ? "0 0 12px rgba(201,162,76,0.25)" : "none",
-                touchAction: "manipulation",
+                touchAction: "none",
+                userSelect: "none",
+                WebkitUserSelect: "none",
               }}
             >
               <span
