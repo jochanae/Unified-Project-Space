@@ -97,3 +97,4 @@ export const useShellStore = create<ShellStore>((set, get) => ({
     set((state) => ({ activeThread: { ...state.activeThread, scrollPosition: pos } })),
   clearThread: () => set({ activeThread: emptyThread, shellMode: 'ambient' }),
 }));
+
