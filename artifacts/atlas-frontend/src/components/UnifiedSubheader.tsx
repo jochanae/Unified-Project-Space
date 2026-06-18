@@ -97,9 +97,15 @@ export function UnifiedSubheader({
     }, 450);
   };
 
-  const handleLaunchPointerUp = () => {
+  const handleLaunchPointerUp = (e: PointerEvent<HTMLButtonElement>) => {
     setLaunchActive(false);
+    const wasLongPress = longPressFired.current;
     clearLongPress();
+    // On touch devices, synthesized click may not fire reliably after pointerup.
+    // Fire the tap action directly here for touch pointers when it was a short tap.
+    if (e.pointerType === "touch" && !wasLongPress) {
+      onLaunch?.();
+    }
   };
 
   const handleLaunchPointerCancel = () => {
@@ -126,7 +132,7 @@ export function UnifiedSubheader({
       longPressFired.current = false;
       return;
     }
-    // Tap always launches preview, regardless of expanded state
+    // For mouse clicks, fire launch here. Touch taps are handled in pointerUp.
     onLaunch?.();
   };
 
@@ -240,8 +246,9 @@ export function UnifiedSubheader({
         </div>
       </div>
 
-      {/* Play button — pinned. Tap = primary (launch when collapsed, collapse when expanded).
-          Long-press = secondary (expand when collapsed, launch when expanded). Icon rotates 90° when expanded. */}
+      {/* Play button + Manifest — pinned top-right.
+          Tap = launch preview (always).
+          Long-press = toggle subheader expand/collapse. */}
       {showActionBar && (
         <div
           style={{
@@ -325,9 +332,7 @@ export function UnifiedSubheader({
                 transition: "background 160ms ease, color 160ms ease, border-color 160ms ease, opacity 160ms ease",
                 WebkitTapHighlightColor: "transparent",
                 boxShadow: launchHover || launchActive ? "0 0 12px rgba(201,162,76,0.25)" : "none",
-                touchAction: "none",
-                userSelect: "none",
-                WebkitUserSelect: "none",
+                touchAction: "manipulation",
               }}
             >
               <span
