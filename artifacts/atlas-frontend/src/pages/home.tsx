@@ -73,10 +73,10 @@ const PLACEHOLDERS = [
 const HOME_PENDING_PHRASES = [
   "Loading context…",
   "Reading your ledger…",
-  "Thinking…",
-  "Checking for conflicts…",
+  "Capturing intent…",
+  "Pressure testing…",
   "Reviewing your portfolio…",
-  "Composing a response…",
+  "Structuring…",
 ];
 
 const OPENING_MESSAGE_STORAGE_KEY = "atlas-opening-message";

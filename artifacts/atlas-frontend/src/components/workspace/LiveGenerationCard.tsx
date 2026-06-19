@@ -11,7 +11,7 @@ const MODE_LABELS: Record<LiveGenerationCardProps["mode"], string> = {
   plan: "Creating plan",
   blueprint: "Generating blueprint",
   edit: "Editing files",
-  thinking: "Thinking...",
+  thinking: "Capturing intent",
   sketch: "Sketching",
 };
 

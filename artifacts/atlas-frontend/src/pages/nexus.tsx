@@ -800,7 +800,7 @@ export default function NexusPage() {
                   </div>
                   <div style={{ flex: 1, padding: "12px 14px", background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", borderRadius: "4px 14px 14px 14px" }}>
                     <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.12em", color: "rgba(201,162,76,0.55)", animation: "nexus-dots 1.2s ease-in-out infinite" }}>
-                      Thinking…
+                      Capturing intent…
                     </span>
                   </div>
                 </div>

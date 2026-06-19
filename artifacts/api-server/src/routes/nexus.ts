@@ -2200,11 +2200,14 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
       `User: ${message}`,
     ].join("\n\n");
-    const geminiModeDetail = mode === "audit" ? "Auditing for gaps and risks"
-      : mode === "deep_dive" ? "Deep-context analysis"
-      : focusProjectId ? `Strategizing ${focusLabel}`
-      : "Cross-portfolio strategy";
-    writeStep({ verb: "Thinking", target: geminiModeDetail });
+    const geminiAtlasVerb = mode === "audit" ? "Auditing"
+      : mode === "deep_dive" ? "Deep analysis"
+      : dbMessages.length === 0 ? "Capturing intent"
+      : dbMessages.length <= 3 ? "Pressure testing"
+      : dbMessages.length <= 7 ? "Structuring"
+      : "Building strategy";
+    const geminiAtlasTarget = focusProjectId ? focusLabel : "your portfolio";
+    writeStep({ verb: geminiAtlasVerb, target: geminiAtlasTarget });
     modelStartedAt = performance.now();
     const geminiContents = allAttachments.length > 0
       ? [{ role: "user" as const, parts: [{ text: combinedText }, { inlineData: { mimeType: allAttachments[0].mediaType, data: allAttachments[0].base64 } }] }]
@@ -2309,11 +2312,14 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   ];
 
   modelStartedAt = performance.now();
-  const claudeModeDetail = mode === "audit" ? "Auditing for gaps and risks"
-    : mode === "deep_dive" ? "Deep strategic analysis"
-    : focusProjectId ? `Strategizing ${focusLabel}`
-    : "Cross-portfolio strategy";
-  writeStep({ verb: "Thinking", target: claudeModeDetail });
+  const claudeAtlasVerb = mode === "audit" ? "Auditing"
+    : mode === "deep_dive" ? "Deep analysis"
+    : dbMessages.length === 0 ? "Capturing intent"
+    : dbMessages.length <= 3 ? "Pressure testing"
+    : dbMessages.length <= 7 ? "Structuring"
+    : "Building strategy";
+  const claudeAtlasTarget = focusProjectId ? focusLabel : "your portfolio";
+  writeStep({ verb: claudeAtlasVerb, target: claudeAtlasTarget });
 
   let fullText = "";
   let pendingNavProjectId: number | null = null;
