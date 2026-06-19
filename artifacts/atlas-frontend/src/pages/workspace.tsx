@@ -4873,6 +4873,22 @@ export default function Workspace() {
     } catch { primeHomeHandoff(fallbackPrompt); }
   }, [sessionId, messages.length, project, doSend]);
 
+  // Auto-generate blueprint silently on first workspace handoff from global insight
+  const autoBlueprintFired = useRef(false);
+  useEffect(() => {
+    if (!isHomeHandoff || !id || !sessionId || autoBlueprintFired.current) return;
+    autoBlueprintFired.current = true;
+    const timer = setTimeout(() => {
+      fetch(`/api/projects/${id}/blueprint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        credentials: "include",
+        body: JSON.stringify({}),
+      }).catch(() => {});
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isHomeHandoff, id, sessionId]);
+
   const sendFromIntentCapture = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed || !sessionId || chatPending) return;
@@ -6502,7 +6518,7 @@ export default function Workspace() {
             <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={() => setPendingTerminalCommand(null)} onCommandComplete={handleTerminalComplete} scenarioLens={wsLens === "scenario"} projectId={project?.id} />
           ) : leftTab === "blueprints" ? (
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-              <BlueprintsTab projectId={id} />
+              <BlueprintsTab projectId={id} manifestDecision={manifestDecision} manifestLoading={manifestLoading} onBuild={handleManifest} />
             </div>
           ) : leftTab === "artifacts" ? (
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>

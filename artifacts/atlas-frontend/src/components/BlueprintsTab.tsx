@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { FileText, ArrowLeft, Trash2, Copy, Download, ArrowRight } from "lucide-react";
+import { FileText, ArrowLeft, Trash2, Copy, Download, ArrowRight, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { haptics } from "@/lib/haptics";
 import { BlueprintVisual } from "@/components/BlueprintVisual";
+import type { ManifestDecision } from "@/components/workspace/PreviewPanel";
 
 export type Blueprint = {
   id: number | string;
@@ -73,12 +74,138 @@ function buildMarkdown(b: Blueprint): string {
   ].join("\n");
 }
 
+function ManifestSummaryCard({
+  decision,
+  loading,
+  onBuild,
+}: {
+  decision: ManifestDecision | null | undefined;
+  loading?: boolean;
+  onBuild?: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const ready = !!decision;
+
+  return (
+    <div
+      onClick={ready && !loading ? onBuild : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: "relative",
+        marginBottom: 16,
+        borderRadius: 10,
+        border: `1px solid ${ready ? "rgba(201,162,76,0.25)" : BORDER}`,
+        background: ready
+          ? hovered
+            ? "rgba(201,162,76,0.07)"
+            : "rgba(201,162,76,0.03)"
+          : "rgba(255,255,255,0.015)",
+        padding: "14px 16px",
+        cursor: ready && !loading ? "pointer" : "default",
+        transition: "background 200ms, border-color 200ms, box-shadow 200ms",
+        boxShadow: ready
+          ? hovered
+            ? "0 0 0 1px rgba(201,162,76,0.15), 0 0 18px rgba(201,162,76,0.08)"
+            : "0 0 12px rgba(201,162,76,0.05)"
+          : "none",
+        overflow: "hidden",
+      }}
+    >
+      {/* Ambient glow pulse when ready */}
+      {ready && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 10,
+            background: "radial-gradient(ellipse at 50% 0%, rgba(201,162,76,0.07) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, position: "relative" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: MONO, fontSize: 9, letterSpacing: "0.18em",
+            textTransform: "uppercase", color: ready ? GOLD : MUTED,
+            opacity: ready ? 0.85 : 0.45, marginBottom: 8,
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            {ready && (
+              <span style={{
+                display: "inline-block", width: 5, height: 5, borderRadius: "50%",
+                background: GOLD, opacity: 0.9,
+                boxShadow: "0 0 6px rgba(201,162,76,0.6)",
+                flexShrink: 0,
+              }} />
+            )}
+            Manifest
+          </div>
+
+          {ready ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 600, color: FG, lineHeight: 1.35, marginBottom: 5 }}>
+                {decision.firstArtifact.name}
+              </div>
+              <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.55, marginBottom: 10 }}>
+                {decision.firstArtifact.description}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px" }}>
+                <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED, opacity: 0.6 }}>
+                  {decision.activeEngine}
+                </span>
+                <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED, opacity: 0.35 }}>·</span>
+                <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED, opacity: 0.6, textTransform: "capitalize" }}>
+                  {decision.complexity}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: MUTED, opacity: 0.5, lineHeight: 1.55 }}>
+              {loading ? "Generating manifest…" : "Run Manifest from the Build button to compile a first artifact decision."}
+            </div>
+          )}
+        </div>
+
+        {ready && !loading && (
+          <div style={{
+            flexShrink: 0, display: "flex", alignItems: "center", gap: 5,
+            padding: "5px 10px", borderRadius: 6,
+            background: hovered ? "rgba(201,162,76,0.15)" : "rgba(201,162,76,0.08)",
+            border: "1px solid rgba(201,162,76,0.2)",
+            color: GOLD, fontFamily: MONO, fontSize: 9.5,
+            letterSpacing: "0.1em", textTransform: "uppercase",
+            transition: "background 160ms",
+          }}>
+            <Zap size={10} strokeWidth={2} />
+            Build
+          </div>
+        )}
+
+        {loading && (
+          <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED, opacity: 0.5, flexShrink: 0 }}>
+            …
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BlueprintsTab({
   projectId,
   onContinueSession,
+  manifestDecision,
+  manifestLoading,
+  onBuild,
 }: {
   projectId: number | string;
   onContinueSession?: (sessionId: number | string) => void;
+  manifestDecision?: ManifestDecision | null;
+  manifestLoading?: boolean;
+  onBuild?: () => void;
 }) {
   const [list, setList] = useState<BlueprintListItem[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -190,25 +317,22 @@ export function BlueprintsTab({
 
         {detail && (
           <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 28px 80px", color: FG, lineHeight: 1.7 }}>
-            {/* Header rule */}
             <div style={{ borderTop: `1px solid ${BORDER}`, marginBottom: 18 }} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 22 }}>
               <span className="blueprint-section-label" style={{ ...sectionLabelStyle, marginBottom: 0 }}>Blueprint</span>
               <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED, letterSpacing: "0.1em" }}>{fmtDate(detail.createdAt)}</span>
             </div>
-            <h1 style={{
-              fontSize: 28, fontWeight: 500, margin: "0 0 28px", letterSpacing: "-0.01em", lineHeight: 1.25, color: FG,
-            }}>{detail.title}</h1>
+            <h1 style={{ fontSize: 28, fontWeight: 500, margin: "0 0 28px", letterSpacing: "-0.01em", lineHeight: 1.25, color: FG }}>
+              {detail.title}
+            </h1>
             <div style={{ borderTop: `1px solid ${BORDER}`, marginBottom: 36 }} />
 
             <Section label="The Idea">
               <p style={{ fontSize: 19, lineHeight: 1.5, fontWeight: 400, color: FG, margin: 0 }}>{detail.idea}</p>
             </Section>
-
             <Section label="The Opportunity"><p style={para}>{detail.opportunity}</p></Section>
             <Section label="How It Works"><p style={para}>{detail.mechanism}</p></Section>
             <Section label="What Already Exists"><p style={para}>{detail.landscape}</p></Section>
-
             <Section label="Risks"><Bulleted items={detail.risks} /></Section>
             <Section label="Open Questions"><Bulleted items={detail.openQuestions} /></Section>
             <Section label="Next Steps"><Numbered items={detail.nextSteps} /></Section>
@@ -253,17 +377,21 @@ export function BlueprintsTab({
 
   // ── List view ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "16px 14px" }}>
-      {list === null && <div style={{ color: MUTED, fontSize: 12, padding: 24, textAlign: "center" }}>Loading…</div>}
+    <div style={{ height: "100%", overflowY: "auto", padding: "14px 14px" }}>
+      {/* Manifest summary — always visible at top */}
+      <ManifestSummaryCard decision={manifestDecision} loading={manifestLoading} onBuild={onBuild} />
+
+      {list === null && <div style={{ color: MUTED, fontSize: 12, padding: "24px 0", textAlign: "center" }}>Loading…</div>}
+
       {list !== null && list.length === 0 && (
         <div style={{
-          padding: "48px 20px", textAlign: "center", color: MUTED,
+          padding: "32px 20px", textAlign: "center", color: MUTED,
           fontSize: 13, lineHeight: 1.7, maxWidth: 360, margin: "0 auto",
         }}>
-          <FileText size={28} strokeWidth={1.3} style={{ opacity: 0.4, marginBottom: 12 }} />
+          <FileText size={24} strokeWidth={1.3} style={{ opacity: 0.3, marginBottom: 10 }} />
           <div>No blueprints yet.</div>
-          <div style={{ opacity: 0.75, marginTop: 4, marginBottom: 18 }}>
-            Generate one from the current conversation, or start an idea thread.
+          <div style={{ opacity: 0.6, marginTop: 4, marginBottom: 18, fontSize: 12 }}>
+            Generate one from the current conversation.
           </div>
           <GenerateBlueprintPill projectId={projectId} onCreated={() => void loadList()} />
           {listError && (
@@ -273,43 +401,52 @@ export function BlueprintsTab({
           )}
         </div>
       )}
+
       {list && list.length > 0 && (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-          {list.map(bp => (
-            <li
-              key={bp.id}
-              style={{
-                display: "flex", alignItems: "center", gap: 12,
-                padding: "12px 14px",
-                border: `1px solid ${BORDER}`, borderRadius: 8,
-                background: "rgba(255,255,255,0.02)",
-              }}
-            >
-              <FileText size={16} strokeWidth={1.5} style={{ color: GOLD, opacity: 0.8, flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, color: FG, fontWeight: 500, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {bp.title}
-                </div>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED, letterSpacing: "0.08em", marginTop: 3 }}>
-                  {fmtDate(bp.createdAt)}
-                </div>
-              </div>
-              <button
-                onClick={() => openBlueprint(bp.id)}
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: MUTED, opacity: 0.5 }}>
+              Blueprints
+            </span>
+            <GenerateBlueprintPill projectId={projectId} onCreated={() => void loadList()} compact />
+          </div>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+            {list.map(bp => (
+              <li
+                key={bp.id}
                 style={{
-                  padding: "5px 11px", borderRadius: 6,
-                  background: "rgba(201,162,76,0.12)",
-                  border: "1px solid rgba(201,162,76,0.3)",
-                  color: GOLD, fontFamily: MONO, fontSize: 10,
-                  letterSpacing: "0.12em", textTransform: "uppercase",
-                  cursor: "pointer", flexShrink: 0,
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "11px 13px",
+                  border: `1px solid ${BORDER}`, borderRadius: 8,
+                  background: "rgba(255,255,255,0.02)",
                 }}
               >
-                Open
-              </button>
-            </li>
-          ))}
-        </ul>
+                <FileText size={14} strokeWidth={1.5} style={{ color: GOLD, opacity: 0.7, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: FG, fontWeight: 500, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {bp.title}
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED, letterSpacing: "0.07em", marginTop: 2, opacity: 0.6 }}>
+                    {fmtDate(bp.createdAt)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => openBlueprint(bp.id)}
+                  style={{
+                    padding: "4px 10px", borderRadius: 5,
+                    background: "transparent",
+                    border: `1px solid ${BORDER}`,
+                    color: MUTED, fontFamily: MONO, fontSize: 9.5,
+                    letterSpacing: "0.1em", textTransform: "uppercase",
+                    cursor: "pointer", flexShrink: 0,
+                  }}
+                >
+                  Open
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
@@ -366,22 +503,18 @@ const btnMuted: React.CSSProperties = {
   color: MUTED, fontSize: 12, cursor: "pointer", opacity: 0.6,
 };
 
-// ── Generate Blueprint Pill (used above composer) ─────────────────────────────
+// ── Generate Blueprint Pill ───────────────────────────────────────────────────
 export function GenerateBlueprintPill({
   projectId,
   onCreated,
+  compact,
 }: {
   projectId: number | string;
   onCreated?: (blueprintId: number | string) => void;
+  compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const trace = (step: string, detail?: unknown) => {
-    // eslint-disable-next-line no-console
-    console.log(`[blueprint] ${step}`, detail ?? "");
-  };
 
   const readBody = async (res: Response): Promise<{ json: any; text: string }> => {
     const text = await res.text().catch(() => "");
@@ -391,53 +524,37 @@ export function GenerateBlueprintPill({
   };
 
   const ensureIdeaModeSession = async () => {
-    setStatus("Preparing conversation context…");
-    trace("ensureIdeaModeSession: list sessions", { projectId });
     const sessionsRes = await fetch(`/api/projects/${projectId}/sessions`, { credentials: "include" });
     const sessionsBody = await readBody(sessionsRes);
-    trace("sessions response", { status: sessionsRes.status, body: sessionsBody.json ?? sessionsBody.text });
-    if (!sessionsRes.ok) throw new Error(`List sessions failed ${sessionsRes.status}: ${sessionsBody.text.slice(0, 200)}`);
-
+    if (!sessionsRes.ok) throw new Error(`List sessions failed ${sessionsRes.status}`);
     const sessions = (sessionsBody.json ?? []) as Array<{ id: number; mode?: string | null }>;
-    const preferred = sessions.find((session) => session.mode === "idea") ?? sessions[0];
+    const preferred = sessions.find((s) => s.mode === "idea") ?? sessions[0];
     let sessionId: number | null = preferred?.id ?? null;
-    trace("preferred session", { sessionId, totalSessions: sessions.length });
-
     if (!sessionId) {
-      trace("creating new session");
       const createRes = await fetch(`/api/projects/${projectId}/sessions`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "Blueprint session", mode: "idea" }),
       });
       const createBody = await readBody(createRes);
-      trace("create session response", { status: createRes.status, body: createBody.json ?? createBody.text });
-      if (!createRes.ok) throw new Error(`Create session failed ${createRes.status}: ${createBody.text.slice(0, 200)}`);
+      if (!createRes.ok) throw new Error(`Create session failed ${createRes.status}`);
       sessionId = (createBody.json as { id?: number } | null)?.id ?? null;
     }
-    if (!sessionId) throw new Error("No session id returned after create");
-
-    trace("enabling idea mode", { sessionId });
-    const ideaRes = await fetch(`/api/sessions/${sessionId}/idea-mode`, {
+    if (!sessionId) throw new Error("No session id");
+    await fetch(`/api/sessions/${sessionId}/idea-mode`, {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: true }),
     });
-    const ideaBody = await readBody(ideaRes);
-    trace("idea-mode response", { status: ideaRes.status, body: ideaBody.json ?? ideaBody.text });
-    if (!ideaRes.ok) throw new Error(`Enable idea-mode failed ${ideaRes.status}: ${ideaBody.text.slice(0, 200)}`);
   };
 
   const callBlueprint = async () => {
-    setStatus("Generating blueprint…");
-    trace("POST /blueprint", { projectId });
     const res = await fetch(`/api/projects/${projectId}/blueprint`, {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
     const body = await readBody(res);
-    trace("blueprint response", { status: res.status, body: body.json ?? body.text });
     return { res, body };
   };
 
@@ -445,71 +562,71 @@ export function GenerateBlueprintPill({
     if (busy) return;
     setBusy(true);
     setError(null);
-    setStatus("Generating blueprint…");
-    trace("── generate start ──", { projectId });
     try {
       let { res, body } = await callBlueprint();
       if (!res.ok) {
         const errMsg = (body.json?.error as string | undefined) ?? body.text;
-        trace("first attempt failed", { status: res.status, errMsg });
         if (errMsg && /idea mode|idea-mode|conversation messages/i.test(errMsg)) {
-          trace("missing idea-mode context → bootstrapping");
           await ensureIdeaModeSession();
           ({ res, body } = await callBlueprint());
         }
       }
       if (!res.ok) {
-        const detail = body.json?.error ?? body.text ?? `HTTP ${res.status}`;
-        throw new Error(`Blueprint API ${res.status}: ${String(detail).slice(0, 240)}`);
+        throw new Error(`Blueprint API ${res.status}: ${String(body.json?.error ?? body.text).slice(0, 200)}`);
       }
       const bpId = body.json?.blueprint?.id ?? body.json?.id;
-      trace("success", { bpId });
-      setStatus(null);
       toast.success("Blueprint created.");
       onCreated?.(bpId);
     } catch (e: any) {
       const msg = e?.message || "Generation failed";
-      console.error("[blueprint] FAILED", e);
       setError(msg);
-      setStatus(null);
-      toast.error(msg, { duration: 10000, description: "Check console for full trace." });
+      toast.error(msg, { duration: 8000 });
     } finally {
       setBusy(false);
-      trace("── generate end ──");
     }
   };
 
+  if (compact) {
+    return (
+      <button
+        onClick={generate}
+        disabled={busy}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 4,
+          padding: "4px 9px", borderRadius: 5,
+          background: "transparent",
+          border: `1px solid ${BORDER}`,
+          color: MUTED, fontFamily: MONO, fontSize: 9,
+          letterSpacing: "0.1em", textTransform: "uppercase",
+          cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 0.8,
+        }}
+      >
+        {busy ? "…" : "+ New"}
+      </button>
+    );
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
       <button
         onClick={generate}
         disabled={busy}
         style={{
           display: "inline-flex", alignItems: "center", gap: 6,
           padding: "6px 14px", borderRadius: 999,
-          background: "rgba(201,162,76,0.1)",
-          border: "1px solid rgba(201,162,76,0.35)",
-          color: GOLD, fontFamily: MONO, fontSize: 10.5,
+          background: "rgba(201,162,76,0.08)",
+          border: "1px solid rgba(201,162,76,0.3)",
+          color: GOLD, fontFamily: MONO, fontSize: 10,
           letterSpacing: "0.12em", textTransform: "uppercase",
-          cursor: busy ? "default" : "pointer",
-          opacity: busy ? 0.6 : 1,
-          backdropFilter: "blur(8px)",
+          cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
           transition: "all 160ms ease",
         }}
       >
         ✦ {busy ? "Generating…" : "Generate Blueprint"}
       </button>
-      {(status || error) && (
-        <div style={{
-          maxWidth: 300,
-          fontFamily: MONO,
-          fontSize: 10,
-          lineHeight: 1.5,
-          color: error ? "var(--atlas-ember)" : MUTED,
-          opacity: error ? 0.95 : 0.72,
-          textAlign: "center",
-        }}>
-          {error ?? status}
+      {error && (
+        <div style={{ maxWidth: 300, fontFamily: MONO, fontSize: 10, lineHeight: 1.5, color: "var(--atlas-ember)", opacity: 0.9, textAlign: "center" }}>
+          {error}
         </div>
       )}
     </div>
