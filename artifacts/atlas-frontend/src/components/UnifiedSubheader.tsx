@@ -175,7 +175,7 @@ export function UnifiedSubheader({
           overlay the chat content below. */}
       <div
         style={{
-          maxHeight: showRow ? 56 : showActionBar ? 36 : 0,
+          maxHeight: showRow ? 56 : 0,
           overflow: "hidden",
           transition: "max-height 240ms ease",
         }}
