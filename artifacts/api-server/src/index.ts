@@ -4,6 +4,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "./lib/logger";
 import { spawn } from "node:child_process";
 import { startScheduledChecksWorker } from "./lib/scheduledChecksWorker";
+import { seedMissingGenomes } from "./lib/genomeExtract";
 
 const rawPort = process.env["PORT"];
 
@@ -122,6 +123,12 @@ async function main() {
       throw err;
     }
   }
+
+  // Seed default genome rows for any existing projects that don't have one.
+  // Non-blocking — errors are logged, not thrown.
+  seedMissingGenomes().catch((err) => {
+    logger.warn({ err }, "genome seed on startup failed — non-fatal");
+  });
 
   app.listen(port, () => {
     console.log({ port }, "Server listening");

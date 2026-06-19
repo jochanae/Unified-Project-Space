@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { db, projectGenomeTable, entriesTable, nexusMessagesTable, chatMessagesTable, sessionsTable } from "@workspace/db";
-import { eq, desc, count, and, sql } from "drizzle-orm";
+import { db, projectGenomeTable, entriesTable, nexusMessagesTable, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
+import { eq, desc, count, and, sql, ne } from "drizzle-orm";
 import { logger } from "./logger";
 import { GENOME_STAGES, OBJECT_TYPES } from "@workspace/db";
-import type { GenomeStage } from "@workspace/db";
+import type { GenomeStage, ObjectType } from "@workspace/db";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -58,8 +58,8 @@ function validStage(s: unknown): GenomeStage {
   return "Think";
 }
 
-function validObjectType(t: unknown): string {
-  if (typeof t === "string" && OBJECT_TYPES.includes(t as (typeof OBJECT_TYPES)[number])) return t;
+function validObjectType(t: unknown): ObjectType {
+  if (typeof t === "string" && OBJECT_TYPES.includes(t as ObjectType)) return t as ObjectType;
   return "Idea";
 }
 
@@ -102,6 +102,29 @@ async function loadConversationText(projectId: number): Promise<string> {
   return chatRows.reverse()
     .map(m => `${m.role === "user" ? "PERSON" : "ATLAS"}: ${m.content}`)
     .join("\n\n");
+}
+
+async function loadCommittedEntries(projectId: number): Promise<string> {
+  const rows = await db
+    .select({
+      type: entriesTable.type,
+      title: entriesTable.title,
+      summary: entriesTable.summary,
+    })
+    .from(entriesTable)
+    .where(and(
+      eq(entriesTable.projectId, projectId),
+      ne(entriesTable.status, "archived"),
+    ))
+    .orderBy(desc(entriesTable.createdAt))
+    .limit(30);
+
+  if (rows.length === 0) return "";
+
+  const lines = rows.map(r =>
+    `[${r.type}] ${r.title}${r.summary ? ` — ${r.summary}` : ""}`,
+  );
+  return `COMMITTED OBJECTS:\n${lines.join("\n")}`;
 }
 
 async function countProjectMessages(projectId: number): Promise<number> {
@@ -151,18 +174,26 @@ async function upsertObjects(
 }
 
 export async function runGenomeExtraction(projectId: number): Promise<void> {
-  const conversationText = await loadConversationText(projectId);
-  if (!conversationText) return;
+  const [conversationText, committedEntriesText] = await Promise.all([
+    loadConversationText(projectId),
+    loadCommittedEntries(projectId),
+  ]);
+
+  if (!conversationText && !committedEntriesText) return;
+
+  const contextBlocks: string[] = [];
+  if (conversationText) contextBlocks.push(`CONVERSATION:\n${conversationText.slice(0, 7000)}`);
+  if (committedEntriesText) contextBlocks.push(committedEntriesText.slice(0, 2000));
+  const fullContext = contextBlocks.join("\n\n---\n\n");
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 1200,
     messages: [{
       role: "user",
-      content: `You are analyzing a conversation to extract structured project DNA (the "Project Genome") and typed objects from the discussion. Be precise and concise.
+      content: `You are analyzing a project's conversation history and committed objects to extract structured project DNA (the "Project Genome"). Be precise and concise.
 
-CONVERSATION:
-${conversationText.slice(0, 8000)}
+${fullContext}
 
 Extract the following and return ONLY valid JSON (no markdown, no preamble):
 
@@ -181,9 +212,9 @@ Extract the following and return ONLY valid JSON (no markdown, no preamble):
 }
 
 Rules:
-- stage reflects how far the thinking has progressed (Think = very early, Evolve = mature)
+- stage reflects how far the thinking has progressed (Think = very early, Evolve = mature and deployed)
 - confidenceScore reflects how clear and grounded the project vision is (0 = vague, 100 = crystal clear)
-- objects: extract 3-8 distinct objects from the conversation. Only include types that genuinely appear.
+- objects: extract 3-8 distinct objects not already in the committed objects list. Skip duplicates.
 - constraints and openQuestions: max 5 each, only real ones from the conversation
 - All string values must be concise (under 200 chars)
 - Return null for fields that cannot be extracted confidently`,
@@ -199,7 +230,6 @@ Rules:
 
   const now = new Date();
 
-  // Upsert the genome row
   const genomeUpdate = {
     ...(typeof parsed.purpose === "string" ? { purpose: parsed.purpose || null } : {}),
     ...(typeof parsed.coreEmotion === "string" ? { coreEmotion: parsed.coreEmotion || null } : {}),
@@ -225,7 +255,6 @@ Rules:
     await db.insert(projectGenomeTable).values({ projectId, ...genomeUpdate });
   }
 
-  // Upsert extracted objects into entries
   if (Array.isArray(parsed.objects) && parsed.objects.length > 0) {
     await upsertObjects(projectId, parsed.objects);
   }
@@ -241,11 +270,37 @@ export async function maybeExtractGenome(projectId: number | null | undefined): 
   try {
     const msgCount = await countProjectMessages(projectId);
     if (msgCount < MIN_MESSAGES) return;
-    // Fire and forget — do not await in hot path
     void runGenomeExtraction(projectId).catch(err => {
       logger.warn({ err, projectId }, "background genome extraction failed");
     });
   } catch (err) {
     logger.warn({ err, projectId }, "maybeExtractGenome check failed");
+  }
+}
+
+// Seed default genome rows for all projects that don't have one yet.
+// Called once on server startup — non-blocking.
+export async function seedMissingGenomes(): Promise<void> {
+  try {
+    const projectIds = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable);
+
+    const existingGenomes = await db
+      .select({ projectId: projectGenomeTable.projectId })
+      .from(projectGenomeTable);
+
+    const existingSet = new Set(existingGenomes.map(g => g.projectId));
+    const missing = projectIds.filter(p => !existingSet.has(p.id));
+
+    if (missing.length === 0) return;
+
+    await db.insert(projectGenomeTable).values(
+      missing.map(p => ({ projectId: p.id })),
+    );
+
+    logger.info({ count: missing.length }, "genome seed: inserted default rows for projects without a genome");
+  } catch (err) {
+    logger.warn({ err }, "genome seed: failed — non-fatal");
   }
 }

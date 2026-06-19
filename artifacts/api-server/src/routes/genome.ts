@@ -105,7 +105,7 @@ router.patch("/projects/:id/genome", async (req, res): Promise<void> => {
     if ("constraints" in body && Array.isArray(body.constraints)) update.constraints = body.constraints.filter((x: unknown) => typeof x === "string").slice(0, 5);
     if ("openQuestions" in body && Array.isArray(body.openQuestions)) update.openQuestions = body.openQuestions.filter((x: unknown) => typeof x === "string").slice(0, 5);
     if ("stage" in body) update.stage = validStage(body.stage);
-    if ("confidenceScore" in body) update.confidenceScore = clampConfidence(body.confidenceScore);
+    // confidenceScore is extraction-computed — not user-editable
 
     if (Object.keys(update).length === 0) {
       const genome = await getOrCreateGenome(projectId);
@@ -184,7 +184,7 @@ router.get("/projects/:id/objects", async (req, res): Promise<void> => {
       .from(entriesTable)
       .where(
         typeFilter && OBJECT_TYPES.includes(typeFilter as (typeof OBJECT_TYPES)[number])
-          ? and(eq(entriesTable.projectId, projectId), eq(entriesTable.type, typeFilter))
+          ? and(eq(entriesTable.projectId, projectId), eq(entriesTable.type, typeFilter as (typeof OBJECT_TYPES)[number]))
           : eq(entriesTable.projectId, projectId),
       )
       .orderBy(desc(entriesTable.createdAt))
