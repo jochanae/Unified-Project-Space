@@ -18,13 +18,30 @@ function parseMemorySummary(memory: string | null | undefined): string {
       const texts = allTiers.map((t) => t?.content ?? t?.text ?? "").filter(Boolean).slice(0, 6);
       parts.push(...texts);
     }
-    return parts.join("\n").slice(0, 1200);
+    return parts.join("\n").slice(0, 1400);
   } catch {
     return memory.slice(0, 800);
   }
 }
 
-// POST /api/manifest/decide — assess readiness and generate first artifact component
+/**
+ * Strip anything that would break a browser <script type="text/babel"> execution:
+ * - import statements (hooks are pre-destructured by the renderer)
+ * - export statements
+ * - markdown fences
+ */
+function sanitizeForBrowser(code: string): string {
+  return code
+    .replace(/^```[a-z]*\n?/gm, "")
+    .replace(/^```$/gm, "")
+    .replace(/^import\s+.*?(?:from\s+['"][^'"]+['"])?;?\s*$/gm, "")
+    .replace(/^export\s+default\s+\w+;?\s*$/gm, "")
+    .replace(/^export\s+\{[^}]*\};?\s*$/gm, "")
+    .replace(/^export\s+/gm, "")
+    .trim();
+}
+
+// POST /api/manifest/decide
 router.post("/manifest/decide", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const { projectId } = req.body as { projectId: unknown; sessionId?: unknown };
@@ -35,15 +52,8 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
     return;
   }
 
-  // Load project
   const [project] = await db
-    .select({
-      id: projectsTable.id,
-      name: projectsTable.name,
-      description: projectsTable.description,
-      memory: projectsTable.memory,
-      status: projectsTable.status,
-    })
+    .select({ id: projectsTable.id, name: projectsTable.name, description: projectsTable.description, memory: projectsTable.memory, status: projectsTable.status })
     .from(projectsTable)
     .where(and(eq(projectsTable.id, numericId), eq(projectsTable.userId, userId)));
 
@@ -52,14 +62,12 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
     return;
   }
 
-  // Load committed decisions
   const committedEntries = await db
     .select({ id: entriesTable.id, title: entriesTable.title, summary: entriesTable.summary })
     .from(entriesTable)
     .where(and(eq(entriesTable.projectId, numericId), eq(entriesTable.status, "committed")))
     .limit(20);
 
-  // Assess readiness
   const memorySummary = parseMemorySummary(project.memory);
   const hasMemory = memorySummary.length > 80;
   const hasDecisions = committedEntries.length > 0;
@@ -69,14 +77,13 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
     res.json({
       ready: false,
       missingCriteria: [
-        "No project context found — run Deep Import in the Files tab or have a conversation with Atlas first",
-        "Commit at least one architectural decision in the LEDGER tab so Atlas knows what to build",
+        "No project context yet — run Deep Import in the Files tab or have a conversation with Atlas first",
+        "Commit at least one decision in the LEDGER so Atlas knows what to build",
       ],
     });
     return;
   }
 
-  // Build context block for AI
   const decisionLines = committedEntries
     .map((e) => `• ${e.title}${e.summary ? ` — ${e.summary.slice(0, 120)}` : ""}`)
     .join("\n");
@@ -84,65 +91,71 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
   const contextBlock = [
     `Project: ${project.name}`,
     project.description ? `Description: ${project.description}` : "",
-    hasDecisions ? `\nCommitted decisions:\n${decisionLines}` : "",
-    hasMemory ? `\nProject memory / architecture:\n${memorySummary}` : "",
+    hasDecisions ? `\nKey decisions:\n${decisionLines}` : "",
+    hasMemory ? `\nProject context:\n${memorySummary}` : "",
   ].filter(Boolean).join("\n");
 
-  // Generate the component with Claude
   let generatedCode = "";
   let componentName = "ManifestPreview";
   let artifactName = `${project.name} — First Artifact`;
-  let artifactDescription = "The core interaction of this product, generated from project context.";
-  let artifactSteps = ["Atlas analyzed your project context", "Determined the core user interaction", "Generated a production-quality React component"];
+  let artifactDescription = "Core product experience, generated from project context.";
+  let artifactSteps = ["Atlas analyzed your project", "Identified the core interaction", "Generated the component"];
 
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 4000,
+      max_tokens: 5000,
       messages: [
         {
           role: "user",
-          content: `You are generating a "First Artifact" — a polished React component that visually demonstrates the core concept of a product.
+          content: `You are generating a "First Artifact" — a high-quality React component that demonstrates the core experience of a product.
 
 ${contextBlock}
 
-Your job:
-1. Pick the most important screen or interaction of this product (the "aha moment")
-2. Generate a self-contained React component for it
-3. Also output a JSON metadata block
+---
 
-Rules for the component:
-- Uses inline styles ONLY — no CSS imports, no Tailwind, no external dependencies except React
-- Dark theme: background #0C0A09, text #E7E5E4, amber/gold accents #C9A24C
-- Production-quality — real content, real layout, real UX — NOT a wireframe
-- Realistic sample data matching the product domain
-- Interactive where appropriate (hover states, simple toggles using useState)
-- No TypeScript — plain JavaScript JSX only
-- No import statements (React is globally available)
-- No external libraries (no Recharts, no Lucide, nothing external)
+CRITICAL EXECUTION ENVIRONMENT RULES (violating these = blank white screen):
+1. NO import statements whatsoever. React hooks are already available: useState, useEffect, useRef, useCallback, useMemo
+2. NO export statements whatsoever. Do not write "export default" anywhere.
+3. NO external libraries. No icons, no charts, no UI kits. Pure inline-style JSX only.
+4. The component MUST be a plain const arrow function: const ComponentName = () => { ... }
+5. The component name must be PascalCase and match what you write in the metadata
 
-Output format — respond with EXACTLY this structure, nothing else:
+Design requirements:
+- Dark theme: body bg #0C0A09, card bg #1A1714, text #E7E5E4, gold accents #C9A24C, muted #71717A
+- Borders: 1px solid rgba(255,255,255,0.08) for cards, rgba(201,162,76,0.25) for highlighted
+- Production-quality design — not a wireframe. Real content, real data, real interactions.
+- Use realistic sample data that fits the product domain perfectly
+- Include hover effects using useState for a polished feel
+- The component should be the most impressive possible representation of this product's core value
 
-METADATA_START
-name: <concise artifact name, e.g. "IntoIQ Feed Dashboard">
-description: <one sentence describing what this demonstrates>
+Respond with EXACTLY this format — no markdown, no explanation, no fences:
+
+METADATA
+name: <artifact name>
+description: <one sentence>
 steps: <step 1> | <step 2> | <step 3>
-METADATA_END
+END_METADATA
 
-COMPONENT_START
+COMPONENT
 const ComponentName = () => {
-  // your component code here
+  const [someState, setSomeState] = useState(null);
+  
+  return (
+    <div style={{ ... }}>
+      ...
+    </div>
+  );
 };
-export default ComponentName;
-COMPONENT_END`,
+END_COMPONENT`,
         },
       ],
     });
 
     const raw = message.content[0].type === "text" ? message.content[0].text : "";
 
-    // Parse metadata
-    const metaMatch = raw.match(/METADATA_START\n([\s\S]*?)\nMETADATA_END/);
+    // Parse metadata block
+    const metaMatch = raw.match(/METADATA\n([\s\S]*?)\nEND_METADATA/);
     if (metaMatch) {
       const meta = metaMatch[1];
       const nameM = meta.match(/^name:\s*(.+)$/m);
@@ -153,24 +166,34 @@ COMPONENT_END`,
       if (stepsM) artifactSteps = stepsM[1].split("|").map((s) => s.trim()).filter(Boolean);
     }
 
-    // Parse component
-    const compMatch = raw.match(/COMPONENT_START\n([\s\S]*?)\nCOMPONENT_END/);
+    // Parse component block
+    const compMatch = raw.match(/COMPONENT\n([\s\S]*?)\nEND_COMPONENT/);
+    let rawCode = "";
     if (compMatch) {
-      generatedCode = compMatch[1].trim();
-      const nameMatch = generatedCode.match(/^const\s+([A-Z][A-Za-z0-9]+)\s*=/m);
-      if (nameMatch) componentName = nameMatch[1];
+      rawCode = compMatch[1].trim();
     } else {
-      // Fallback: just use the raw response
-      generatedCode = raw.replace(/METADATA_START[\s\S]*?METADATA_END\n?/g, "").trim();
-      const nameMatch = generatedCode.match(/^const\s+([A-Z][A-Za-z0-9]+)\s*=/m);
-      if (nameMatch) componentName = nameMatch[1];
-      if (!generatedCode.includes("export default")) {
-        generatedCode += `\n\nexport default ${componentName};`;
-      }
+      // Fallback: strip metadata, take everything left
+      rawCode = raw
+        .replace(/METADATA[\s\S]*?END_METADATA\n?/g, "")
+        .replace(/COMPONENT\n?/g, "")
+        .replace(/END_COMPONENT\n?/g, "")
+        .trim();
     }
+
+    // Extract component name
+    const nameMatch = rawCode.match(/^const\s+([A-Z][A-Za-z0-9]+)\s*=/m);
+    if (nameMatch) componentName = nameMatch[1];
+
+    // Sanitize — remove any import/export that would crash the browser script
+    generatedCode = sanitizeForBrowser(rawCode);
+
+    if (!generatedCode || generatedCode.length < 50) {
+      throw new Error("Generated component was empty after parsing");
+    }
+
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    res.status(500).json({ error: `AI generation failed: ${msg}` });
+    res.status(500).json({ error: `Generation failed: ${msg}` });
     return;
   }
 
@@ -184,7 +207,7 @@ COMPONENT_END`,
       },
       activeEngine: "atlas-generated",
       suggestedEngine: "atlas-generated",
-      engineReason: "Project context analyzed — Atlas-generated component selected for V1.",
+      engineReason: "Project context fully analyzed — Atlas generated this component.",
       complexity: "medium" as const,
       deploymentRequired: false,
     },
