@@ -167,7 +167,7 @@ function StoreCommitPill({ className = "", onArm }: { className?: string; onArm?
     void run();
   }, [status, onArm, projectId, navigate, setShellMode, setShapingStatus, resetHandoff]);
 
-  if (status === "idle") return null;
+  if (status === "idle" || status === "shaping") return null;
 
   const effectiveStatus: Status = localStatus === "error" ? "error" : (status as Status);
 
@@ -213,13 +213,13 @@ function PillVisual({
   className: string;
 }) {
   const label =
-    status === "shaping"
-      ? "Shaping into structure…"
-      : status === "ready"
-        ? "Enter Workspace →"
-        : status === "transitioning"
-          ? `Preparing ${title}…`
-          : "Handoff failed — Retry";
+    status === "ready"
+      ? "Open Workspace"
+      : status === "transitioning"
+        ? "Opening workspace…"
+        : status === "error"
+          ? "Handoff failed — Retry"
+          : "Open Workspace";
 
   const isReady = status === "ready";
   const isTransitioning = status === "transitioning";
