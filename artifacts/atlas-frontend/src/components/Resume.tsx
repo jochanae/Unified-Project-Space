@@ -1,11 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useGetPortfolioResume, getGetPortfolioResumeQueryKey } from "@workspace/api-client-local";
 
-type ResumeData = {
-  whatMoved: string[];
-  whatEmerged: string;
-  waitingOnYou: string;
-  suggestedNextMove: string;
-};
+export { getGetPortfolioResumeQueryKey };
 
 type RecentProject = {
   id: number;
@@ -31,26 +26,20 @@ function formatRelative(iso: string): string {
 }
 
 export function Resume({ recentProjects = [], onOpenProject }: Props) {
-  const [data, setData] = useState<ResumeData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const fetchedRef = useRef(false);
+  const { data, isLoading } = useGetPortfolioResume();
 
-  useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-    fetch("/api/nexus/resume", { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then((d: ResumeData | null) => {
-        if (d?.whatMoved) setData(d);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const isEmpty =
+    !isLoading &&
+    !!data &&
+    data.whatMoved.length === 0 &&
+    !data.whatEmerged &&
+    !data.waitingOnYou &&
+    !data.suggestedNextMove;
 
-  const hasData = loading || !!data;
+  const hasContent = isLoading || (!!data && !isEmpty);
   const hasProjects = recentProjects.length > 0;
 
-  if (!hasData && !hasProjects) return null;
+  if (!hasContent && !hasProjects) return null;
 
   return (
     <div className="atlas-discovery-card" style={{ padding: "16px 16px 14px" }}>
@@ -72,7 +61,7 @@ export function Resume({ recentProjects = [], onOpenProject }: Props) {
       </div>
 
       {/* Loading state */}
-      {loading && (
+      {isLoading && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: hasProjects ? 16 : 0 }}>
           <div style={{
             width: 12, height: 12, borderRadius: "50%",
@@ -90,8 +79,19 @@ export function Resume({ recentProjects = [], onOpenProject }: Props) {
         </div>
       )}
 
+      {/* Empty / first-run state */}
+      {isEmpty && (
+        <p style={{
+          margin: 0, marginBottom: hasProjects ? 16 : 0,
+          fontSize: 12, color: "var(--atlas-muted)", opacity: 0.55,
+          fontStyle: "italic", lineHeight: 1.55, fontFamily: "var(--app-font-sans)",
+        }}>
+          Nothing to resume yet. Your first conversation will begin building momentum.
+        </p>
+      )}
+
       {/* Four-section structured brief */}
-      {!loading && data && (
+      {!isLoading && data && !isEmpty && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: hasProjects ? 16 : 0 }}>
 
           {/* whatMoved — factual bullets of what changed */}
@@ -108,7 +108,8 @@ export function Resume({ recentProjects = [], onOpenProject }: Props) {
                 {data.whatMoved.map((item, i) => (
                   <li key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                     <span style={{
-                      fontSize: 11, color: "rgba(201,162,76,0.55)", flexShrink: 0, paddingTop: 1, lineHeight: 1.45,
+                      fontSize: 11, color: "rgba(201,162,76,0.55)", flexShrink: 0,
+                      paddingTop: 1, lineHeight: 1.45,
                     }}>
                       ›
                     </span>
@@ -196,7 +197,7 @@ export function Resume({ recentProjects = [], onOpenProject }: Props) {
       {/* Recent projects list */}
       {hasProjects && (
         <>
-          {(data || loading) && (
+          {(hasContent) && (
             <div style={{ height: 1, background: "var(--atlas-border)", marginBottom: 10 }} />
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>

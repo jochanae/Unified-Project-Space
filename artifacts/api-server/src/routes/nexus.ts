@@ -2744,9 +2744,10 @@ router.get("/nexus/resume", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
 
-    // Serve from cache if fresh
+    // Serve from cache if fresh (unless ?bust=1 forces re-generation)
+    const bustCache = req.query.bust === "1";
     const cached = resumeCache.get(userId);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (!bustCache && cached && cached.expiresAt > Date.now()) {
       res.json(cached.data);
       return;
     }

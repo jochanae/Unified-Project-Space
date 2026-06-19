@@ -16,6 +16,9 @@
       "@/*": ["./src/*"],
       "@workspace/api-client-react": [
         "./src/_workspace/api-client-react/src/index.ts"
+      ],
+      "@workspace/api-client-local": [
+        "../../lib/api-client-react/src/index.ts"
       ]
     }
   }

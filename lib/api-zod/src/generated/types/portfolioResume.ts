@@ -5,9 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
 
 /**
  * A curated, Atlas-generated brief across the user's full portfolio. This is a first-class platform service — not a Home widget. Consumed by Home, future Mobile, Notifications, Daily Briefings, and any surface that needs to surface "what matters right now."
@@ -27,19 +24,3 @@ export interface PortfolioResume {
    */
   suggestedNextMove: string;
 }
-
-export type GetPortfolioResumeParams = {
-/**
- * Pass `bust=1` to bypass the per-user cache and force a fresh generation (e.g. after a pull-to-refresh gesture).
-
- */
-bust?: GetPortfolioResumeBust;
-};
-
-export type GetPortfolioResumeBust = typeof GetPortfolioResumeBust[keyof typeof GetPortfolioResumeBust];
-
-
-export const GetPortfolioResumeBust = {
-  NUMBER_1: 1,
-} as const;
-

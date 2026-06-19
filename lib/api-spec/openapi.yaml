@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: nexus
+    description: >
+      Portfolio-level intelligence. Nexus endpoints operate across the full
+      set of projects and produce curated insights — not raw activity logs.
 paths:
   /healthz:
     get:
@@ -24,7 +28,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /nexus/resume:
+    get:
+      operationId: getPortfolioResume
+      tags: [nexus]
+      summary: Portfolio Resume
+      description: >
+        Atlas reads the portfolio and generates a structured brief with four
+        curated sections: what moved, what emerged, what is waiting on the
+        user, and the single suggested next move.
+
+        The response is cached per user for five minutes so repeated fast
+        opens do not trigger re-generation. Pass `?bust=1` to bypass the
+        cache and force a fresh read.
+      parameters:
+        - name: bust
+          in: query
+          required: false
+          schema:
+            type: integer
+            enum: [1]
+          description: >
+            Pass `bust=1` to bypass the per-user cache and force a fresh
+            generation (e.g. after a pull-to-refresh gesture).
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Portfolio Resume successfully generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioResume"
+        "401":
+          description: Not authenticated
+
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +79,40 @@ components:
           type: string
       required:
         - status
+
+    PortfolioResume:
+      type: object
+      description: >
+        A curated, Atlas-generated brief across the user's full portfolio.
+        This is a first-class platform service — not a Home widget.
+        Consumed by Home, future Mobile, Notifications, Daily Briefings,
+        and any surface that needs to surface "what matters right now."
+      properties:
+        whatMoved:
+          type: array
+          items:
+            type: string
+          description: >
+            Factual bullet strings — specific things that changed across
+            projects since the user was last active. Reference real project
+            names. Maximum four items.
+        whatEmerged:
+          type: string
+          description: >
+            One key insight or pattern Atlas noticed across the portfolio.
+            1-2 sentences. Not a summary of facts — the underlying pattern.
+        waitingOnYou:
+          type: string
+          description: >
+            The single most important decision or question only the human
+            can answer right now.
+        suggestedNextMove:
+          type: string
+          description: >
+            Exactly one concrete next action. No alternatives. Decisive.
+      required:
+        - whatMoved
+        - whatEmerged
+        - waitingOnYou
+        - suggestedNextMove
 
