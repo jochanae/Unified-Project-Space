@@ -9,6 +9,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // In-memory rate limiter: projectId → last extraction timestamp
 const extractionCooldowns = new Map<number, number>();
+// In-flight guard: tracks projects with an active extraction in progress
+const extractionInFlight = new Set<number>();
 const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 const MIN_MESSAGES = 5;
 
@@ -16,6 +18,10 @@ export function isOnCooldown(projectId: number): boolean {
   const last = extractionCooldowns.get(projectId);
   if (!last) return false;
   return Date.now() - last < COOLDOWN_MS;
+}
+
+function isInFlight(projectId: number): boolean {
+  return extractionInFlight.has(projectId);
 }
 
 function setCooldown(projectId: number): void {
@@ -131,7 +137,11 @@ async function countProjectMessages(projectId: number): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(nexusMessagesTable)
-    .where(eq(nexusMessagesTable.projectId, projectId));
+    .where(and(
+      eq(nexusMessagesTable.projectId, projectId),
+      sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
+      sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
+    ));
   return row?.n ?? 0;
 }
 
@@ -265,14 +275,30 @@ Rules:
 
 export async function maybeExtractGenome(projectId: number | null | undefined): Promise<void> {
   if (!projectId) return;
-  if (isOnCooldown(projectId)) return;
+
+  // Check both cooldown and in-flight before doing anything
+  if (isOnCooldown(projectId) || isInFlight(projectId)) return;
 
   try {
     const msgCount = await countProjectMessages(projectId);
     if (msgCount < MIN_MESSAGES) return;
-    void runGenomeExtraction(projectId).catch(err => {
-      logger.warn({ err, projectId }, "background genome extraction failed");
-    });
+
+    // Claim the slot atomically before launching async work.
+    // Set cooldown immediately so that any subsequent Atlas responses
+    // that arrive before extraction finishes are rejected by isOnCooldown().
+    extractionInFlight.add(projectId);
+    setCooldown(projectId);
+
+    void runGenomeExtraction(projectId)
+      .catch(err => {
+        // On failure, clear the cooldown so a retry is allowed after
+        // the remaining window lapses (or immediately on next request).
+        extractionCooldowns.delete(projectId);
+        logger.warn({ err, projectId }, "background genome extraction failed");
+      })
+      .finally(() => {
+        extractionInFlight.delete(projectId);
+      });
   } catch (err) {
     logger.warn({ err, projectId }, "maybeExtractGenome check failed");
   }
