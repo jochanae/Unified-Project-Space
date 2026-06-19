@@ -3040,6 +3040,21 @@ export default function Home() {
         },
       ]);
       await new Promise(resolve => setTimeout(resolve, 700));
+
+      // Snapshot the Nexus conversation into a Resume artifact before navigating.
+      // Fires in the background; navigation never blocks on failure.
+      try {
+        const snapshotMessages = conversationMessages
+          .filter((m) => typeof m.content === "string" && m.content.trim().length > 0)
+          .map((m) => ({ role: m.role as string, content: m.content as string }));
+        await fetch(`/api/projects/${projectId}/append-thread`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: snapshotMessages }),
+        });
+      } catch {}
+
       // Commit carryover: hand workspace the threshold marker + greeting payload.
       try {
         sessionStorage.setItem(

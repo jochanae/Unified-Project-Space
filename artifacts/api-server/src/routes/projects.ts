@@ -786,6 +786,11 @@ router.post("/projects/:id/append-thread", async (req, res): Promise<void> => {
     .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
   if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
 
+  // Accept a Nexus conversation snapshot from the client.
+  const bodyMessages = Array.isArray((req.body as Record<string, unknown>)?.messages)
+    ? ((req.body as Record<string, unknown>).messages as Array<{ role: string; content: string }>)
+    : [];
+
   const [genomeRow] = await db
     .select()
     .from(projectGenomeTable)
@@ -796,7 +801,18 @@ router.post("/projects/:id/append-thread", async (req, res): Promise<void> => {
   const hasIntent = Boolean(genomeRow?.purpose);
   const hasAudience = Boolean(genomeRow?.audience);
 
-  function suggestedBuild(score: number, intent: boolean, audience: boolean): string {
+  function suggestedBuildFromText(text: string): string | null {
+    const t = text.toLowerCase();
+    if (t.includes("landing page")) return "Landing Page — begin with presence";
+    if (t.includes("mobile app") || t.includes("ios") || t.includes("android")) return "Mobile App — bring it to the device";
+    if (t.includes("investor") || t.includes("pitch deck")) return "Investor Deck — make the case";
+    if (t.includes("beta") || t.includes("waitlist") || t.includes("early access")) return "Beta Program — validate with real users";
+    if (t.includes("web app") || t.includes("dashboard") || t.includes("platform")) return "Web App — your foundation is ready";
+    if (t.includes("database") || t.includes("schema") || t.includes("data model")) return "Database Schema — structure your data model";
+    return null;
+  }
+
+  function suggestedBuildFromGenome(score: number, intent: boolean, audience: boolean): string {
     if (!intent) return "Start by defining your core intent";
     if (score < 30) return "Landing Page — begin with presence";
     if (!audience) return "Landing Page — clarify who this is for";
@@ -807,9 +823,24 @@ router.post("/projects/:id/append-thread", async (req, res): Promise<void> => {
 
   const openQuestions = Array.isArray(genomeRow?.openQuestions) ? genomeRow.openQuestions as string[] : [];
 
-  const threadSummary = hasIntent
-    ? `${proj.name} is ${genomeRow?.purpose ?? "a project in development"}${genomeRow?.audience ? `, built for ${String(genomeRow.audience)}` : ""}${genomeRow?.coreEmotion ? `, with a ${String(genomeRow.coreEmotion)} tone` : ""}.`
-    : `${proj.name} is still being defined. Continue the conversation to build clarity.`;
+  // Derive thread summary: prefer the last substantive assistant message from the
+  // conversation snapshot, then fall back to genome-derived narrative.
+  const lastAssistantMsg = bodyMessages
+    .slice()
+    .reverse()
+    .find((m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim().length > 40);
+
+  const conversationText = bodyMessages.map((m) => m.content).join(" ");
+
+  const threadSummary = lastAssistantMsg
+    ? lastAssistantMsg.content.trim().slice(0, 600)
+    : hasIntent
+      ? `${proj.name} is ${genomeRow?.purpose ?? "a project in development"}${genomeRow?.audience ? `, built for ${String(genomeRow.audience)}` : ""}${genomeRow?.coreEmotion ? `, with a ${String(genomeRow.coreEmotion)} tone` : ""}.`
+      : `${proj.name} is still being defined. Continue the conversation to build clarity.`;
+
+  const suggestedFirstBuild =
+    (conversationText ? suggestedBuildFromText(conversationText) : null) ??
+    suggestedBuildFromGenome(clarityScore, hasIntent, hasAudience);
 
   const brief = {
     generatedAt: new Date().toISOString(),
@@ -819,8 +850,9 @@ router.post("/projects/:id/append-thread", async (req, res): Promise<void> => {
     audience: genomeRow?.audience ?? null,
     tone: genomeRow?.coreEmotion ?? null,
     openQuestions,
-    suggestedFirstBuild: suggestedBuild(clarityScore, hasIntent, hasAudience),
+    suggestedFirstBuild,
     threadSummary,
+    fromConversation: bodyMessages.length > 0,
   };
 
   const content = JSON.stringify(brief);
