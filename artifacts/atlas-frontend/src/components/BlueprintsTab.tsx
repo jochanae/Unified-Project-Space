@@ -5,6 +5,7 @@ import { haptics } from "@/lib/haptics";
 import { BlueprintVisual } from "@/components/BlueprintVisual";
 import type { ManifestDecision } from "@/components/workspace/PreviewPanel";
 import { GenomeCard } from "@/components/GenomeCard";
+import { ObjectBoard } from "@/components/ObjectBoard";
 
 export type Blueprint = {
   id: number | string;
@@ -208,6 +209,7 @@ export function BlueprintsTab({
   manifestLoading?: boolean;
   onBuild?: () => void;
 }) {
+  const [panelTab, setPanelTab] = useState<"objects" | "blueprints">("objects");
   const [list, setList] = useState<BlueprintListItem[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | string | null>(null);
@@ -379,11 +381,51 @@ export function BlueprintsTab({
   // ── List view ──────────────────────────────────────────────────────────────
   return (
     <div style={{ height: "100%", overflowY: "auto", padding: "14px 14px" }}>
-      {/* Genome card — living project DNA */}
+      {/* Project Health card */}
       <GenomeCard projectId={projectId} />
 
-      {/* Manifest summary — always visible at top */}
-      <ManifestSummaryCard decision={manifestDecision} loading={manifestLoading} onBuild={onBuild} />
+      {/* Panel tab strip: Objects | Blueprints */}
+      <div style={{
+        display: "flex", gap: 0,
+        marginBottom: 12,
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+      }}>
+        {(["objects", "blueprints"] as const).map(t => {
+          const active = panelTab === t;
+          const label = t === "objects" ? "Objects" : "Blueprints";
+          return (
+            <button
+              key={t}
+              onClick={() => setPanelTab(t)}
+              style={{
+                background: "transparent", border: "none",
+                borderBottom: active ? "1px solid var(--atlas-gold)" : "1px solid transparent",
+                marginBottom: -1,
+                padding: "5px 12px 8px",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase",
+                color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                opacity: active ? 0.85 : 0.4,
+                cursor: "pointer",
+                transition: "all 150ms",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Objects view */}
+      {panelTab === "objects" && (
+        <ObjectBoard projectId={projectId} />
+      )}
+
+      {/* Blueprints view */}
+      {panelTab === "blueprints" && (
+        <>
+          {/* Manifest summary */}
+          <ManifestSummaryCard decision={manifestDecision} loading={manifestLoading} onBuild={onBuild} />
 
       {list === null && <div style={{ color: MUTED, fontSize: 12, padding: "24px 0", textAlign: "center" }}>Loading…</div>}
 
@@ -450,6 +492,8 @@ export function BlueprintsTab({
               </li>
             ))}
           </ul>
+        </>
+      )}
         </>
       )}
     </div>
