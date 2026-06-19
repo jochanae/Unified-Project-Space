@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
-import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable } from "@workspace/db";
+import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable, artifactsTable, projectGenomeTable } from "@workspace/db";
 import { encryptToken, decryptToken } from "../lib/tokenCrypto";
 import { createProjectForUser, ensureProjectSchema, ProjectLimitReachedError } from "../lib/projectCreation";
 import {
@@ -748,6 +748,108 @@ router.put("/projects/:id/flow", async (req, res): Promise<void> => {
       set: { nodes, edges, updatedAt: new Date() },
     });
   res.json({ ok: true });
+});
+
+// ── Resume artifact ───────────────────────────────────────────────────────────
+
+router.get("/projects/:id/resume", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [proj] = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const [artifact] = await db
+    .select()
+    .from(artifactsTable)
+    .where(and(eq(artifactsTable.projectId, id), eq(artifactsTable.type, "resume")))
+    .orderBy(desc(artifactsTable.updatedAt))
+    .limit(1);
+
+  res.json({ artifact: artifact ?? null });
+});
+
+router.post("/projects/:id/append-thread", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [proj] = await db
+    .select({ id: projectsTable.id, name: projectsTable.name })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const [genomeRow] = await db
+    .select()
+    .from(projectGenomeTable)
+    .where(eq(projectGenomeTable.projectId, id))
+    .limit(1);
+
+  const clarityScore: number = typeof genomeRow?.confidenceScore === "number" ? genomeRow.confidenceScore : 0;
+  const hasIntent = Boolean(genomeRow?.purpose);
+  const hasAudience = Boolean(genomeRow?.audience);
+
+  function suggestedBuild(score: number, intent: boolean, audience: boolean): string {
+    if (!intent) return "Start by defining your core intent";
+    if (score < 30) return "Landing Page — begin with presence";
+    if (!audience) return "Landing Page — clarify who this is for";
+    if (score < 50) return "Database Schema — structure your data model";
+    if (score < 65) return "Web App — your foundation is ready";
+    return "Full Web App — you have everything needed";
+  }
+
+  const openQuestions = Array.isArray(genomeRow?.openQuestions) ? genomeRow.openQuestions as string[] : [];
+
+  const threadSummary = hasIntent
+    ? `${proj.name} is ${genomeRow?.purpose ?? "a project in development"}${genomeRow?.audience ? `, built for ${String(genomeRow.audience)}` : ""}${genomeRow?.coreEmotion ? `, with a ${String(genomeRow.coreEmotion)} tone` : ""}.`
+    : `${proj.name} is still being defined. Continue the conversation to build clarity.`;
+
+  const brief = {
+    generatedAt: new Date().toISOString(),
+    projectName: proj.name,
+    clarityScore,
+    intent: genomeRow?.purpose ?? null,
+    audience: genomeRow?.audience ?? null,
+    tone: genomeRow?.coreEmotion ?? null,
+    openQuestions,
+    suggestedFirstBuild: suggestedBuild(clarityScore, hasIntent, hasAudience),
+    threadSummary,
+  };
+
+  const content = JSON.stringify(brief);
+  const title = `Resume — ${proj.name}`;
+
+  const [existing] = await db
+    .select({ id: artifactsTable.id })
+    .from(artifactsTable)
+    .where(and(eq(artifactsTable.projectId, id), eq(artifactsTable.type, "resume")))
+    .orderBy(desc(artifactsTable.updatedAt))
+    .limit(1);
+
+  let artifact;
+  if (existing) {
+    const [updated] = await db
+      .update(artifactsTable)
+      .set({ content, title, updatedAt: new Date() })
+      .where(eq(artifactsTable.id, existing.id))
+      .returning();
+    artifact = updated;
+  } else {
+    const [inserted] = await db
+      .insert(artifactsTable)
+      .values({ projectId: id, userId, type: "resume", title, content, status: "active", pinned: true })
+      .returning();
+    artifact = inserted;
+  }
+
+  res.json({ ok: true, artifact, brief });
 });
 
 export default router;

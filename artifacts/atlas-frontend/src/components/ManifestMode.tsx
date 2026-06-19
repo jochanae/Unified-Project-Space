@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SessionTimeline } from "@/components/workspace/SessionTimeline";
 import type { TimelineMessage } from "@/components/workspace/SessionTimeline";
 import { ArtifactsPanel } from "@/components/workspace/ArtifactsPanel";
@@ -7,6 +7,34 @@ import type { ManifestDecision } from "@/components/workspace/PreviewPanel";
 import type { PushRecord } from "@/pages/workspace";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface ResumeBrief {
+  generatedAt: string;
+  projectName: string;
+  clarityScore: number;
+  intent: string | null;
+  audience: string | null;
+  tone: string | null;
+  openQuestions: string[];
+  suggestedFirstBuild: string;
+  threadSummary: string;
+}
+
+function parseResumeBrief(content: string): ResumeBrief | null {
+  try { return JSON.parse(content) as ResumeBrief; } catch { return null; }
+}
+
+function resumeTargetId(suggestedFirstBuild: string): string | null {
+  const s = suggestedFirstBuild.toLowerCase();
+  if (s.includes("landing")) return "landing-page";
+  if (s.includes("database") || s.includes("schema")) return "database-schema";
+  if (s.includes("full web") || s.includes("full-web")) return "web-app";
+  if (s.includes("web app") || s.includes("web-app")) return "web-app";
+  if (s.includes("beta")) return "beta-program";
+  if (s.includes("investor") || s.includes("deck")) return "investor-deck";
+  if (s.includes("mobile")) return "mobile-app";
+  return null;
+}
 
 type Completeness = "absent" | "thin" | "sufficient";
 type TargetStatus = "available" | "warning" | "locked";
@@ -468,6 +496,12 @@ export function ManifestMode({
   const [visible, setVisible] = useState(false);
   const [selectedSheet, setSelectedSheet] = useState<OutputSheet | null>(null);
 
+  // Resume state
+  const [resumeBrief, setResumeBrief] = useState<ResumeBrief | null>(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeGenerating, setResumeGenerating] = useState(false);
+  const resumeAutoSelectedRef = useRef(false);
+
   // Animate in
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 16);
@@ -487,6 +521,54 @@ export function ManifestMode({
       .catch(() => {})
       .finally(() => setGenomeLoading(false));
   }, [projectId]);
+
+  // Fetch resume artifact
+  useEffect(() => {
+    if (!projectId || projectId <= 0) return;
+    setResumeLoading(true);
+    fetch(`/api/projects/${projectId}/resume`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.artifact?.content) {
+          const brief = parseResumeBrief(data.artifact.content as string);
+          if (brief) setResumeBrief(brief);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setResumeLoading(false));
+  }, [projectId]);
+
+  // Auto-select suggested target from resume (once, on first load)
+  useEffect(() => {
+    if (!resumeBrief || resumeAutoSelectedRef.current || selectedTarget) return;
+    const targetId = resumeTargetId(resumeBrief.suggestedFirstBuild);
+    if (targetId) {
+      setSelectedTarget(targetId);
+      resumeAutoSelectedRef.current = true;
+    }
+  }, [resumeBrief, selectedTarget]);
+
+  async function generateResume() {
+    if (!projectId || resumeGenerating) return;
+    setResumeGenerating(true);
+    try {
+      const r = await fetch(`/api/projects/${projectId}/append-thread`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (r.ok) {
+        const data = await r.json() as { brief?: ResumeBrief };
+        if (data.brief) {
+          setResumeBrief(data.brief);
+          const targetId = resumeTargetId(data.brief.suggestedFirstBuild);
+          if (targetId && !selectedTarget) setSelectedTarget(targetId);
+        }
+      }
+    } catch {}
+    finally { setResumeGenerating(false); }
+  }
 
   const anchors = deriveAnchors(genome);
   const targets = deriveTargets(genome);
@@ -560,6 +642,95 @@ export function ManifestMode({
 
         {/* Content */}
         <div style={{ flex: 1, position: "relative", zIndex: 1, maxWidth: 560, width: "100%", margin: "0 auto", padding: "24px 20px 40px", display: "flex", flexDirection: "column", gap: 32 }}>
+
+          {/* ── Section 0: Resume Framing ── */}
+          <section>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <SectionLabel>Resume</SectionLabel>
+              {resumeBrief && (
+                <button
+                  type="button"
+                  onClick={() => void generateResume()}
+                  disabled={resumeGenerating}
+                  style={{ background: "transparent", border: "none", cursor: resumeGenerating ? "default" : "pointer", fontFamily: MONO, fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: MUTED, opacity: resumeGenerating ? 0.3 : 0.45, padding: "2px 0", transition: "opacity 150ms ease" }}
+                  onMouseEnter={(e) => { if (!resumeGenerating) (e.currentTarget as HTMLButtonElement).style.opacity = "0.75"; }}
+                  onMouseLeave={(e) => { if (!resumeGenerating) (e.currentTarget as HTMLButtonElement).style.opacity = "0.45"; }}
+                >
+                  {resumeGenerating ? "Regenerating…" : "Regenerate"}
+                </button>
+              )}
+            </div>
+
+            {resumeLoading && !resumeBrief ? (
+              <div style={{ padding: "14px", borderRadius: 8, background: SURFACE, border: `1px solid ${BORDER}` }}>
+                <div style={{ height: 10, width: "55%", borderRadius: 4, background: "rgba(255,255,255,0.06)", marginBottom: 10 }} />
+                <div style={{ height: 8, width: "80%", borderRadius: 4, background: "rgba(255,255,255,0.04)", marginBottom: 6 }} />
+                <div style={{ height: 8, width: "65%", borderRadius: 4, background: "rgba(255,255,255,0.04)" }} />
+              </div>
+            ) : resumeBrief ? (
+              <div style={{ borderRadius: 8, background: SURFACE, border: `1px solid rgba(201,162,76,0.15)`, overflow: "hidden" }}>
+                {/* Thread summary */}
+                <div style={{ padding: "14px 14px 12px", borderBottom: `1px solid ${BORDER}` }}>
+                  <p style={{ margin: 0, fontSize: 13, color: FG, opacity: 0.82, lineHeight: 1.6, fontFamily: SANS }}>
+                    {resumeBrief.threadSummary}
+                  </p>
+                </div>
+
+                {/* Suggested first build */}
+                <div style={{ padding: "10px 14px", borderBottom: resumeBrief.openQuestions.length > 0 ? `1px solid ${BORDER}` : "none", display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: MUTED, opacity: 0.45, marginTop: 2, flexShrink: 0 }}>Build</span>
+                  <span style={{ fontSize: 12, color: GOLD, fontFamily: SANS, opacity: 0.88, lineHeight: 1.4 }}>{resumeBrief.suggestedFirstBuild}</span>
+                </div>
+
+                {/* Open questions */}
+                {resumeBrief.openQuestions.length > 0 && (
+                  <div style={{ padding: "10px 14px" }}>
+                    <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: MUTED, opacity: 0.4, marginBottom: 8 }}>Open Questions</div>
+                    <div style={{ display: "flex", flexDirection: "column" as const, gap: 6 }}>
+                      {resumeBrief.openQuestions.slice(0, 3).map((q, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                          <span style={{ color: AMBER, opacity: 0.6, flexShrink: 0, lineHeight: 1.5, fontSize: 10 }}>?</span>
+                          <span style={{ fontSize: 12, color: MUTED, opacity: 0.65, lineHeight: 1.45, fontFamily: SANS }}>{q}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer timestamp */}
+                <div style={{ padding: "8px 14px", borderTop: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+                  <span style={{ fontFamily: MONO, fontSize: 8, color: MUTED, opacity: 0.3, letterSpacing: "0.05em" }}>
+                    Packaged {new Date(resumeBrief.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void generateResume()}
+                disabled={resumeGenerating || !projectId}
+                style={{
+                  width: "100%", padding: "13px 20px", borderRadius: 8,
+                  border: `1px dashed ${BORDER}`,
+                  background: "rgba(255,255,255,0.02)",
+                  cursor: resumeGenerating || !projectId ? "not-allowed" : "pointer",
+                  fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase" as const,
+                  color: MUTED, opacity: resumeGenerating ? 0.4 : 0.6,
+                  transition: "opacity 160ms ease, border-color 160ms ease",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+                onMouseEnter={(e) => { if (!resumeGenerating && projectId) (e.currentTarget as HTMLButtonElement).style.opacity = "0.85"; }}
+                onMouseLeave={(e) => { if (!resumeGenerating && projectId) (e.currentTarget as HTMLButtonElement).style.opacity = "0.6"; }}
+              >
+                {resumeGenerating ? (
+                  <>
+                    <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.2)", borderTopColor: MUTED, animation: "spin 700ms linear infinite" }} />
+                    Packaging…
+                  </>
+                ) : "Package Idea →"}
+              </button>
+            )}
+          </section>
 
           {/* ── Section 1: DNA Snapshot ── */}
           <section>
