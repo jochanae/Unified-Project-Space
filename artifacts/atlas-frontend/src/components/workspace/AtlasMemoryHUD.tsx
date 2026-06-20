@@ -133,47 +133,76 @@ function ActivityRow({ ev, dimmed }: { ev: HudEvent; dimmed?: boolean }) {
 
 function MemoryBlock({ brief }: { brief: NonNullable<ReturnType<typeof useProjectResume>["data"]> }) {
   const updated = relTime(brief.generatedAt);
-  const openCount = brief.openQuestions.length;
+
+  // Build "Known" bullets: intent + audience, deduplicated
+  const knownFacts: string[] = [];
+  if (brief.intent) knownFacts.push(brief.intent);
+  if (brief.audience) knownFacts.push(brief.audience);
 
   return (
-    <div style={{ padding: "6px 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ padding: "6px 12px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
       {/* Project name */}
-      <div style={{ fontFamily: FONT_SANS, fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.88)", letterSpacing: "-0.01em", lineHeight: 1.3 }}>
+      <div style={{ fontFamily: FONT_SANS, fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.88)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
         {brief.projectName}
       </div>
 
-      {/* Core intent / summary */}
-      {brief.threadSummary && (
-        <p style={{ margin: 0, fontFamily: FONT_SANS, fontSize: 11, lineHeight: 1.55, color: "rgba(255,255,255,0.52)" }}>
-          {brief.threadSummary.length > 200 ? brief.threadSummary.slice(0, 197) + "…" : brief.threadSummary}
-        </p>
+      {/* Known facts */}
+      {knownFacts.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.22)" }}>
+            Known
+          </span>
+          {knownFacts.map((fact, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+              <span style={{ color: AMBER, opacity: 0.65, fontSize: 10, flexShrink: 0, marginTop: 1 }}>✓</span>
+              <span style={{ fontFamily: FONT_SANS, fontSize: 11, color: "rgba(255,255,255,0.55)", lineHeight: 1.45 }}>
+                {fact.length > 80 ? fact.slice(0, 77) + "…" : fact}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Suggested first build */}
-      {brief.suggestedFirstBuild && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: AMBER, opacity: 0.65 }}>
-            Suggested
+      {/* Open questions */}
+      {brief.openQuestions.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.22)" }}>
+            Open Questions
           </span>
-          <span style={{ fontFamily: FONT_SANS, fontSize: 11, color: "rgba(255,255,255,0.6)", lineHeight: 1.4 }}>
-            {brief.suggestedFirstBuild}
+          {brief.openQuestions.slice(0, 3).map((q, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+              <span style={{ color: "rgba(255,255,255,0.28)", fontSize: 10, flexShrink: 0, marginTop: 1 }}>·</span>
+              <span style={{ fontFamily: FONT_SANS, fontSize: 11, color: "rgba(255,255,255,0.42)", lineHeight: 1.45 }}>
+                {q.length > 80 ? q.slice(0, 77) + "…" : q}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Suggested next step */}
+      {brief.suggestedFirstBuild && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: AMBER, opacity: 0.55 }}>
+            Next Step
+          </span>
+          <span style={{ fontFamily: FONT_SANS, fontSize: 11, color: "rgba(255,255,255,0.52)", lineHeight: 1.4 }}>
+            {brief.suggestedFirstBuild.length > 100 ? brief.suggestedFirstBuild.slice(0, 97) + "…" : brief.suggestedFirstBuild}
           </span>
         </div>
       )}
 
-      {/* Meta row: open questions + updated */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
-        {openCount > 0 ? (
-          <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: "rgba(255,255,255,0.22)", letterSpacing: "0.04em" }}>
-            {openCount} open {openCount === 1 ? "question" : "questions"}
+      {/* Last imported timestamp */}
+      {updated && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 2, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.18)" }}>
+            Last imported
           </span>
-        ) : <span />}
-        {updated && (
-          <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: "rgba(255,255,255,0.18)", letterSpacing: "0.03em" }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.03em" }}>
             {updated}
           </span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
