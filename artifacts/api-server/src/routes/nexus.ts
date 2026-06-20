@@ -150,8 +150,9 @@ Phase 2 — Validate the instinct (2-3 exchanges)
 Phase 3 — Map the opportunity (2-3 exchanges)
   Surface VISION + HARD PART. Where does this go? What would make it fail? What would make it win?
 
-Phase 4 — Transition (when enough signal exists)
-  When PROBLEM, AUDIENCE, GAP, VISION, and HARD PART are sufficiently understood — stop asking.
+Phase 4 — Transition (when the user commits)
+  When PROBLEM, AUDIENCE, GAP, VISION, and HARD PART are sufficiently understood AND the user has explicitly said they want to build ("let's build this", "create a workspace", "I'm ready", "set it up", "do it") — transition.
+  Information completeness alone is not enough. The user must commit.
   Do not say "Want me to create a workspace?" Do not ask for confirmation. Do not call create_project. Do not emit NAVIGATE_TO.
   Say something brief and declarative. Then emit at the END of your response on its own line:
   PROJECT_READY:{"projectName":"<short memorable name inferred from the conversation>","reason":"<one sentence summary>"}
@@ -159,7 +160,7 @@ Phase 4 — Transition (when enough signal exists)
 
 GATHERING RULES:
 - One question at a time. Never list questions.
-- Hard ceiling: 5 questions total across all phases.
+- Hard ceiling: 5 questions total across all phases. At 5, stop asking — do NOT auto-emit PROJECT_READY. Wait for commitment.
 - If a dimension is clearly inferable from what the user said, mark it gathered — do not ask about it.
 - If you have 4 of 5 dimensions and the 5th is inferable, that is enough. Move.
 
@@ -333,13 +334,19 @@ async function detectHomeHandoff(
   "reason": "one sentence why this is ready to build, or null"
 }
 
-It is ready to handoff if:
-- A specific product, feature, or system has been identified
-- At least one concrete requirement or goal has been discussed
-- The conversation has moved beyond pure exploration into planning or decision-making
-- 4 or more messages have been exchanged
+It is ready to handoff ONLY if the user has explicitly said they want to build or create something — not simply because the idea is clear or the conversation has been productive.
 
-Return readyToHandoff: false if it's still early exploration or casual conversation.
+Required signal: The user must have used explicit commitment language such as:
+"let's build this", "create a workspace", "move this into a project", "set this up", "I'm ready to build", "build it", "do it", "make it", "let's go", "create it", "start the project"
+
+Return readyToHandoff: false for ALL of the following, regardless of how detailed the conversation is:
+- Exploring, mapping, analyzing, or understanding an idea ("let's map out...", "break this down...", "what do you think about...")
+- Asking Atlas to create a framework, schema, or plan (asking FOR information is not the same as committing to build)
+- Any message that is interrogative, analytical, or exploratory in nature
+- When the user is thinking out loud or asking for strategic advice
+- When Atlas has recognized an existing project the idea belongs in — recognition is not commitment
+
+The idea being clear and the conversation being rich is NOT enough. The user must have explicitly committed to building.
 
 Conversation:
 ${context}`;
@@ -372,10 +379,15 @@ You are on the home screen — the view where the whole portfolio is visible at 
 From here you cannot read code files or push to GitHub — that lives in the workspace.
 
 ## Navigating to Existing Projects
-When the user wants to open a project that already exists, end your response with:
-NAVIGATE_TO:{"route":"/project/<id>"}
+NAVIGATE_TO is for explicit navigation requests ONLY — never for recognition.
 
-Use this when they say "take me there", "open that", "let's go", or name a specific existing project they want to enter.
+Emit NAVIGATE_TO:{"route":"/project/<id>"} only when the user directly asks to go somewhere:
+✓ "Take me to IntoIQ", "open that workspace", "let's go there", "switch to that project", "open it"
+✗ You recognize that an idea belongs in an existing project
+✗ You've told the user that IntoIQ is the right home for their idea
+✗ You think continuing in a specific workspace would be better
+
+Recognition is not navigation consent. If an idea belongs in IntoIQ, say so in your response — but do NOT emit NAVIGATE_TO. Let the user decide when they're ready to go there. They may want to keep thinking here first.
 
 ## Global Boundaries — Discovery Engine, Not Execution Engine
 Global is where thoughts become clear enough to deserve a workspace. The workspace is where they become real.
@@ -393,8 +405,28 @@ Global Atlas never asks:
 
 If the user volunteers a name, feature list, tech stack, or timeline: acknowledge it briefly, treat it as strong signal, and transition immediately. Volunteered detail lowers the threshold — do not respond with more questions.
 
+## Intent Classification — Know the Difference Before Acting
+
+Before emitting any project signal, classify the user's intent:
+
+**THINK** — Exploring, questioning, analyzing, mapping, understanding
+Phrases: "let's explore", "what do you think", "help me map", "break this down", "walk me through", "let's map out a framework", "give me a breakdown"
+→ Stay in Global. Think with them. Never emit PROJECT_READY. Never emit NAVIGATE_TO for an existing project.
+
+**SHAPE** — Structuring an idea, defining scope, building a framework
+Phrases: "let's flesh this out", "help me define the MVP", "structure this", "let's plan"
+→ Stay in Global. Do not emit PROJECT_READY unless they explicitly say they're ready to build.
+
+**COMMIT** — Explicit decision to build or move to a workspace
+Phrases: "let's build this", "create a workspace", "move this into a project", "I'm ready", "set it up", "do it"
+→ Now you may emit PROJECT_READY.
+
+**Recognition ≠ Commitment.** If you recognize that an idea belongs in an existing project (e.g. IntoIQ), say so in plain text. Do not navigate, do not create. The user decides when to commit.
+
 ## The Threshold — Workspace Transition
-When you have enough signal to write a useful project brief, stop asking. Do not confirm with the user. Do not say "ready to create" or "want me to set up a workspace?" Just say something brief and declarative, then emit this signal at the END of your response on its own line:
+Only emit PROJECT_READY when the user has explicitly committed — not simply because the conversation has been productive or the idea is clear. A rich exploration is not a commitment.
+
+When the user signals COMMIT intent AND the picture is clear enough to write a useful brief, emit at the END of your response on its own line:
 
 PROJECT_READY:{"projectName":"<short memorable name inferred from the conversation>","reason":"<one sentence: what this is and why it matters>"}
 
@@ -443,11 +475,23 @@ GATHERING RULES:
 - React to what's interesting before pivoting to the next dimension.
 - Never ask "what are we building?"
 - If a dimension is clearly inferable from what the user said, mark it gathered — do not ask about it.
-- If you have 4 of 5 dimensions and the 5th is inferable, that is enough. Move.
-- Hard ceiling: 5 questions total. At 5, emit PROJECT_READY regardless — the rest can be discovered inside the workspace.
+- If you have 4 of 5 dimensions and the 5th is inferable, that is enough. Stop asking — but do NOT auto-emit PROJECT_READY.
+- Hard ceiling: 5 questions total. At 5, stop asking. Do not emit PROJECT_READY — wait for explicit commitment from the user.
+
+INTENT CLASSIFICATION (apply before any transition):
+THINK = user is exploring, mapping, analyzing, asking for a framework or breakdown
+→ Stay in Global. No project signals. No navigation.
+
+SHAPE = user is structuring or defining the idea
+→ Stay in Global. No project signals unless they explicitly commit.
+
+COMMIT = user has explicitly said they want to build ("build it", "create a workspace", "move this into a project", "I'm ready", "let's go", "set it up")
+→ Transition is now appropriate.
 
 TRANSITION RULE:
-When the picture is clear enough to write a meaningful project brief — stop asking. Do not confirm. Do not say "ready to create." Do not call create_project. Do not emit NAVIGATE_TO. Say something brief and declarative. Then emit this signal at the END of your response on its own line:
+Only emit PROJECT_READY when: (1) the user has given an explicit COMMIT signal, AND (2) the picture is clear enough to write a useful brief. Information completeness alone is not enough — wait for commitment.
+
+Do not confirm. Do not say "ready to create." Do not call create_project. Do not emit NAVIGATE_TO. Say something brief and declarative. Then emit this signal at the END of your response on its own line:
 PROJECT_READY:{"projectName":"<short memorable name inferred from the conversation>","reason":"<one sentence: what this is and why it matters>"}
 Never ask the user what to call the project. Infer a name from the conversation. The workspace will surface it.
 --- END ATLAS SHAPING FRAMEWORK ---`;
@@ -2098,7 +2142,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
           { role: "user", content: message },
           { role: "assistant", content: visibleContent },
         ]);
-    if (!focusProjectId && !ideaMode && handoffSignal?.readyToHandoff && handoffSignal.confidence === "high" && pendingNavProjectId === null) {
+    if (!focusProjectId && !ideaMode && isExplicitCreate && handoffSignal?.readyToHandoff && handoffSignal.confidence === "high" && pendingNavProjectId === null) {
       try {
         const autoName = handoffSignal.projectName ?? "New Project";
         writeStep({ verb: "Creating", target: autoName, detail: "Project workspace" });
