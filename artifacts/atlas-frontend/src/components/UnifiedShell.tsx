@@ -1944,15 +1944,17 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
         {/* ShellFooter intentionally not rendered — UnifiedContextDock owns the bottom nav.
             Two fixed footers at bottom:0 caused tap collisions. */}
       </div>
-      {/* Two-layer memory HUD
-          Home:      event-driven only — activeProjectId suppressed so Layer 2 (persistent memory) never
-                     pins the HUD open. It appears only when Atlas fires hudBus events, then fades after
-                     IDLE_MS (8 s) of silence. The FOCUS chip memory peek handles the "show me what Atlas
-                     knows" use case without cluttering the discovery surface.
-          Workspace: full behavior — Layer 1 (live activity) + Layer 2 (persistent resume) both active. */}
+      {/* Surface contract:
+          Home (surface="activity") → "Atlas · Activity"
+            Event-driven only. activeProjectId suppressed so Layer 2 never pins open.
+            Answers: "What did Atlas just notice?" Fades after 8 s idle.
+          Workspace (surface="memory") → "Atlas · Memory"
+            Persistent. Layer 1 (live activity) + Layer 2 (resume). Always available.
+            Answers: "What does Atlas currently know?" */}
       <AtlasMemoryHUD
         position={{ top: 64, right: 16 }}
         activeProjectId={location !== "/home" ? activeProjectId : null}
+        surface={location !== "/home" ? "memory" : "activity"}
       />
     </ShellStateContext.Provider>
   );

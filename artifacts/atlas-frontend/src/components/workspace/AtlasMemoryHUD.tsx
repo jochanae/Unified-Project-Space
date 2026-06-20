@@ -215,12 +215,19 @@ export interface AtlasMemoryHUDProps {
   conversationId?: string | null;
   /** Active project — enables Layer 2 persistent memory. */
   activeProjectId?: number | null;
+  /**
+   * Surface identity — controls the label shown in the expanded header.
+   * "activity" → Home: "Atlas · Activity"   (event-driven, ephemeral)
+   * "memory"   → Workspace: "Atlas · Memory" (persistent, resume-powered)
+   */
+  surface?: "activity" | "memory";
 }
 
 export function AtlasMemoryHUD({
   position = { top: 12, right: 12 },
   conversationId,
   activeProjectId,
+  surface = "memory",
 }: AtlasMemoryHUDProps) {
   const allEvents = useHudFeed();
   const { data: resumeBrief } = useProjectResume(activeProjectId);
@@ -360,7 +367,7 @@ export function AtlasMemoryHUD({
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {hasActivity ? <VioletPulse /> : <AmberDot />}
             <span style={{ fontFamily: FONT_SANS, fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.7)", letterSpacing: "-0.005em" }}>
-              Atlas · Memory
+              {surface === "activity" ? "Atlas · Activity" : "Atlas · Memory"}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center" }}>
