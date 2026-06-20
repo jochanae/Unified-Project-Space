@@ -23,11 +23,13 @@ export type ShellMode = 'ambient' | 'active' | 'operational';
 
 // Shaping → Commit handoff state machine.
 //   idle          = no commit in flight (baseline)
-//   shaping       = commit endpoint in flight (Atlas synthesizing)
-//   ready         = pendingWorkspaceId set, CommitPill glowing, waiting for tap
-//   transitioning = user tapped, border-trace playing, header gate engaged
+//   shaping       = Atlas is mid-stream forming the idea; pill visible but non-interactive
+//   ready         = stream done, Atlas finished goodbye; CommitPill glowing, waiting for tap
+//   packaging     = user tapped; handleHandoff running in background
+//   opening       = handoff complete, navigating; pill shows "Opening Workspace…"
+//   transitioning = legacy alias kept for backward compat; behaves like packaging
 // Header MUST NOT render workspace title while isHandoff() === true.
-export type ShapingStatus = 'idle' | 'shaping' | 'ready' | 'transitioning';
+export type ShapingStatus = 'idle' | 'shaping' | 'ready' | 'packaging' | 'opening' | 'transitioning';
 
 export interface ActiveThread {
   conversationId: string | null;
@@ -84,7 +86,7 @@ export const useShellStore = create<ShellStore>((set, get) => ({
     set({ shapingStatus: 'idle', pendingWorkspaceId: null, pendingWorkspaceTitle: null, handoffStage: '' }),
   isHandoff: () => {
     const s = get().shapingStatus;
-    return s === 'shaping' || s === 'ready' || s === 'transitioning';
+    return s === 'shaping' || s === 'ready' || s === 'packaging' || s === 'opening' || s === 'transitioning';
   },
   activeThread: emptyThread,
   setActiveThread: (thread) =>

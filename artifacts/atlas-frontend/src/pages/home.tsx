@@ -1951,11 +1951,12 @@ export default function Home() {
     if (shapingStatus === "transitioning") return;
     if (suggestedName) {
       setPendingWorkspace(null, suggestedName);
-      const ready =
-        nexusChat.handoffSignal?.readyToHandoff === true ||
-        nexusChat.handoffSignal?.explicit === true ||
-        userMsgCount >= 5;
-      setShapingStatus(ready ? "ready" : "shaping");
+      // Mid-stream: always "shaping" — Atlas is still writing its goodbye.
+      // "ready" is only promoted by the done-event (projectReadyDoneData effect)
+      // so the pill never lights up before Atlas finishes speaking.
+      if (shapingStatus !== "ready" && shapingStatus !== "packaging" && shapingStatus !== "opening") {
+        setShapingStatus("shaping");
+      }
     } else if (userMsgCount === 0 && shapingStatus !== "idle") {
       // No active conversation — ambient home state. Reset any stale pill.
       setShapingStatus("idle");
@@ -3282,10 +3283,11 @@ export default function Home() {
 
       queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
 
+      setShapingStatus("opening");
       setLocation(`/project/${projectId}?source=home-handoff`);
       return;
     } catch {
-      setShapingStatus("idle");
+      setShapingStatus("ready");
       toast("Handoff failed — try again");
     } finally {
       setHandoffLoading(false);

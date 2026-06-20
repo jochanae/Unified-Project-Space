@@ -22,7 +22,7 @@ import { haptics } from "@/lib/haptics";
  * silently navigating.
  */
 
-type Status = "shaping" | "ready" | "transitioning" | "error";
+type Status = "shaping" | "ready" | "packaging" | "opening" | "transitioning" | "error";
 
 interface InlineProps {
   projectId: number;
@@ -126,9 +126,10 @@ function StoreCommitPill({ className = "", onArm, overrideLabel }: { className?:
     }
   }, [status]);
 
-  // Trace animation runs purely as visual cover while onArm executes.
+  // Trace animation runs during packaging/opening/transitioning as visual cover.
   useEffect(() => {
-    if (status !== "transitioning") {
+    const active = status === "packaging" || status === "opening" || status === "transitioning";
+    if (!active) {
       setTraceProgress(0);
       return;
     }
@@ -144,15 +145,14 @@ function StoreCommitPill({ className = "", onArm, overrideLabel }: { className?:
     return () => cancelAnimationFrame(raf);
   }, [status]);
 
-  // Kick off onArm exactly once when entering transitioning.
+  // Kick off onArm exactly once when the user commits (packaging state).
   useEffect(() => {
-    if (status !== "transitioning" || armedRef.current) return;
+    if ((status !== "packaging" && status !== "transitioning") || armedRef.current) return;
     armedRef.current = true;
     const run = async () => {
       try {
         if (onArm) {
           await onArm();
-          // onArm owns navigation; reset shortly after so the overlay clears.
           setTimeout(() => resetHandoff(), 80);
         } else if (projectId) {
           setShellMode("operational");
@@ -168,7 +168,7 @@ function StoreCommitPill({ className = "", onArm, overrideLabel }: { className?:
     void run();
   }, [status, onArm, projectId, navigate, setShellMode, setShapingStatus, resetHandoff]);
 
-  if (status === "idle" || status === "shaping") return null;
+  if (status === "idle") return null;
 
   const effectiveStatus: Status = localStatus === "error" ? "error" : (status as Status);
 
@@ -185,12 +185,12 @@ function StoreCommitPill({ className = "", onArm, overrideLabel }: { className?:
           setErrorMsg(null);
           armedRef.current = false;
           haptics.tap();
-          setShapingStatus("transitioning");
+          setShapingStatus("packaging");
           return;
         }
         if (status !== "ready") return;
         haptics.cardConfirmed();
-        setShapingStatus("transitioning");
+        setShapingStatus("packaging");
       }}
       className={className}
     />
@@ -217,16 +217,22 @@ function PillVisual({
   overrideLabel?: string;
 }) {
   const label =
-    status === "ready"
-      ? (overrideLabel ?? "Enter Workspace →")
-      : status === "transitioning"
-        ? "Opening workspace…"
-        : status === "error"
-          ? "Handoff failed — Retry"
-          : "Enter Workspace →";
+    status === "shaping"
+      ? "Shaping\u2026"
+      : status === "ready"
+        ? (overrideLabel ?? "Enter Workspace \u2192")
+        : status === "packaging"
+          ? "Packaging\u2026"
+          : status === "opening" || status === "transitioning"
+            ? "Opening Workspace\u2026"
+            : status === "error"
+              ? "Handoff failed \u2014 Retry"
+              : "Enter Workspace \u2192";
 
+  const isShaping = status === "shaping";
   const isReady = status === "ready";
-  const isTransitioning = status === "transitioning";
+  const isPackaging = status === "packaging";
+  const isOpening = status === "opening" || status === "transitioning";
   const isError = status === "error";
   const interactive = isReady || isError;
 
@@ -246,14 +252,16 @@ function PillVisual({
         style={{
           background: interactive
             ? `linear-gradient(135deg, ${accentSoft}, ${accentSoft.replace("0.16", "0.08")})`
-            : "rgba(255,255,255,0.03)",
-          border: `1px solid ${interactive ? accentBorder : "rgba(255,255,255,0.08)"}`,
+            : isPackaging || isOpening
+              ? "rgba(201,162,76,0.06)"
+              : "rgba(255,255,255,0.03)",
+          border: `1px solid ${interactive ? accentBorder : isPackaging || isOpening ? "rgba(201,162,76,0.3)" : "rgba(255,255,255,0.08)"}`,
           boxShadow: isReady
             ? "0 0 24px rgba(201,162,76,0.25), inset 0 0 12px rgba(201,162,76,0.08)"
             : isError
               ? "0 0 18px rgba(220,90,80,0.25)"
               : "none",
-          color: interactive ? accent : "var(--atlas-muted)",
+          color: interactive ? accent : isPackaging || isOpening ? "rgba(201,162,76,0.6)" : "var(--atlas-muted)",
           fontFamily: "var(--app-font-mono)",
           fontSize: 12,
           letterSpacing: "0.08em",
@@ -273,11 +281,13 @@ function PillVisual({
           />
         )}
 
-        {status === "shaping" && (
+        {(isShaping || isPackaging) && (
           <span
             className="absolute inset-0 rounded-full"
             style={{
-              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)",
+              background: isPackaging
+                ? "linear-gradient(90deg, transparent, rgba(201,162,76,0.1), transparent)"
+                : "linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)",
               backgroundSize: "200% 100%",
               animation: "commit-pill-shimmer 1.6s linear infinite",
               pointerEvents: "none",
@@ -285,7 +295,7 @@ function PillVisual({
           />
         )}
 
-        {isTransitioning && (
+        {isOpening && (
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
             preserveAspectRatio="none"
