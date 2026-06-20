@@ -1944,8 +1944,8 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
         {/* ShellFooter intentionally not rendered — UnifiedContextDock owns the bottom nav.
             Two fixed footers at bottom:0 caused tap collisions. */}
       </div>
-      {/* Two-layer memory HUD — Layer 1: live activity (hudBus), Layer 2: Resume (API) */}
-      <AtlasMemoryHUD position={{ top: 64, right: 16 }} activeProjectId={activeProjectId} />
+      {/* Two-layer memory HUD — hidden on home page where FOCUS chip already shows project context */}
+      {location !== "/home" && <AtlasMemoryHUD position={{ top: 64, right: 16 }} activeProjectId={activeProjectId} />}
     </ShellStateContext.Provider>
   );
 }
