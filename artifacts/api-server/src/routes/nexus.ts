@@ -2164,13 +2164,18 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
       : null;
 
-    const handoffSignal = ideaMode
+    const rawHandoffSignal = ideaMode
       ? null
       : await detectHomeHandoff([
           ...conversationHistory.slice(-8),
           { role: "user", content: message },
           { role: "assistant", content: visibleContent },
         ]);
+    // Gate: in THINK mode, suppress the handoff signal entirely.
+    // Recognizing that a project is relevant ≠ the user consenting to navigate or commit.
+    // The CommitPill and FOCUS chip must not arm during exploration.
+    const handoffSignal = convState === "THINK" ? null : rawHandoffSignal;
+
     // Auto-create requires all three: Atlas in COMMIT state, explicit commit phrase, AND high-confidence handoff.
     // CommitPill tap remains the primary consent path — this only fires on unmistakable signals.
     if (!focusProjectId && !ideaMode && convState === "COMMIT" && isExplicitCreate && handoffSignal?.readyToHandoff && handoffSignal.confidence === "high" && pendingNavProjectId === null) {
