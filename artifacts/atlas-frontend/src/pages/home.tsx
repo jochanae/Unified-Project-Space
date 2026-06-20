@@ -4610,6 +4610,30 @@ export default function Home() {
                 style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, justifyContent: "flex-start", minWidth: 0 }}
               >
 
+              {/* Gold history clock — matches production action bar */}
+              <button
+                type="button"
+                aria-label="Where were we"
+                title="Conversation history"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => void handleOpenHistory()}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 32, height: 32, borderRadius: 8, border: "none",
+                  background: "rgba(201,162,76,0.12)",
+                  color: "rgba(201,162,76,0.85)",
+                  cursor: "pointer", flexShrink: 0, padding: 0,
+                  transition: "background 150ms",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(201,162,76,0.22)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(201,162,76,0.12)"; }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <polyline points="12 7 12 12 15 14" />
+                </svg>
+              </button>
+
               <ComposerActions
                 scope="home"
                 hasProjectContext={false}
