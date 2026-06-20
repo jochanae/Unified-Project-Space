@@ -11,26 +11,25 @@ Global conversation → project created → TWO things must happen:
 
 1. **Full transcript copied into workspace thread** (for the human)
    - Purpose: trust and continuity. "Atlas came with me."
-   - Implementation: re-link ambient nexus_messages rows to new projectId
-   - WHERE: `nexusMessagesTable` rows with `projectId IS NULL` → set `projectId = newProjectId`
+   - Implementation (two-layer):
+     a. **Visual layer**: sessionStorage `atlas-opening-conversation` → `normalizeThinkFreelyThread` → `setMessages` in workspace.tsx (already wired, survives nav)
+     b. **Persistence layer**: `POST /api/projects/:id/append-thread` writes conversation snapshot to `nexusMessagesTable` with `projectId = newProjectId` (added; survives refresh; AI context)
 
 2. **Resume artifact generated from transcript** (for the system)
    - Purpose: compressed, structured signal for Manifest, builders, future agents
-   - Implementation: POST /api/projects/:id/append-thread with conversation snapshot
+   - Implementation: same `POST /api/projects/:id/append-thread` call — generates Resume artifact
    - Shape: { threadSummary, suggestedFirstBuild, intent, audience, tone, clarityScore }
 
-## What's built (sandbox Phase 1)
-- ✅ Resume artifact generated and stored
-- ✅ threadSummary surfaced as workspace opening greeting (commitCarryover.greeting)
-- ✅ Manifest reads Resume artifact
-- ❌ Full transcript NOT copied into workspace thread (workspace chat still starts blank)
+## What's built (Phase 2 complete)
 
-## The gap to close for production
-When `performCreateProjectFromConversation` runs:
-- After project creation, UPDATE nexusMessagesTable SET projectId = newProjectId
-  WHERE projectId IS NULL AND userId = currentUser
-- This re-links the ambient conversation to the project
-- Workspace loads these as its chat history → user sees full conversation chain
+- ✅ Resume artifact generated and stored (`artifactsTable` type="resume")
+- ✅ threadSummary surfaced as workspace opening greeting (commitCarryover.greeting)
+- ✅ ManifestMode reads Resume artifact via GET /api/projects/:id/resume
+- ✅ Visual transcript transfer: sessionStorage → workspace chat UI (OPENING_CONVERSATION_STORAGE_KEY)
+- ✅ Persistent transcript: nexusMessagesTable write on append-thread (idempotent, filters empty/genesis msgs)
+
+## Idempotency guard
+`append-thread` checks if any nexus messages with `projectId = id AND userId = userId` already exist before inserting. Safe to call multiple times.
 
 ## Why both matter
 - Summary-only: feels efficient but emotionally empty, loses nuance

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
+import { randomUUID } from "node:crypto";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
-import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable, artifactsTable, projectGenomeTable } from "@workspace/db";
+import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable, artifactsTable, projectGenomeTable, nexusMessagesTable } from "@workspace/db";
 import { encryptToken, decryptToken } from "../lib/tokenCrypto";
 import { createProjectForUser, ensureProjectSchema, ProjectLimitReachedError } from "../lib/projectCreation";
 import {
@@ -790,6 +791,36 @@ router.post("/projects/:id/append-thread", async (req, res): Promise<void> => {
   const bodyMessages = Array.isArray((req.body as Record<string, unknown>)?.messages)
     ? ((req.body as Record<string, unknown>).messages as Array<{ role: string; content: string }>)
     : [];
+
+  // Persist the conversation transcript to nexusMessagesTable so it survives
+  // page refresh and gives the workspace AI full context on subsequent turns.
+  // Only write if there are no existing nexus messages for this project yet
+  // (idempotent — prevents duplicates if append-thread is called twice).
+  if (bodyMessages.length > 0) {
+    const [existingMsg] = await db
+      .select({ id: nexusMessagesTable.id })
+      .from(nexusMessagesTable)
+      .where(and(eq(nexusMessagesTable.projectId, id), eq(nexusMessagesTable.userId, userId)))
+      .limit(1);
+
+    if (!existingMsg) {
+      const convId = randomUUID();
+      const validMessages = bodyMessages.filter(
+        (m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim().length > 0,
+      );
+      if (validMessages.length > 0) {
+        await db.insert(nexusMessagesTable).values(
+          validMessages.map((m) => ({
+            userId,
+            projectId: id,
+            conversationId: convId,
+            role: m.role,
+            content: m.content.trim(),
+          })),
+        );
+      }
+    }
+  }
 
   const [genomeRow] = await db
     .select()
