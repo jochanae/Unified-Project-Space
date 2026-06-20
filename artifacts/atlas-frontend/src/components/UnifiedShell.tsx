@@ -18,7 +18,7 @@ import { useIsTinyScreen } from "@/hooks/useBreakpoints";
 import { toast } from "sonner";
 import { UserMenuDropdown } from "@/components/UserMenuDropdown";
 import { HudToggleDot } from "@/components/HudToggleDot";
-import ListeningHUD from "@/components/workspace/ListeningHUD";
+import AtlasMemoryHUD from "@/components/workspace/AtlasMemoryHUD";
 import { LifecycleGlyph } from "@/components/LifecycleGlyph";
 import { deriveLifecycle, LIFECYCLE_META } from "@/lib/lifecycle";
 import { parseLinkedRepo } from "@/lib/githubRepo";
@@ -1944,8 +1944,8 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
         {/* ShellFooter intentionally not rendered — UnifiedContextDock owns the bottom nav.
             Two fixed footers at bottom:0 caused tap collisions. */}
       </div>
-      {/* Single shared HUD panel for all surfaces — driven by hudBus, toggled by HudToggleDot */}
-      <ListeningHUD position={{ top: 64, right: 16 }} />
+      {/* Two-layer memory HUD — Layer 1: live activity (hudBus), Layer 2: Resume (API) */}
+      <AtlasMemoryHUD position={{ top: 64, right: 16 }} activeProjectId={activeProjectId} />
     </ShellStateContext.Provider>
   );
 }
