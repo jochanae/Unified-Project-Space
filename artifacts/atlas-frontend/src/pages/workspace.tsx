@@ -3940,6 +3940,19 @@ export default function Workspace() {
   const [showHomeHandoffBanner, setShowHomeHandoffBanner] = useState(() => {
     try { return isHomeHandoff && sessionStorage.getItem(`atlas-home-handoff-banner-${id}`) !== "1"; } catch { return isHomeHandoff; }
   });
+  const [showFromHomeCard, setShowFromHomeCard] = useState(isHomeHandoff);
+  const fromHomeCardMessages = useMemo(() => {
+    if (!isHomeHandoff) return [];
+    try {
+      const raw = sessionStorage.getItem("atlas-opening-conversation");
+      if (!raw) return [];
+      const msgs = JSON.parse(raw) as Array<{ role: string; content: string }>;
+      return msgs
+        .filter(m => m.role === "assistant" && m.content?.trim().length > 20)
+        .slice(-2)
+        .map(m => m.content.trim());
+    } catch { return []; }
+  }, [isHomeHandoff]);
   const [showHomeHandoffDrawer, setShowHomeHandoffDrawer] = useState(false);
   const importSourceLabel = importSource === "compani" ? "Compani Blueprints" : importSource === "axiom" ? "Axiom" : importSource ? importSource.charAt(0).toUpperCase() + importSource.slice(1) : null;
   const [showAxiomBanner, setShowAxiomBanner] = useState(() => {
@@ -6544,6 +6557,40 @@ export default function Workspace() {
               <ArtifactsPanel projectId={id} />
             </div>
           ) : null}
+
+          {showFromHomeCard && fromHomeCardMessages.length > 0 && (
+            <div
+              style={{
+                margin: "12px 16px 0",
+                padding: "12px 14px",
+                borderRadius: "10px",
+                border: "1px solid rgba(212,175,55,0.25)",
+                background: "rgba(212,175,55,0.06)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", color: "rgba(212,175,55,0.7)", textTransform: "uppercase" }}>
+                  From your home thread
+                </span>
+                <button
+                  onClick={() => setShowFromHomeCard(false)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(212,175,55,0.4)", fontSize: "14px", lineHeight: 1, padding: "0 2px" }}
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+              {fromHomeCardMessages.map((msg, i) => (
+                <p key={i} style={{ margin: 0, fontSize: "13px", lineHeight: 1.5, color: "rgba(255,255,255,0.65)" }}>
+                  {msg.length > 280 ? msg.slice(0, 277) + "…" : msg}
+                </p>
+              ))}
+            </div>
+          )}
 
           <UnifiedConversationSurface
             mode="operational"
