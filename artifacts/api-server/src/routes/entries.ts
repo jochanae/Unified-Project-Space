@@ -22,6 +22,21 @@ const anthropic = new Anthropic({
 type EntryContextResponse = {
   whatItMeans: string;
   whyItComesUp: string;
+  whyItMatters?: string;
+  options?: string[];
+  complexity?: "Low" | "Medium" | "High";
+  revisitWhen?: string;
+  atlasCategory?: string;
+};
+
+type ParkEnrichment = {
+  whyItMatters: string;
+  options: string[];
+  complexity: "Low" | "Medium" | "High";
+  revisitWhen: string;
+  atlasCategory: string;
+  whatItMeans: string;
+  whyItComesUp: string;
 };
 
 function serializeEntry(e: typeof entriesTable.$inferSelect) {
@@ -51,6 +66,72 @@ function parseContextJson(raw: string): EntryContextResponse | null {
     };
   } catch {
     return null;
+  }
+}
+
+function parseParkEnrichmentJson(raw: string): ParkEnrichment | null {
+  try {
+    const cleaned = raw.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned) as Partial<ParkEnrichment>;
+    if (!parsed.whyItMatters || !parsed.whatItMeans) return null;
+    const COMPLEXITIES = ["Low", "Medium", "High"] as const;
+    const CATEGORIES = ["Opportunity", "Decision", "Improvement", "Question", "Future Build"] as const;
+    return {
+      whyItMatters: String(parsed.whyItMatters).trim(),
+      options: Array.isArray(parsed.options) ? (parsed.options as unknown[]).map(String) : [],
+      complexity: COMPLEXITIES.includes(parsed.complexity as never) ? parsed.complexity as "Low" | "Medium" | "High" : "Medium",
+      revisitWhen: String(parsed.revisitWhen ?? "").trim(),
+      atlasCategory: CATEGORIES.includes(parsed.atlasCategory as never) ? parsed.atlasCategory as string : "Opportunity",
+      whatItMeans: String(parsed.whatItMeans).trim(),
+      whyItComesUp: String(parsed.whyItComesUp ?? parsed.whyItMatters).trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function enrichParkedEntry(entryId: number, title: string, summary: string | null, projectName: string): Promise<void> {
+  const prompt = `You are Atlas — a strategic thinking partner inside Axiom, a product development workspace.
+
+A user just parked this thought for later. Analyze it and return ONLY a JSON object, no markdown.
+
+Parked thought: "${title}"
+${summary ? `Summary: ${summary}` : ""}
+Project: ${projectName}
+
+Return this exact shape:
+{
+  "whyItMatters": "One sentence — why this matters for the project.",
+  "options": ["Option A", "Option B", "Option C"],
+  "complexity": "Medium",
+  "revisitWhen": "One sentence — best trigger or condition to revisit this.",
+  "atlasCategory": "Opportunity",
+  "whatItMeans": "One sentence in everyday language, no jargon.",
+  "whyItComesUp": "One sentence — why this surfaced now."
+}
+
+complexity values: Low, Medium, High
+atlasCategory values: Opportunity, Decision, Improvement, Question, Future Build`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 600,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const raw = msg.content[0]?.type === "text" ? msg.content[0].text : "";
+    const parsed = parseParkEnrichmentJson(raw);
+    if (!parsed) return;
+    await db
+      .update(entriesTable)
+      .set({
+        enrichmentJson: JSON.stringify(parsed),
+        contextWhat: parsed.whatItMeans,
+        contextWhy: parsed.whyItComesUp,
+      })
+      .where(eq(entriesTable.id, entryId));
+  } catch {
+    // fire-and-forget: silently skip on error
   }
 }
 
@@ -151,9 +232,22 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
     ...rest,
     title: parsed.data.title.trim(),
     ...(costOfLesson != null ? { costOfLesson: String(costOfLesson) } : {}),
-  }).returning();
+  } as typeof entriesTable.$inferInsert).returning();
   await touchProjectActivity(params.data.projectId);
   res.status(201).json(serializeEntry(entry));
+
+  // Fire-and-forget enrichment for parked entries
+  if (entry.status === "parked") {
+    void db
+      .select({ name: projectsTable.name })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, params.data.projectId))
+      .limit(1)
+      .then(([project]) =>
+        project ? enrichParkedEntry(entry.id, entry.title, entry.summary ?? null, project.name) : undefined
+      )
+      .catch(() => { /* silent */ });
+  }
 });
 
 router.get("/entries/:id", async (req, res): Promise<void> => {
@@ -190,6 +284,16 @@ router.post("/entries/:id/context", async (req, res): Promise<void> => {
   if (!row) { res.status(404).json({ error: "Entry not found" }); return; }
 
   const { projectName, ...entry } = row;
+
+  // Return stored enrichment if available (fastest path)
+  if (entry.enrichmentJson) {
+    try {
+      const enrichment = JSON.parse(entry.enrichmentJson) as ParkEnrichment;
+      res.json(enrichment);
+      return;
+    } catch { /* fall through to regenerate */ }
+  }
+
   if (entry.contextWhat && entry.contextWhy) {
     res.json({ whatItMeans: entry.contextWhat, whyItComesUp: entry.contextWhy });
     return;
@@ -214,12 +318,17 @@ Respond with a JSON object only, no markdown:
       messages: [{ role: "user", content: prompt }],
     });
     const raw = msg.content[0]?.type === "text" ? msg.content[0].text : "";
-    const parsed = parseContextJson(raw);
+    const enrichParsed = parseParkEnrichmentJson(raw);
+    const parsed = enrichParsed ?? parseContextJson(raw);
     if (!parsed) throw new Error("Invalid context JSON");
 
     await db
       .update(entriesTable)
-      .set({ contextWhat: parsed.whatItMeans, contextWhy: parsed.whyItComesUp })
+      .set({
+        contextWhat: parsed.whatItMeans,
+        contextWhy: parsed.whyItComesUp,
+        ...(enrichParsed ? { enrichmentJson: JSON.stringify(enrichParsed) } : {}),
+      })
       .where(eq(entriesTable.id, id));
 
     res.json(parsed);

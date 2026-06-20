@@ -6812,6 +6812,7 @@ export default function Workspace() {
               },
               onComposerMenuAction: (action) => {
 
+                if (action === "park") { setLocation(`/parking?project=${id}`); return; }
                 if (action === "settings") { setShowProjectSettings(true); return; }
                 if (action === "forge-intake") { setForgeIntakeSheetOpen(true); return; }
                 if (action === "history") { setShowHistorySheet(true); return; }

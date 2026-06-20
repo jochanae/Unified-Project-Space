@@ -38,7 +38,8 @@ export type ComposerMenuAction =
   | "more:deep-dive"
   | "more:artifacts"
   | "more:console"
-  | "more:changes";
+  | "more:changes"
+  | "park";
 
 export interface ComposerActionsProps {
   /** Append selected files (camera + attach both route here). */
@@ -247,6 +248,24 @@ export function ComposerActions({
         style={iconBtnStyle(showMore, false, borderless)}
       >
         <MoreHorizontal size={17} strokeWidth={1.7} />
+      </button>
+
+      {/* Park button — deferred intelligence, always visible */}
+      <button
+        type="button"
+        aria-label="Parking Lot"
+        title="Park a thought"
+        onClick={() => {
+          setShowPlus(false);
+          setShowMore(false);
+          onMenuAction("park");
+        }}
+        style={iconBtnStyle(false, false, borderless)}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M5.5 11V5h3.2a2.3 2.3 0 0 1 0 4.6H5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
 
       {trailing}

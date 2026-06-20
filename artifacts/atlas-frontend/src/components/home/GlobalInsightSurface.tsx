@@ -928,6 +928,7 @@ export function GlobalInsightSurface({
                 globalContext={true}
                 onFiles={(files) => onFiles?.(files)}
                 onMenuAction={(action) => {
+                  if (action === "park") { setLocation("/parking"); return; }
                   if (action === "more:deep-dive") {
                     const recent = messages.slice(-6).map((m) => {
                       const role = m.role === "user" ? "ME" : "ATLAS";

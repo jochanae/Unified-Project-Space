@@ -13,6 +13,11 @@ type ParkingLotDetailPanelProps = {
 type EntryContext = {
   whatItMeans: string;
   whyItComesUp: string;
+  whyItMatters?: string;
+  options?: string[];
+  complexity?: "Low" | "Medium" | "High";
+  revisitWhen?: string;
+  atlasCategory?: string;
 };
 
 function timeAgo(date: string | Date): string {
@@ -201,25 +206,71 @@ export function ParkingLotDetailPanel({
             </p>
           )}
 
-          <DetailSection title="What it means">
-            {loadingContext ? (
+          {loadingContext ? (
+            <DetailSection title="Analyzing…">
               <ThinkingLine />
-            ) : contextError ? (
-              fallback
-            ) : (
-              context?.whatItMeans || fallback
-            )}
-          </DetailSection>
+            </DetailSection>
+          ) : contextError ? (
+            <DetailSection title="What it means">{fallback}</DetailSection>
+          ) : context?.whyItMatters ? (
+            <>
+              <DetailSection title="Why it matters">
+                {context.whyItMatters}
+              </DetailSection>
 
-          <DetailSection title="Why it comes up">
-            {loadingContext ? (
-              <ThinkingLine />
-            ) : contextError ? (
-              fallback
-            ) : (
-              context?.whyItComesUp || fallback
-            )}
-          </DetailSection>
+              {context.options && context.options.length > 0 && (
+                <DetailSection title="Options">
+                  <ul style={{ margin: 0, padding: "0 0 0 16px", listStyle: "disc", color: "var(--atlas-fg)", opacity: 0.82, lineHeight: 1.7 }}>
+                    {context.options.map((opt, i) => (
+                      <li key={i} style={{ marginBottom: 2 }}>{opt}</li>
+                    ))}
+                  </ul>
+                </DetailSection>
+              )}
+
+              <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+                {context.complexity && (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    padding: "3px 10px", borderRadius: 20,
+                    border: `1px solid ${context.complexity === "Low" ? "rgba(132,204,132,0.3)" : context.complexity === "High" ? "rgba(251,146,60,0.3)" : "rgba(201,162,76,0.3)"}`,
+                    background: context.complexity === "Low" ? "rgba(132,204,132,0.06)" : context.complexity === "High" ? "rgba(251,146,60,0.06)" : "rgba(201,162,76,0.06)",
+                    color: context.complexity === "Low" ? "rgb(132,204,132)" : context.complexity === "High" ? "rgb(251,146,60)" : "var(--atlas-gold)",
+                    fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase",
+                  }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor" }} />
+                    {context.complexity} complexity
+                  </span>
+                )}
+                {context.atlasCategory && (
+                  <span style={{
+                    padding: "3px 10px", borderRadius: 20,
+                    border: "1px solid rgba(167,139,250,0.25)",
+                    background: "rgba(167,139,250,0.06)",
+                    color: "rgba(167,139,250,0.85)",
+                    fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase",
+                  }}>
+                    {context.atlasCategory}
+                  </span>
+                )}
+              </div>
+
+              {context.revisitWhen && (
+                <DetailSection title="When to revisit">
+                  {context.revisitWhen}
+                </DetailSection>
+              )}
+            </>
+          ) : (
+            <>
+              <DetailSection title="What it means">
+                {context?.whatItMeans || fallback}
+              </DetailSection>
+              <DetailSection title="Why it comes up">
+                {context?.whyItComesUp || fallback}
+              </DetailSection>
+            </>
+          )}
         </div>
 
         <footer
