@@ -55,6 +55,8 @@ export interface ComposerActionsProps {
   trailing?: ReactNode;
   /** Strip the borders / chip backgrounds from + and ... buttons (used by Global Insight). */
   borderless?: boolean;
+  /** When true (Global Insight), hides workspace-only items from the More menu. */
+  globalContext?: boolean;
   /** When provided, shows a "Sketch" tile in the + sheet that opens a manual
    *  image-generation prompt. Receives the composed `[SKETCH:<preset>] …`
    *  prompt — wire to the host's chat send pipeline. */
@@ -80,14 +82,14 @@ const PRIMARY_ITEMS: PrimaryItem[] = [
   { id: "settings", label: "Settings", icon: <Settings size={18} strokeWidth={1.6} />, projectOnly: true },
 ];
 
-const MORE_ITEMS: { id: ComposerMenuAction; label: string }[] = [
+const MORE_ITEMS: { id: ComposerMenuAction; label: string; workspaceOnly?: boolean }[] = [
   { id: "more:memory", label: "Memory" },
-  { id: "more:blueprints", label: "Blueprints" },
-  { id: "more:changes", label: "Changes" },
-  { id: "more:artifacts", label: "Artifacts" },
-  { id: "more:console", label: "Console" },
+  { id: "more:blueprints", label: "Blueprints", workspaceOnly: true },
+  { id: "more:changes", label: "Changes", workspaceOnly: true },
+  { id: "more:artifacts", label: "Artifacts", workspaceOnly: true },
+  { id: "more:console", label: "Console", workspaceOnly: true },
   { id: "more:deep-dive", label: "Deep Dive" },
-  { id: "more:rescan", label: "Rescan Repo" },
+  { id: "more:rescan", label: "Rescan Repo", workspaceOnly: true },
 ];
 
 // Sentinel action id used internally when Sketch is rendered as a top-of-More
@@ -160,6 +162,7 @@ export function ComposerActions({
   hasAttachments = false,
   trailing,
   borderless = false,
+  globalContext = false,
   onSketch,
 }: ComposerActionsProps) {
   const [showPlus, setShowPlus] = useState(false);
@@ -188,6 +191,7 @@ export function ComposerActions({
   }
 
   const visiblePrimary = PRIMARY_ITEMS.filter((i) => hasProjectContext || !i.projectOnly);
+  const visibleMore = MORE_ITEMS.filter((i) => !globalContext || !i.workspaceOnly);
 
   return (
     <>
@@ -350,7 +354,7 @@ export function ComposerActions({
                     borderLeft: "1px solid color-mix(in oklab, var(--atlas-gold) 16%, transparent)",
                   }}
                 >
-                  {MORE_ITEMS.map((m) => (
+                  {visibleMore.map((m) => (
                     <button
                       key={m.id}
                       type="button"

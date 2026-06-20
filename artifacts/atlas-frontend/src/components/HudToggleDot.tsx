@@ -39,19 +39,17 @@ export function HudToggleDot() {
       onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
     >
       <span style={{ position: "relative", display: "inline-flex", width: 8, height: 8 }}>
-        {active && (
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: 999,
-              background: "rgb(167,139,250)",
-              opacity: 0.55,
-              animation: "atlas-hud-dot-ping 1.6s cubic-bezier(0,0,0.2,1) infinite",
-            }}
-          />
-        )}
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 999,
+            background: "rgb(167,139,250)",
+            opacity: 0.45,
+            animation: "atlas-hud-dot-ping 1.6s cubic-bezier(0,0,0.2,1) infinite",
+          }}
+        />
         <span
           aria-hidden
           style={{

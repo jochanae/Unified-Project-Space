@@ -19,7 +19,7 @@ import { ComposerActions, type ComposerMenuAction } from "@/components/composer/
 import InlineSketchOffer from "@/components/chat/InlineSketchOffer";
 import SketchReveal from "@/components/chat/SketchReveal";
 import { DeepDiveSheet } from "@/components/DeepDiveSheet";
-import { HudDockChip } from "@/components/workspace/ListeningHUD";
+
 import { useSmartAutoScroll } from "@/hooks/useSmartAutoScroll";
 import { CommitPill } from "./CommitPill";
 import { setFeeder } from "@/lib/feederStore";
@@ -400,7 +400,6 @@ export function GlobalInsightSurface({
           }}
         >
           <span>Global Insight · All projects</span>
-          <HudDockChip />
           {messages.length > 0 && (
             <button
               type="button"
@@ -926,6 +925,7 @@ export function GlobalInsightSurface({
                 scope="global-insight"
                 hasProjectContext={false}
                 borderless={true}
+                globalContext={true}
                 onFiles={(files) => onFiles?.(files)}
                 onMenuAction={(action) => {
                   if (action === "more:deep-dive") {
