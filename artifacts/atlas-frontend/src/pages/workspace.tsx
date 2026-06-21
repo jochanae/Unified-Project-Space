@@ -5194,13 +5194,13 @@ export default function Workspace() {
   };
 
   const handlePark = useCallback(
-    (content: string, sourceMessageId?: number, contextWhat?: string) => {
+    (content: string, sourceMessageId?: number, contextWhat?: string, details?: string) => {
       if (!sessionId) return;
       haptic.short();
       playPark();
       createEntry.mutate(
-        { projectId: id, data: { ...buildParkedEntryPayload(content, sessionId, sourceMessageId, contextWhat) } },
-        { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); void refreshParkedEntries(); } }
+        { projectId: id, data: { ...buildParkedEntryPayload(content, sessionId, sourceMessageId, contextWhat, details) } },
+        { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); queryClient.invalidateQueries({ queryKey: ["entries", "parked-count"] }); void refreshParkedEntries(); } }
       );
     },
     [id, sessionId, createEntry, queryClient, refreshParkedEntries, playPark]

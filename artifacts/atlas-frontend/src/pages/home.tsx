@@ -11,6 +11,7 @@ import { useListProjects } from "@workspace/api-client-react";
 import { getLinkedRepoFullName, normalizeGitHubRepoInput, serializeLinkedRepo } from "@/lib/githubRepo";
 import { API_BASE } from "@/lib/api";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
+import { ParkingBadgeIcon } from "@/components/ParkingBadgeIcon";
 import { TimelineRail } from "../components/TimelineRail";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import SketchReveal from "@/components/chat/SketchReveal";
@@ -5619,7 +5620,7 @@ export default function Home() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="2"/><circle cx="4" cy="4" r="1.5"/><circle cx="20" cy="4" r="1.5"/><circle cx="4" cy="20" r="1.5"/><circle cx="20" cy="20" r="1.5"/></svg>
           )},
           { label: "Parking", onClick: () => setLocation("/parking"), icon: (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M10 16V8h3a2.5 2.5 0 010 5h-3"/></svg>
+            <ParkingBadgeIcon size={20} />
           )},
           { label: "Profile", onClick: () => setShowProfile(true), icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>

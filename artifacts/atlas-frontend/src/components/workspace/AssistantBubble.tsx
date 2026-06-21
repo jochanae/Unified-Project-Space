@@ -925,7 +925,7 @@ export function AssistantBubble({
   projectId: number;
   sessionId: number;
   linkedRepo: LinkedRepo | null;
-  onPark: (content: string, sourceMessageId?: number, contextWhat?: string) => void;
+  onPark: (content: string, sourceMessageId?: number, contextWhat?: string, details?: string) => void;
   onCommit: (content: string) => void;
   onRegenerate: () => void;
   onSend?: (message: string) => void;
@@ -1315,6 +1315,7 @@ export function AssistantBubble({
                   `${c.label}${c.insight ? `: ${c.insight}` : ""}`,
                   message.id,
                   c.label,
+                  c.insight,
                 )}
                 onDismiss={(label) => setDismissedChipLabels(prev => new Set([...prev, label]))}
               />

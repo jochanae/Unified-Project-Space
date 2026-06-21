@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useParkedCount } from "@/hooks/useParkedCount";
 import { Project } from "@workspace/api-client-react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
@@ -31,6 +32,7 @@ type Props = {
 };
 
 export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, onOpenSpecify, userLabel }: Props) {
+  const parkedCount = useParkedCount();
   const [, setLocation] = useLocation();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(false);
@@ -335,6 +337,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
             icon={<Inbox size={14} strokeWidth={1.6} />}
             label="Parking Lot"
             sublabel="All projects"
+            badge={parkedCount}
             onClick={() => { navigate("/parking"); onClose(); }}
           />
           
@@ -401,7 +404,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavRow({ icon, label, sublabel, onClick }: { icon: React.ReactNode; label: string; sublabel?: string; onClick: () => void }) {
+function NavRow({ icon, label, sublabel, badge, onClick }: { icon: React.ReactNode; label: string; sublabel?: string; badge?: number; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} style={{
       display: "flex", alignItems: "center", gap: 10,
@@ -419,6 +422,25 @@ function NavRow({ icon, label, sublabel, onClick }: { icon: React.ReactNode; lab
       {sublabel && (
         <span style={{ fontSize: 9, color: "var(--atlas-muted)", opacity: 0.55, marginLeft: 4, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
           · {sublabel}
+        </span>
+      )}
+      {badge != null && badge > 0 && (
+        <span style={{
+          marginLeft: "auto",
+          minWidth: 16, height: 16,
+          borderRadius: 999,
+          background: "rgba(201,162,76,0.15)",
+          border: "1px solid rgba(201,162,76,0.3)",
+          color: "var(--atlas-gold)",
+          fontSize: 9,
+          fontFamily: "var(--app-font-mono)",
+          fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "0 4px",
+          lineHeight: 1,
+          flexShrink: 0,
+        }}>
+          {badge > 99 ? "99+" : badge}
         </span>
       )}
     </button>

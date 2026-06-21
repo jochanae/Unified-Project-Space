@@ -224,6 +224,17 @@ async function entryBelongsToUser(entryId: number, userId: number): Promise<bool
   return rows.length > 0;
 }
 
+// GET /api/entries/parked-count — count of parked entries across all projects for the user
+router.get("/entries/parked-count", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const rows = await db
+    .select({ count: sql<string>`count(*)` })
+    .from(entriesTable)
+    .innerJoin(projectsTable, eq(entriesTable.projectId, projectsTable.id))
+    .where(and(eq(projectsTable.userId, userId), eq(entriesTable.status, "parked")));
+  res.json({ count: Number(rows[0]?.count ?? 0) });
+});
+
 // GET /api/entries/all — all committed entries for the user across all projects
 router.get("/entries/all", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
