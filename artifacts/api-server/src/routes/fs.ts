@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type IRouter } from "express";
 import fsNode from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
+import { execFile } from "child_process";
 import {
   projectWorkspaceDir,
   ensureProjectWorkspaceDir,
@@ -270,6 +271,45 @@ router.post("/fs/:projectId/rename", async (req: Request, res: Response): Promis
   } catch (err) {
     req.log?.error({ err }, "fs rename error");
     res.status(500).json({ error: "Failed to rename" });
+  }
+});
+
+// GET /api/fs/:projectId/gitstatus
+router.get("/fs/:projectId/gitstatus", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const projectId = parseProjectId(req.params.projectId);
+    if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+    if (!await assertProjectOwner(projectId, userId)) { res.status(404).json({ error: "Project not found" }); return; }
+
+    const workspaceDir = projectWorkspaceDir(projectId);
+
+    const files = await new Promise<Record<string, string>>((resolve) => {
+      execFile("git", ["status", "--porcelain", "-z"], { cwd: workspaceDir, maxBuffer: 512_000 }, (err, stdout) => {
+        if (err) {
+          // Not a git repo or git not available — return empty, not an error
+          resolve({});
+          return;
+        }
+        const result: Record<string, string> = {};
+        // --porcelain -z: entries separated by NUL, each is "XY filename"
+        const entries = stdout.split("\0").filter(Boolean);
+        for (const entry of entries) {
+          if (entry.length < 3) continue;
+          const code = entry.slice(0, 2);
+          // Handle renames: "XY from\0to" — with -z, rename uses two NUL-delimited fields
+          // In -z mode each entry is "XY path" (no spaces in path, no rename second field here)
+          const filePath = entry.slice(3);
+          if (filePath) result[filePath] = code;
+        }
+        resolve(result);
+      });
+    });
+
+    res.json({ files });
+  } catch (err) {
+    req.log?.error({ err }, "fs gitstatus error");
+    res.status(500).json({ error: "Failed to get git status" });
   }
 });
 

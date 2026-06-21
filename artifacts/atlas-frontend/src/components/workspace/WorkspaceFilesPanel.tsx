@@ -15,6 +15,10 @@ interface TreeResponse extends FsNode {
   children: FsNode[];
 }
 
+interface GitStatusResponse {
+  files: Record<string, string>;
+}
+
 interface Props {
   projectId: number;
 }
@@ -30,15 +34,42 @@ async function apiFetch(url: string, init?: RequestInit) {
   return res.json();
 }
 
+// Map git status code → { label, color }
+function gitBadge(code: string): { label: string; color: string } | null {
+  if (!code) return null;
+  const x = code[0] ?? " ";
+  const y = code[1] ?? " ";
+  if (x === "?" && y === "?") return { label: "?", color: "rgba(180,180,180,0.7)" };
+  if (x === "A" || y === "A") return { label: "A", color: "rgba(100,200,120,0.85)" };
+  if (x === "D" || y === "D") return { label: "D", color: "rgba(220,80,80,0.8)" };
+  if (x === "M" || y === "M") return { label: "M", color: "rgba(201,162,76,0.9)" };
+  if (x === "R" || y === "R") return { label: "R", color: "rgba(140,160,220,0.85)" };
+  return { label: code.trim().slice(0, 1) || "~", color: "rgba(180,180,180,0.7)" };
+}
+
 export function WorkspaceFilesPanel({ projectId }: Props) {
   const qc = useQueryClient();
   const treeKey = ["ws-tree", projectId];
+  const gitKey = ["ws-gitstatus", projectId];
 
   const { data: tree, isLoading: treeLoading, error: treeError } = useQuery<TreeResponse>({
     queryKey: treeKey,
     queryFn: () => apiFetch(`${BASE}/${projectId}/tree`),
     staleTime: 10_000,
   });
+
+  const { data: gitStatus } = useQuery<GitStatusResponse>({
+    queryKey: gitKey,
+    queryFn: () => apiFetch(`${BASE}/${projectId}/gitstatus`),
+    staleTime: 8_000,
+  });
+
+  const gitFiles: Record<string, string> = gitStatus?.files ?? {};
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: treeKey });
+    qc.invalidateQueries({ queryKey: gitKey });
+  };
 
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>("");
@@ -50,12 +81,12 @@ export function WorkspaceFilesPanel({ projectId }: Props) {
 
   const isDirty = editContent !== savedContent;
 
-  const openFileFn = useCallback(async (path: string) => {
+  const openFileFn = useCallback(async (filePath: string) => {
     setFileError(null);
     setFileLoading(true);
-    setOpenFile(path);
+    setOpenFile(filePath);
     try {
-      const data = await apiFetch(`${BASE}/${projectId}/file?path=${encodeURIComponent(path)}`);
+      const data = await apiFetch(`${BASE}/${projectId}/file?path=${encodeURIComponent(filePath)}`);
       setEditContent(data.content);
       setSavedContent(data.content);
     } catch (err: unknown) {
@@ -76,26 +107,15 @@ export function WorkspaceFilesPanel({ projectId }: Props) {
         body: JSON.stringify({ path: openFile, content: editContent }),
       });
       setSavedContent(editContent);
-      qc.invalidateQueries({ queryKey: treeKey });
+      invalidateAll();
     },
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (path: string) => {
-      await apiFetch(`${BASE}/${projectId}/file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-      if (openFile === path) { setOpenFile(null); setEditContent(""); setSavedContent(""); }
-      qc.invalidateQueries({ queryKey: treeKey });
-    },
-  });
-
-  const mkdirMut = useMutation({
-    mutationFn: async (dirPath: string) => {
-      await apiFetch(`${BASE}/${projectId}/mkdir`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: dirPath }),
-      });
-      qc.invalidateQueries({ queryKey: treeKey });
+    mutationFn: async (p: string) => {
+      await apiFetch(`${BASE}/${projectId}/file?path=${encodeURIComponent(p)}`, { method: "DELETE" });
+      if (openFile === p) { setOpenFile(null); setEditContent(""); setSavedContent(""); }
+      invalidateAll();
     },
   });
 
@@ -107,7 +127,7 @@ export function WorkspaceFilesPanel({ projectId }: Props) {
         body: JSON.stringify({ from, to }),
       });
       if (openFile === from) setOpenFile(to);
-      qc.invalidateQueries({ queryKey: treeKey });
+      invalidateAll();
     },
     onSuccess: () => { setNewNamePath(null); setNewNameValue(""); },
   });
@@ -120,9 +140,11 @@ export function WorkspaceFilesPanel({ projectId }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path: name.trim(), content: "" }),
     });
-    qc.invalidateQueries({ queryKey: treeKey });
+    invalidateAll();
     openFileFn(name.trim());
   };
+
+  const changedCount = Object.keys(gitFiles).length;
 
   return (
     <div style={{
@@ -144,12 +166,26 @@ export function WorkspaceFilesPanel({ projectId }: Props) {
           borderBottom: "1px solid rgba(201,162,76,0.08)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
-          <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.16em", textTransform: "uppercase", opacity: 0.8 }}>
-            Workspace
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.16em", textTransform: "uppercase", opacity: 0.8 }}>
+              Workspace
+            </span>
+            {changedCount > 0 && (
+              <span style={{
+                fontSize: 9, fontFamily: "var(--app-font-mono)",
+                background: "rgba(201,162,76,0.15)",
+                color: "rgba(201,162,76,0.9)",
+                border: "1px solid rgba(201,162,76,0.25)",
+                borderRadius: 3, padding: "1px 4px",
+                letterSpacing: "0.04em",
+              }}>
+                {changedCount}
+              </span>
+            )}
+          </div>
           <div style={{ display: "flex", gap: 2 }}>
             <IconBtn title="New file" onClick={createNewFile}><Plus size={12} strokeWidth={1.8} /></IconBtn>
-            <IconBtn title="Refresh" onClick={() => qc.invalidateQueries({ queryKey: treeKey })}>
+            <IconBtn title="Refresh" onClick={invalidateAll}>
               <RefreshCw size={11} strokeWidth={1.8} />
             </IconBtn>
           </div>
@@ -176,6 +212,7 @@ export function WorkspaceFilesPanel({ projectId }: Props) {
               node={node}
               depth={0}
               selected={openFile}
+              gitFiles={gitFiles}
               onSelectFile={openFileFn}
               onDelete={(p) => deleteMut.mutate(p)}
               onRenameStart={(p) => { setNewNamePath(p); setNewNameValue(p.split("/").pop() ?? ""); }}
@@ -342,11 +379,12 @@ export function WorkspaceFilesPanel({ projectId }: Props) {
 }
 
 function TreeNode({
-  node, depth, selected, onSelectFile, onDelete, onRenameStart,
+  node, depth, selected, gitFiles, onSelectFile, onDelete, onRenameStart,
 }: {
   node: FsNode;
   depth: number;
   selected: string | null;
+  gitFiles: Record<string, string>;
   onSelectFile: (path: string) => void;
   onDelete: (path: string) => void;
   onRenameStart: (path: string) => void;
@@ -356,6 +394,13 @@ function TreeNode({
   const isSelected = selected === node.path;
 
   const indent = 8 + depth * 14;
+
+  // For directories: bubble up badge if any child has a git status
+  const dirHasChanges = node.type === "dir"
+    ? Object.keys(gitFiles).some(p => p === node.path || p.startsWith(node.path + "/"))
+    : false;
+
+  const badge = node.type === "file" ? gitBadge(gitFiles[node.path] ?? "") : null;
 
   if (node.type === "dir") {
     return (
@@ -378,9 +423,12 @@ function TreeNode({
           <span style={{ color: "rgba(201,162,76,0.65)", flexShrink: 0 }}>
             {expanded ? <FolderOpen size={12} strokeWidth={1.6} /> : <Folder size={12} strokeWidth={1.6} />}
           </span>
-          <span style={{ fontSize: 12, color: "var(--atlas-fg)", opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: 12, color: "var(--atlas-fg)", opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
             {node.name}
           </span>
+          {!expanded && dirHasChanges && (
+            <span style={{ fontSize: 8.5, color: "rgba(201,162,76,0.7)", flexShrink: 0 }}>●</span>
+          )}
         </div>
         {expanded && node.children?.map(child => (
           <TreeNode
@@ -388,6 +436,7 @@ function TreeNode({
             node={child}
             depth={depth + 1}
             selected={selected}
+            gitFiles={gitFiles}
             onSelectFile={onSelectFile}
             onDelete={onDelete}
             onRenameStart={onRenameStart}
@@ -417,12 +466,21 @@ function TreeNode({
         <File size={11} strokeWidth={1.6} />
       </span>
       <span style={{
-        fontSize: 12, color: isSelected ? "var(--atlas-fg)" : "var(--atlas-fg)",
+        fontSize: 12, color: "var(--atlas-fg)",
         opacity: isSelected ? 1 : 0.8,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
       }}>
         {node.name}
       </span>
+      {badge && !hovered && (
+        <span style={{
+          fontSize: 9, fontFamily: "var(--app-font-mono)", fontWeight: 700,
+          color: badge.color, flexShrink: 0, lineHeight: 1,
+          width: 12, textAlign: "center",
+        }}>
+          {badge.label}
+        </span>
+      )}
       {hovered && (
         <div style={{ display: "flex", gap: 1, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
           <IconBtn title="Rename" onClick={() => onRenameStart(node.path)} small>
