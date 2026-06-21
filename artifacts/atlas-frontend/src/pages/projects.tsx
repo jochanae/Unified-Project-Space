@@ -1124,8 +1124,22 @@ function ProjectRow({
   isArchived?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const showActions = hovered || menuOpen;
+  const showActions = hovered;
+  const menuRef = useRef<HTMLDivElement>(null);
   const date = new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent | TouchEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close, true);
+    document.addEventListener("touchstart", close, true);
+    return () => {
+      document.removeEventListener("mousedown", close, true);
+      document.removeEventListener("touchstart", close, true);
+    };
+  }, [menuOpen]);
 
   return (
     <div
@@ -1313,97 +1327,105 @@ function ProjectRow({
         </div>
       ) : showActions ? (
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          {/* Link Repo */}
           {onLinkRepo && !p.linkedRepo && (
             <button
               title="Link a GitHub repo"
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); onLinkRepo(); setMenuOpen(false); }}
-              style={{
-                background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
-                padding: "4px 7px", cursor: "pointer", lineHeight: 1,
-                color: "var(--atlas-muted)", transition: "all 140ms ease",
-              }}
+              style={{ background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4, padding: "4px 7px", cursor: "pointer", lineHeight: 1, color: "var(--atlas-muted)", transition: "all 140ms ease" }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(74,222,128,0.4)"; e.currentTarget.style.color = "rgba(74,222,128,0.85)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
             >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M6.5 8.5l3-3" />
-                <path d="M7.5 4.5l1.5-1.5a2.83 2.83 0 014 4L11.5 8.5" />
-                <path d="M8.5 11.5L7 13a2.83 2.83 0 01-4-4l1.5-1.5" />
-              </svg>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.5 8.5l3-3" /><path d="M7.5 4.5l1.5-1.5a2.83 2.83 0 014 4L11.5 8.5" /><path d="M8.5 11.5L7 13a2.83 2.83 0 01-4-4l1.5-1.5" /></svg>
             </button>
           )}
-          {/* Archive / Restore */}
           <button
             title={isArchived ? "Restore project" : "Archive project"}
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onArchive(); setMenuOpen(false); }}
-            style={{
-              background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
-              padding: "4px 7px", cursor: "pointer", lineHeight: 1,
-              color: "var(--atlas-muted)", transition: "all 140ms ease",
-            }}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onArchive(); }}
+            style={{ background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4, padding: "4px 7px", cursor: "pointer", lineHeight: 1, color: "var(--atlas-muted)", transition: "all 140ms ease" }}
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; e.currentTarget.style.color = "var(--atlas-gold)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
           >
-            {isArchived ? (
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 12V4M4 8l4-4 4 4" />
-                <path d="M2 14h12" />
-              </svg>
-            ) : (
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="12" height="3" rx="1" />
-                <path d="M3 6v7a1 1 0 001 1h8a1 1 0 001-1V6" />
-                <path d="M6 10h4" />
-              </svg>
-            )}
+            {isArchived
+              ? <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 12V4M4 8l4-4 4 4" /><path d="M2 14h12" /></svg>
+              : <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="12" height="3" rx="1" /><path d="M3 6v7a1 1 0 001 1h8a1 1 0 001-1V6" /><path d="M6 10h4" /></svg>
+            }
           </button>
-          {/* Delete */}
           <button
             title="Delete project"
             onClick={(e) => { e.stopPropagation(); e.preventDefault(); onRequestDelete(); }}
-            style={{
-              background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
-              padding: "4px 7px", cursor: "pointer", lineHeight: 1,
-              color: "var(--atlas-muted)", transition: "all 140ms ease",
-            }}
+            style={{ background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4, padding: "4px 7px", cursor: "pointer", lineHeight: 1, color: "var(--atlas-muted)", transition: "all 140ms ease" }}
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; e.currentTarget.style.color = "rgba(252,165,165,0.8)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 4h10M6 4V2h4v2M13 4l-.867 9.143A2 2 0 0110.138 15H5.862a2 2 0 01-1.995-1.857L3 4" />
-            </svg>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h10M6 4V2h4v2M13 4l-.867 9.143A2 2 0 0110.138 15H5.862a2 2 0 01-1.995-1.857L3 4" /></svg>
           </button>
-          {/* Close menu (mobile) */}
-          {menuOpen && !hovered && (
-            <button
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(false); }}
-              style={{
-                background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
-                padding: "4px 7px", cursor: "pointer", lineHeight: 1,
-                color: "var(--atlas-muted)", transition: "all 140ms ease", fontSize: 11,
-              }}
-            >
-              ×
-            </button>
-          )}
         </div>
       ) : (
-        /* ⋯ button — always visible, primary access on mobile */
-        <button
-          onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(true); }}
-          title="Project actions"
-          style={{
-            background: "transparent", border: "1px solid rgba(120,113,108,0.3)", borderRadius: 6,
-            padding: "5px 10px", cursor: "pointer", lineHeight: 1,
-            color: "var(--atlas-muted)", opacity: 0.8, transition: "all 140ms ease",
-            flexShrink: 0, fontSize: 15, letterSpacing: "0.05em",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)"; e.currentTarget.style.color = "var(--atlas-gold)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.8"; e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
-        >
-          ···
-        </button>
+        /* ⋯ button + floating dropdown — mobile primary access */
+        <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); }}
+            title="Project actions"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            style={{
+              background: menuOpen ? "rgba(201,162,76,0.08)" : "transparent",
+              border: `1px solid ${menuOpen ? "rgba(201,162,76,0.4)" : "rgba(120,113,108,0.3)"}`,
+              borderRadius: 6, padding: "5px 10px", cursor: "pointer", lineHeight: 1,
+              color: menuOpen ? "var(--atlas-gold)" : "var(--atlas-muted)",
+              transition: "all 140ms ease", fontSize: 15, letterSpacing: "0.05em",
+            }}
+          >
+            ···
+          </button>
+          {menuOpen && (
+            <div
+              role="menu"
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                right: 0,
+                minWidth: 148,
+                background: "var(--atlas-bg)",
+                border: "1px solid var(--atlas-border)",
+                borderRadius: 8,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                zIndex: 100,
+                overflow: "hidden",
+              }}
+            >
+              {onLinkRepo && !p.linkedRepo && (
+                <button
+                  role="menuitem"
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onLinkRepo(); setMenuOpen(false); }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px", background: "transparent", border: "none", cursor: "pointer", color: "rgba(74,222,128,0.8)", fontFamily: "var(--app-font-mono)", fontSize: 11, letterSpacing: "0.08em", textAlign: "left" }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.5 8.5l3-3" /><path d="M7.5 4.5l1.5-1.5a2.83 2.83 0 014 4L11.5 8.5" /><path d="M8.5 11.5L7 13a2.83 2.83 0 01-4-4l1.5-1.5" /></svg>
+                  Link Repo
+                </button>
+              )}
+              <button
+                role="menuitem"
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onArchive(); setMenuOpen(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px", background: "transparent", border: "none", borderTop: (onLinkRepo && !p.linkedRepo) ? "1px solid var(--atlas-border)" : "none", cursor: "pointer", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", fontSize: 11, letterSpacing: "0.08em", textAlign: "left" }}
+              >
+                {isArchived
+                  ? <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 12V4M4 8l4-4 4 4" /><path d="M2 14h12" /></svg>
+                  : <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="12" height="3" rx="1" /><path d="M3 6v7a1 1 0 001 1h8a1 1 0 001-1V6" /><path d="M6 10h4" /></svg>
+                }
+                {isArchived ? "Restore" : "Archive"}
+              </button>
+              <button
+                role="menuitem"
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onRequestDelete(); setMenuOpen(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px", background: "transparent", border: "none", borderTop: "1px solid var(--atlas-border)", cursor: "pointer", color: "rgba(252,165,165,0.8)", fontFamily: "var(--app-font-mono)", fontSize: 11, letterSpacing: "0.08em", textAlign: "left" }}
+              >
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h10M6 4V2h4v2M13 4l-.867 9.143A2 2 0 0110.138 15H5.862a2 2 0 01-1.995-1.857L3 4" /></svg>
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
