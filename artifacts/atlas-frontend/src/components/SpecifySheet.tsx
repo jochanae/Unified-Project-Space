@@ -202,15 +202,17 @@ export function SpecifySheet() {
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(var(--atlas-muted-rgb),0.75)", textTransform: "uppercase", marginBottom: 6, fontFamily: "var(--app-font-mono)" }}>
                     Scope & target surfaces <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
                   </p>
-                  <input
-                    type="text"
+                  <textarea
                     value={scope}
                     onChange={(e) => setScope(e.target.value)}
-                    placeholder="e.g. workspace chat, mobile ≤390px, decision ledger"
+                    placeholder={projectName
+                      ? `e.g. ${projectName} workspace chat, mobile ≤390px, decision ledger`
+                      : "e.g. workspace chat, mobile ≤390px, decision ledger"}
+                    rows={2}
                     style={{
                       width: "100%", ...FIELD_STYLE, padding: "9px 12px",
-                      color: "var(--atlas-fg)", fontSize: 12, outline: "none",
-                      boxSizing: "border-box", fontFamily: "inherit",
+                      color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.6,
+                      outline: "none", resize: "none", boxSizing: "border-box", fontFamily: "inherit",
                     }}
                   />
                 </div>
@@ -219,15 +221,15 @@ export function SpecifySheet() {
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(var(--atlas-muted-rgb),0.75)", textTransform: "uppercase", marginBottom: 6, fontFamily: "var(--app-font-mono)" }}>
                     Do NOT change <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
                   </p>
-                  <input
-                    type="text"
+                  <textarea
                     value={exclusions}
                     onChange={(e) => setExclusions(e.target.value)}
                     placeholder="e.g. workspace.tsx, the API schema, existing animations"
+                    rows={2}
                     style={{
                       width: "100%", ...FIELD_STYLE, padding: "9px 12px",
-                      color: "var(--atlas-fg)", fontSize: 12, outline: "none",
-                      boxSizing: "border-box", fontFamily: "inherit",
+                      color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.6,
+                      outline: "none", resize: "none", boxSizing: "border-box", fontFamily: "inherit",
                     }}
                   />
                 </div>
@@ -292,7 +294,7 @@ export function SpecifySheet() {
                     <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", animation: "specify-pulse 1.4s ease-in-out infinite" }} />
                     <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>Writing specification…</span>
                   </span>
-                ) : "Specify →"}
+                ) : "Generate Specification"}
               </button>
 
               {error && (

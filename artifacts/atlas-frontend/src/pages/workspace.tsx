@@ -7088,6 +7088,7 @@ export default function Workspace() {
           onManifest={() => { setMobileTab("manifest"); setRightOpen(true); }}
           onFlow={() => setLocation("/map")}
           entryCount={entryCount}
+          currentProjectName={project?.name ?? ""}
         />
       )}
 

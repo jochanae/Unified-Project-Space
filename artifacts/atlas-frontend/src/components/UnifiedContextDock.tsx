@@ -51,6 +51,9 @@ export interface UnifiedContextDockProps {
 
   // badges (operational ledger)
   entryCount?: number;
+
+  /** If set, passed as project context when long-press opens Specify. */
+  currentProjectName?: string;
 }
 
 type Slot = {
@@ -254,7 +257,12 @@ export function UnifiedContextDock(props: UnifiedContextDockProps) {
     const duration = Date.now() - pressStartTime.current;
     if (duration >= 900) {
       try { (navigator as any).vibrate?.([35]); } catch {}
-      window.dispatchEvent(new CustomEvent("axiom:open-specify"));
+      const detail = props.currentProjectName ? { projectName: props.currentProjectName } : {};
+      window.dispatchEvent(new CustomEvent("axiom:open-specify", { detail }));
+      return true;
+    }
+    if (duration >= 350) {
+      // Medium-press dead zone: suppress tap, take no action.
       return true;
     }
     return false;
@@ -492,8 +500,8 @@ export function UnifiedContextDock(props: UnifiedContextDockProps) {
         {/* Center — Atlas Core anchor */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <button
-            title="Atlas Core — tap to focus chat, hold for last project, hold longer for projects list"
-            aria-label="Atlas Core. Tap to focus chat. Short hold opens last project. Longer hold or Shift+Enter opens projects list."
+            title="Atlas Core — tap to focus chat, hold 900ms to Specify a change"
+            aria-label="Atlas Core. Tap to focus chat. Hold 900ms or press Shift+Enter to open Specify."
             className="udock-center"
             onClick={handleAtlasClick}
             onTouchStart={(e) => {
@@ -506,13 +514,19 @@ export function UnifiedContextDock(props: UnifiedContextDockProps) {
               e.stopPropagation();
               if (!resolveLongPress()) fireTap();
             }}
-            onContextMenu={(e) => { e.preventDefault(); cancelLongPress(); goToProjects(); }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              cancelLongPress();
+              const detail = props.currentProjectName ? { projectName: props.currentProjectName } : {};
+              window.dispatchEvent(new CustomEvent("axiom:open-specify", { detail }));
+            }}
             onKeyDown={(e) => {
               if (e.repeat) return;
               if (e.key === "Enter" && e.shiftKey) {
                 e.preventDefault();
                 cancelLongPress();
-                goToProjects();
+                const detail = props.currentProjectName ? { projectName: props.currentProjectName } : {};
+                window.dispatchEvent(new CustomEvent("axiom:open-specify", { detail }));
               } else if (e.key === " " || e.key === "Spacebar") {
                 e.preventDefault();
                 startLongPress();
