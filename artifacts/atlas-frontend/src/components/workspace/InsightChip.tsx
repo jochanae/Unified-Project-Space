@@ -5,10 +5,12 @@ export function InsightChip({
   chip,
   onPark,
   onDismiss,
+  onExecute,
 }: {
   chip: MemoryChip;
   onPark: (chip: MemoryChip) => void;
   onDismiss?: (label: string) => void;
+  onExecute?: (label: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const hasInsight = !!chip.insight;

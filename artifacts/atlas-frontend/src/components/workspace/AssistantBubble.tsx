@@ -925,7 +925,7 @@ export function AssistantBubble({
   projectId: number;
   sessionId: number;
   linkedRepo: LinkedRepo | null;
-  onPark: (content: string) => void;
+  onPark: (content: string, sourceMessageId?: number, contextWhat?: string) => void;
   onCommit: (content: string) => void;
   onRegenerate: () => void;
   onSend?: (message: string) => void;

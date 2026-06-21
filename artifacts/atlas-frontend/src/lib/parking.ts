@@ -6,6 +6,8 @@
 export function buildParkedEntryPayload(
   content: string,
   sessionId?: number | string | null,
+  sourceMessageId?: number | null,
+  contextWhat?: string | null,
 ) {
   const trimmed = content.trim();
   const title = trimmed.replace(/\n/g, " ").slice(0, 80).trim();
@@ -16,5 +18,7 @@ export function buildParkedEntryPayload(
     severity: "parked" as const,
     mode: "think" as const,
     ...(sessionId != null ? { sessionId: sessionId as number } : {}),
+    ...(sourceMessageId != null ? { sourceMessageId } : {}),
+    ...(contextWhat != null ? { contextWhat: contextWhat.slice(0, 120) } : {}),
   };
 }
