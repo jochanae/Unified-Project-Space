@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, Save, Trash2, RefreshCw, GitCommit } from "lucide-react";
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, Save, Trash2, RefreshCw, GitCommit, GitMerge, History, FileCode } from "lucide-react";
 
 interface FsNode {
   name: string;
@@ -18,6 +18,17 @@ interface TreeResponse extends FsNode {
 interface GitStatusResponse {
   files: Record<string, string>;
   hasRemote?: boolean;
+}
+
+interface GitLogEntry {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
+interface GitLogResponse {
+  commits: GitLogEntry[];
 }
 
 interface Props {
@@ -53,6 +64,7 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
   const qc = useQueryClient();
   const treeKey = ["ws-tree", projectId];
   const gitKey = ["ws-gitstatus", projectId];
+  const logKey = ["ws-gitlog", projectId];
 
   const { data: tree, isLoading: treeLoading, error: treeError } = useQuery<TreeResponse>({
     queryKey: treeKey,
@@ -66,11 +78,20 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
     staleTime: 8_000,
   });
 
+  const [logExpanded, setLogExpanded] = useState(false);
+  const { data: gitLog } = useQuery<GitLogResponse>({
+    queryKey: logKey,
+    queryFn: () => apiFetch(`${BASE}/${projectId}/git/log`),
+    staleTime: 30_000,
+    enabled: logExpanded,
+  });
+
   const gitFiles: Record<string, string> = gitStatus?.files ?? {};
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: treeKey });
     qc.invalidateQueries({ queryKey: gitKey });
+    qc.invalidateQueries({ queryKey: logKey });
   };
 
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -89,6 +110,19 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
   const [commitSuccess, setCommitSuccess] = useState(false);
   const [commitPanelOpen, setCommitPanelOpen] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
+
+  // Pull panel state
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullOutput, setPullOutput] = useState("");
+  const [pullError, setPullError] = useState<string | null>(null);
+  const [pullSuccess, setPullSuccess] = useState(false);
+  const [pullPanelOpen, setPullPanelOpen] = useState(false);
+  const pullOutputRef = useRef<HTMLDivElement>(null);
+
+  // Diff state (in commit panel)
+  const [showDiff, setShowDiff] = useState(false);
+  const [diffContent, setDiffContent] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
 
   const isDirty = editContent !== savedContent;
 
@@ -220,6 +254,8 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
               if (result.ok) {
                 setCommitSuccess(true);
                 setCommitMsg("");
+                setShowDiff(false);
+                setDiffContent(null);
                 invalidateAll();
               } else {
                 setCommitError(result.error ?? "Failed");
@@ -236,9 +272,100 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
     setIsCommitting(false);
   };
 
+  const doPull = async () => {
+    if (isPulling) return;
+    setIsPulling(true);
+    setPullOutput("");
+    setPullError(null);
+    setPullSuccess(false);
+    setPullPanelOpen(true);
+
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/${projectId}/git/pull`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (err) {
+      setPullError(err instanceof Error ? err.message : "Network error");
+      setIsPulling(false);
+      return;
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setPullError((body as { error?: string }).error ?? `HTTP ${res.status}`);
+      setIsPulling(false);
+      return;
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) { setPullError("No response body"); setIsPulling(false); return; }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          let type = "";
+          let data = "";
+          for (const line of part.split("\n")) {
+            if (line.startsWith("event: ")) type = line.slice(7).trim();
+            if (line.startsWith("data: ")) data = line.slice(6);
+          }
+          if (!type || !data) continue;
+          try {
+            const parsed: string = JSON.parse(data);
+            if (type === "output" || type === "status") {
+              setPullOutput(prev => {
+                const next = prev + parsed;
+                setTimeout(() => { if (pullOutputRef.current) pullOutputRef.current.scrollTop = pullOutputRef.current.scrollHeight; }, 0);
+                return next;
+              });
+            } else if (type === "done") {
+              const result: { ok: boolean; error: string | null } = JSON.parse(parsed);
+              if (result.ok) {
+                setPullSuccess(true);
+                invalidateAll();
+              } else {
+                setPullError(result.error ?? "Failed");
+              }
+            } else if (type === "error") {
+              setPullError(parsed);
+            }
+          } catch { /* skip malformed */ }
+        }
+      }
+    } catch (err) {
+      setPullError(err instanceof Error ? err.message : "Stream error");
+    }
+    setIsPulling(false);
+  };
+
+  const toggleDiff = async () => {
+    if (showDiff) { setShowDiff(false); return; }
+    setShowDiff(true);
+    setDiffContent(null);
+    setDiffLoading(true);
+    try {
+      const data = await apiFetch(`${BASE}/${projectId}/git/diff`);
+      setDiffContent((data as { diff: string }).diff || "(no diff — all changes are untracked files)");
+    } catch (err) {
+      setDiffContent(`Error: ${err instanceof Error ? err.message : "Failed"}`);
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
   const changedCount = Object.keys(gitFiles).length;
   const hasRemote = gitStatus?.hasRemote ?? false;
   const canCommit = changedCount > 0 && hasRemote;
+  const canPull = hasRemote;
 
   return (
     <div style={{
@@ -279,17 +406,87 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
             )}
           </div>
           <div style={{ display: "flex", gap: 2 }}>
+            {canPull && (
+              <IconBtn title={isPulling ? "Pulling…" : "Pull"} onClick={doPull}>
+                <GitMerge size={12} strokeWidth={1.8} style={{ color: isPulling ? "var(--atlas-gold)" : pullSuccess ? "rgba(100,200,120,0.9)" : undefined }} />
+              </IconBtn>
+            )}
             {canCommit && (
               <IconBtn title="Commit & Push" onClick={() => setCommitPanelOpen(o => !o)}>
                 <GitCommit size={12} strokeWidth={1.8} style={{ color: commitPanelOpen ? "var(--atlas-gold)" : undefined }} />
               </IconBtn>
             )}
+            <IconBtn title="History" onClick={() => setLogExpanded(o => !o)}>
+              <History size={12} strokeWidth={1.8} style={{ color: logExpanded ? "var(--atlas-gold)" : undefined }} />
+            </IconBtn>
             <IconBtn title="New file" onClick={createNewFile}><Plus size={12} strokeWidth={1.8} /></IconBtn>
             <IconBtn title="Refresh" onClick={invalidateAll}>
               <RefreshCw size={11} strokeWidth={1.8} />
             </IconBtn>
           </div>
         </div>
+
+        {/* Pull output panel */}
+        {pullPanelOpen && (
+          <div style={{
+            borderTop: "1px solid rgba(100,180,255,0.15)",
+            background: "rgba(100,180,255,0.03)",
+            padding: "8px 12px 10px",
+            flexShrink: 0,
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{
+                fontSize: 9.5, fontFamily: "var(--app-font-mono)",
+                color: "rgba(100,180,255,0.8)", letterSpacing: "0.12em",
+                textTransform: "uppercase", opacity: 0.9,
+              }}>
+                {isPulling ? "Pulling…" : "Pull"}
+              </div>
+              <IconBtn title="Dismiss" onClick={() => { setPullPanelOpen(false); setPullOutput(""); setPullError(null); setPullSuccess(false); }}>
+                <span style={{ fontSize: 11, lineHeight: 1 }}>×</span>
+              </IconBtn>
+            </div>
+            {pullOutput && (
+              <div
+                ref={pullOutputRef}
+                style={{
+                  maxHeight: 90, overflowY: "auto",
+                  fontFamily: "var(--app-font-mono)", fontSize: 10,
+                  color: "var(--atlas-fg)", opacity: 0.75,
+                  background: "rgba(0,0,0,0.2)",
+                  border: "1px solid rgba(100,180,255,0.1)",
+                  borderRadius: 5, padding: "6px 8px",
+                  whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.55,
+                }}
+              >
+                {pullOutput}
+              </div>
+            )}
+            {pullSuccess && (
+              <div style={{ fontSize: 11, color: "rgba(100,200,120,0.9)", fontFamily: "var(--app-font-mono)" }}>
+                ✓ Pulled successfully
+              </div>
+            )}
+            {pullError && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ fontSize: 10.5, color: "rgba(220,80,80,0.85)", fontFamily: "var(--app-font-sans)", lineHeight: 1.4 }}>
+                  {pullError}
+                </div>
+                {onOpenTerminal && (
+                  <button type="button" onClick={onOpenTerminal} style={{
+                    alignSelf: "flex-start", padding: "3px 8px", borderRadius: 5,
+                    border: "1px solid rgba(255,255,255,0.12)", background: "transparent",
+                    color: "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)",
+                    cursor: "pointer", opacity: 0.75,
+                  }}>
+                    View in Terminal →
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tree body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
@@ -320,6 +517,61 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
           ))}
         </div>
 
+        {/* Git log — commit history */}
+        {logExpanded && (
+          <div style={{
+            borderTop: "1px solid rgba(201,162,76,0.08)",
+            flexShrink: 0, maxHeight: 160, overflowY: "auto",
+          }}>
+            <div style={{
+              padding: "6px 12px 4px",
+              fontSize: 9.5, fontFamily: "var(--app-font-mono)",
+              color: "var(--atlas-gold)", letterSpacing: "0.12em",
+              textTransform: "uppercase", opacity: 0.7,
+              display: "flex", alignItems: "center", gap: 5,
+            }}>
+              <History size={9} strokeWidth={1.8} />
+              History
+            </div>
+            {!gitLog && (
+              <div style={{ padding: "6px 12px", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5 }}>
+                Loading…
+              </div>
+            )}
+            {gitLog && gitLog.commits.length === 0 && (
+              <div style={{ padding: "6px 12px", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5 }}>
+                No commits yet
+              </div>
+            )}
+            {gitLog?.commits.map((c) => (
+              <div key={c.hash} title={`${c.author}  ${c.date}`} style={{
+                display: "flex", alignItems: "baseline", gap: 6,
+                padding: "3px 12px",
+                fontSize: 11, lineHeight: 1.5,
+              }}>
+                <span style={{
+                  fontFamily: "var(--app-font-mono)", fontSize: 9.5,
+                  color: "rgba(201,162,76,0.6)", flexShrink: 0, letterSpacing: "0.04em",
+                }}>
+                  {c.hash}
+                </span>
+                <span style={{
+                  color: "var(--atlas-fg)", opacity: 0.75,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  {c.message}
+                </span>
+                <span style={{
+                  fontFamily: "var(--app-font-mono)", fontSize: 9, flexShrink: 0,
+                  color: "var(--atlas-muted)", opacity: 0.45, marginLeft: "auto",
+                }}>
+                  {c.date}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Working dir label */}
         {tree?.workspaceDir && (
           <div style={{
@@ -343,13 +595,45 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
             flexShrink: 0,
             display: "flex", flexDirection: "column", gap: 8,
           }}>
-            <div style={{
-              fontSize: 9.5, fontFamily: "var(--app-font-mono)",
-              color: "var(--atlas-gold)", letterSpacing: "0.12em",
-              textTransform: "uppercase", opacity: 0.8,
-            }}>
-              Commit & Push
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{
+                fontSize: 9.5, fontFamily: "var(--app-font-mono)",
+                color: "var(--atlas-gold)", letterSpacing: "0.12em",
+                textTransform: "uppercase", opacity: 0.8,
+              }}>
+                Commit & Push
+              </div>
+              <IconBtn title={showDiff ? "Hide diff" : "Show diff"} onClick={toggleDiff}>
+                <FileCode size={11} strokeWidth={1.8} style={{ color: showDiff ? "var(--atlas-gold)" : undefined }} />
+              </IconBtn>
             </div>
+
+            {/* Diff view */}
+            {showDiff && (
+              <div style={{
+                maxHeight: 120, overflowY: "auto",
+                fontFamily: "var(--app-font-mono)", fontSize: 9.5,
+                background: "rgba(0,0,0,0.25)",
+                border: "1px solid rgba(201,162,76,0.1)",
+                borderRadius: 5, padding: "6px 8px",
+                lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-all",
+              }}>
+                {diffLoading ? (
+                  <span style={{ color: "var(--atlas-muted)", opacity: 0.5 }}>Loading diff…</span>
+                ) : diffContent ? (
+                  diffContent.split("\n").map((line, i) => {
+                    const color = line.startsWith("+") && !line.startsWith("+++")
+                      ? "rgba(100,200,120,0.85)"
+                      : line.startsWith("-") && !line.startsWith("---")
+                        ? "rgba(220,80,80,0.85)"
+                        : line.startsWith("@@")
+                          ? "rgba(100,160,240,0.75)"
+                          : "rgba(255,255,255,0.6)";
+                    return <div key={i} style={{ color }}>{line || "\u00a0"}</div>;
+                  })
+                ) : null}
+              </div>
+            )}
 
             {/* Changed files — read-only list */}
             <div style={{

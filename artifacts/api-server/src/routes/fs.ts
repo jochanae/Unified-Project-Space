@@ -418,4 +418,132 @@ router.post("/fs/:projectId/git/commit-push", async (req: Request, res: Response
   }
 });
 
+// POST /api/fs/:projectId/git/pull  (SSE streaming)
+router.post("/fs/:projectId/git/pull", async (req: Request, res: Response): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const projectId = parseProjectId(req.params.projectId);
+  if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+  if (!await assertProjectOwner(projectId, userId)) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const workspaceDir = projectWorkspaceDir(projectId);
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event: string, data: string) => {
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {}
+  };
+
+  let githubToken: string | null = null;
+  let pullUrl: string | null = null;
+  try {
+    const [project] = await db
+      .select({ linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, projectId))
+      .limit(1);
+    const repo = parseLinkedRepo(project?.linkedRepo ?? null);
+    if (repo) {
+      githubToken = await resolveGithubTokenForRequest(userId, project?.githubToken ?? null);
+      pullUrl = buildCloneUrl(repo, githubToken);
+    }
+  } catch {
+    // fall through — pull without explicit URL
+  }
+
+  try {
+    send("status", "$ git pull\n");
+    const pullArgs = pullUrl ? ["pull", pullUrl] : ["pull"];
+    const proc = spawn("git", pullArgs, {
+      cwd: workspaceDir,
+      env: { ...process.env as Record<string, string>, GIT_TERMINAL_PROMPT: "0" },
+      stdio: "pipe",
+    });
+    req.on("close", () => { try { proc.kill("SIGTERM"); } catch {} });
+    proc.stdout.on("data", (chunk: Buffer) => {
+      const text = githubToken ? redactToken(chunk.toString(), githubToken) : chunk.toString();
+      send("output", text);
+    });
+    proc.stderr.on("data", (chunk: Buffer) => {
+      const text = githubToken ? redactToken(chunk.toString(), githubToken) : chunk.toString();
+      send("output", text);
+    });
+    proc.on("error", (err) => {
+      send("done", JSON.stringify({ ok: false, error: err.message }));
+      res.end();
+    });
+    proc.on("close", (code) => {
+      const ok = code === 0;
+      send("done", JSON.stringify({ ok, error: ok ? null : "git pull failed — check output above" }));
+      res.end();
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Pull failed";
+    req.log?.error({ err }, "fs git pull error");
+    send("error", msg);
+    res.end();
+  }
+});
+
+// GET /api/fs/:projectId/git/diff
+router.get("/fs/:projectId/git/diff", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const projectId = parseProjectId(req.params.projectId);
+    if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+    if (!await assertProjectOwner(projectId, userId)) { res.status(404).json({ error: "Project not found" }); return; }
+
+    const workspaceDir = projectWorkspaceDir(projectId);
+
+    const diff = await new Promise<string>((resolve) => {
+      execFile("git", ["diff", "HEAD"], { cwd: workspaceDir, maxBuffer: 512_000 }, (err, stdout) => {
+        if (err) { resolve(""); return; }
+        resolve(stdout);
+      });
+    });
+
+    res.json({ diff });
+  } catch (err) {
+    req.log?.error({ err }, "fs git diff error");
+    res.status(500).json({ error: "Failed to get diff" });
+  }
+});
+
+// GET /api/fs/:projectId/git/log
+router.get("/fs/:projectId/git/log", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const projectId = parseProjectId(req.params.projectId);
+    if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+    if (!await assertProjectOwner(projectId, userId)) { res.status(404).json({ error: "Project not found" }); return; }
+
+    const workspaceDir = projectWorkspaceDir(projectId);
+
+    const raw = await new Promise<string>((resolve) => {
+      execFile(
+        "git", ["log", "--format=%H\x1f%s\x1f%an\x1f%ai", "-20"],
+        { cwd: workspaceDir, maxBuffer: 64_000 },
+        (err, stdout) => { if (err) { resolve(""); return; } resolve(stdout); }
+      );
+    });
+
+    interface Commit { hash: string; message: string; author: string; date: string }
+    const commits: Commit[] = raw
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [hash = "", message = "", author = "", date = ""] = line.split("\x1f");
+        return { hash: hash.slice(0, 7), message, author, date: date.slice(0, 10) };
+      });
+
+    res.json({ commits });
+  } catch (err) {
+    req.log?.error({ err }, "fs git log error");
+    res.status(500).json({ error: "Failed to get log" });
+  }
+});
+
 export default router;
