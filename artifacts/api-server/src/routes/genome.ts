@@ -90,7 +90,7 @@ function nextActionForStage(stage: string, openQuestions: string[], constraints:
 async function computeProjectHealth(projectId: number, genome: typeof projectGenomeTable.$inferSelect) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [msgRow, blockerCountRow, objectCountRow] = await Promise.all([
+  const [msgRow, blockerCountRow, objectCountRow, sessionCountRow, committedRow, parkedRow] = await Promise.all([
     db.select({ n: count() }).from(nexusMessagesTable).where(and(
       eq(nexusMessagesTable.projectId, projectId),
       sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
@@ -105,6 +105,17 @@ async function computeProjectHealth(projectId: number, genome: typeof projectGen
     db.select({ n: count() }).from(entriesTable).where(and(
       eq(entriesTable.projectId, projectId),
       ne(entriesTable.status, "archived"),
+    )).then(r => r[0]),
+    db.select({ n: count() }).from(sessionsTable).where(
+      eq(sessionsTable.projectId, projectId)
+    ).then(r => r[0]),
+    db.select({ n: count() }).from(entriesTable).where(and(
+      eq(entriesTable.projectId, projectId),
+      eq(entriesTable.status, "committed"),
+    )).then(r => r[0]),
+    db.select({ n: count() }).from(entriesTable).where(and(
+      eq(entriesTable.projectId, projectId),
+      eq(entriesTable.status, "parked"),
     )).then(r => r[0]),
   ]);
 
@@ -123,6 +134,9 @@ async function computeProjectHealth(projectId: number, genome: typeof projectGen
   const recentMsgCount = Number(msgRow?.n ?? 0);
   const blockerCount = Number(blockerCountRow?.n ?? 0);
   const objectCount = Number(objectCountRow?.n ?? 0);
+  const totalSessions = Number(sessionCountRow?.n ?? 0);
+  const committedDecisions = Number(committedRow?.n ?? 0);
+  const parkedItems = Number(parkedRow?.n ?? 0);
   const constraints = genome.constraints ?? [];
   const openQuestions = genome.openQuestions ?? [];
   const risk = topBlocker?.title ?? constraints[0] ?? null;
@@ -144,6 +158,30 @@ async function computeProjectHealth(projectId: number, genome: typeof projectGen
     risk,
     nextAction: nextActionForStage(genome.stage, openQuestions, constraints),
     atlasState,
+    // Explainability: raw signals that drove each conclusion above.
+    // Never stored — generated fresh on every GET /genome call.
+    evidence: {
+      scope: "project" as const,
+      signals: {
+        conversationsLast7Days: recentMsgCount,
+        totalSessions,
+        committedDecisions,
+        parkedItems,
+        openBlockers: blockerCount,
+        openConstraints: constraints.length,
+        openQuestions: openQuestions.length,
+        confidenceScore: genome.confidenceScore,
+      },
+      derivations: {
+        momentum: recentMsgCount >= 16
+          ? `${recentMsgCount} conversations this week → High`
+          : recentMsgCount >= 6
+            ? `${recentMsgCount} conversations this week → Medium`
+            : `${recentMsgCount} conversations this week → Low`,
+        clarity: `${genome.confidenceScore}% confidence score`,
+        state: `${genome.stage} stage${blockerCount > 0 ? ` · ${blockerCount} blocker${blockerCount !== 1 ? "s" : ""}` : ""} → ${atlasState}`,
+      },
+    },
   };
 }
 

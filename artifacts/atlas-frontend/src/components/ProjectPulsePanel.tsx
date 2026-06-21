@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { X, Check } from "lucide-react";
 import { useUpdateProject, getGetProjectQueryKey, getListProjectsQueryKey } from "@workspace/api-client-react";
@@ -18,6 +19,39 @@ interface Props {
   onClose: () => void;
 }
 
+interface GenomeEvidence {
+  scope: "project";
+  signals: {
+    conversationsLast7Days: number;
+    totalSessions: number;
+    committedDecisions: number;
+    parkedItems: number;
+    openBlockers: number;
+    openConstraints: number;
+    openQuestions: number;
+    confidenceScore: number;
+  };
+  derivations: {
+    momentum: string;
+    clarity: string;
+    state: string;
+  };
+}
+
+interface GenomeHealth {
+  clarity: number;
+  momentum: "Low" | "Medium" | "High";
+  confidence: "Low" | "Medium" | "High";
+  risk: string | null;
+  nextAction: string;
+  atlasState: string;
+  evidence: GenomeEvidence;
+}
+
+interface GenomeResponse {
+  health: GenomeHealth;
+}
+
 function relTime(iso: string | null): string {
   if (!iso) return "—";
   const diff = Date.now() - new Date(iso).getTime();
@@ -28,6 +62,10 @@ function relTime(iso: string | null): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+function plural(n: number, singular: string, pluralForm?: string): string {
+  return `${n} ${n === 1 ? singular : (pluralForm ?? singular + "s")}`;
 }
 
 /**
@@ -44,6 +82,18 @@ export function ProjectPulsePanel(props: Props) {
   const updateProject = useUpdateProject();
   const queryClient = useQueryClient();
   const [justMarked, setJustMarked] = useState(false);
+
+  const { data: genomeData } = useQuery<GenomeResponse>({
+    queryKey: ["genome", projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/genome`, { credentials: "include" });
+      if (!res.ok) throw new Error("genome fetch failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const evidence = genomeData?.health?.evidence ?? null;
 
   const handleMarkBuilt = () => {
     updateProject.mutate(
@@ -65,7 +115,6 @@ export function ProjectPulsePanel(props: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Momentum assessment from signals available
   const score = readinessScore ?? 0;
   const dCount = decisionCount ?? 0;
   const coherence = score >= 60 ? "High" : score >= 30 ? "Building" : "Early";
@@ -149,7 +198,7 @@ export function ProjectPulsePanel(props: Props) {
           </div>
         </Section>
 
-        {isEmpty ? (
+        {isEmpty && !evidence ? (
           <div style={{
             marginTop: 14, padding: "14px 14px",
             background: "rgba(255,255,255,0.02)",
@@ -184,12 +233,26 @@ export function ProjectPulsePanel(props: Props) {
               </Section>
             )}
 
-            <Section label="Atlas Assessment">
+            {/* Explainability: what Atlas observed before concluding anything */}
+            {evidence && <EvidenceBlock evidence={evidence} lastActivityAt={lastActivityAt} />}
+
+            <Section label="Atlas Concludes">
               <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5 }}>
-                <Row k="Coherence" v={coherence} />
-                <Row k="Momentum" v={momentum} />
-                {readinessScore != null && <Row k="Readiness" v={`${readinessScore}%`} />}
-                {hasRepo && <Row k="Repository" v="Linked" />}
+                {evidence ? (
+                  <>
+                    <Row k="Momentum" v={genomeData?.health?.momentum ?? "—"} note={evidence.derivations.momentum} />
+                    <Row k="Clarity" v={`${evidence.signals.confidenceScore}%`} note={evidence.derivations.clarity} />
+                    <Row k="State" v={genomeData?.health?.atlasState ?? "—"} note={evidence.derivations.state} />
+                    {genomeData?.health?.risk && <Row k="Risk" v={genomeData.health.risk} />}
+                  </>
+                ) : (
+                  <>
+                    <Row k="Coherence" v={coherence} />
+                    <Row k="Momentum" v={momentum} />
+                    {readinessScore != null && <Row k="Readiness" v={`${readinessScore}%`} />}
+                    {hasRepo && <Row k="Repository" v="Linked" />}
+                  </>
+                )}
               </div>
             </Section>
 
@@ -235,7 +298,7 @@ export function ProjectPulsePanel(props: Props) {
           </div>
         )}
 
-        {/* Footnote — explains who decides what */}
+        {/* Footnote */}
         <div style={{
           marginTop: 16, paddingTop: 12,
           borderTop: "1px solid rgba(201,162,76,0.1)",
@@ -247,6 +310,47 @@ export function ProjectPulsePanel(props: Props) {
       </div>
     </div>,
     document.body
+  );
+}
+
+function EvidenceBlock({ evidence, lastActivityAt }: { evidence: GenomeEvidence; lastActivityAt: string | null }) {
+  const s = evidence.signals;
+
+  const bullets: string[] = [];
+
+  if (s.conversationsLast7Days > 0) {
+    bullets.push(plural(s.conversationsLast7Days, "conversation") + " this week");
+  } else if (s.totalSessions > 0) {
+    bullets.push(plural(s.totalSessions, "session") + " total · none this week");
+  } else {
+    bullets.push("No conversations yet");
+  }
+
+  if (s.committedDecisions > 0) bullets.push(plural(s.committedDecisions, "committed decision"));
+  if (s.parkedItems > 0) bullets.push(plural(s.parkedItems, "parked item"));
+  if (s.openBlockers > 0) bullets.push(plural(s.openBlockers, "open blocker"));
+  if (s.openConstraints > 0) bullets.push(plural(s.openConstraints, "constraint"));
+  if (s.openQuestions > 0) bullets.push(plural(s.openQuestions, "open question"));
+  if (lastActivityAt) bullets.push(`Last activity ${relTime(lastActivityAt)}`);
+
+  return (
+    <Section label="Atlas Observed">
+      <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        {bullets.map((b, i) => (
+          <li key={i} style={{
+            fontSize: 12, color: "var(--atlas-fg)", opacity: 0.8, lineHeight: 1.5,
+            display: "flex", alignItems: "baseline", gap: 7,
+          }}>
+            <span style={{
+              flexShrink: 0, width: 4, height: 4, borderRadius: "50%",
+              background: "rgba(var(--atlas-gold-rgb), 0.55)",
+              display: "inline-block", marginBottom: 1,
+            }} />
+            {b}
+          </li>
+        ))}
+      </ul>
+    </Section>
   );
 }
 
@@ -264,11 +368,22 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v, note }: { k: string; v: string; note?: string }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-      <span style={{ color: "var(--atlas-muted)", opacity: 0.75 }}>{k}</span>
-      <span style={{ color: "var(--atlas-fg)" }}>{v}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 2 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <span style={{ color: "var(--atlas-muted)", opacity: 0.75, fontSize: 12.5 }}>{k}</span>
+        <span style={{ color: "var(--atlas-fg)", fontSize: 12.5 }}>{v}</span>
+      </div>
+      {note && (
+        <div style={{
+          fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5,
+          fontFamily: "var(--app-font-mono)", lineHeight: 1.4,
+          paddingLeft: 0, letterSpacing: "0.01em",
+        }}>
+          {note}
+        </div>
+      )}
     </div>
   );
 }
