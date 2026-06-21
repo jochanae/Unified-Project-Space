@@ -241,6 +241,8 @@ export interface ChatMessage {
   /** Time-travel: messages bypassed by a rollback. Kept in-array but filtered
    *  from upstream prompt history (safeguard #3) and dimmed in the UI. */
   reverted?: boolean;
+  /** Atlas-proposed workspace file write — set when Atlas emits WRITE_FILE signal. */
+  writeFileProposal?: { path: string };
 }
 
 export type MemoryChip = { label: string; insight?: string };

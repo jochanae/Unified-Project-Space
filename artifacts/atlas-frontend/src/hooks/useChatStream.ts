@@ -124,6 +124,21 @@ const GITHUB_AUTO_LINK_TOOL_CALL_LINE_RE = /^TOOL_CALL:\s*github\/auto-link$/;
 const GITHUB_AUTO_LINK_SUCCESS = "GitHub sync complete.";
 const GITHUB_AUTO_LINK_FAILURE = "GitHub sync failed — add token in Connections.";
 
+const WRITE_FILE_RE = /\n?WRITE_FILE:\s*(\{[^\n]*"path"\s*:\s*"([^"]+)"[^\n]*\})\s*$/;
+
+function stripWriteFileSignal(content: string): { content: string; path: string | null } {
+  const match = content.match(WRITE_FILE_RE);
+  if (!match) return { content, path: null };
+  let path: string | null = null;
+  try {
+    const parsed = JSON.parse(match[1]) as { path?: unknown };
+    path = typeof parsed.path === "string" ? parsed.path : null;
+  } catch {
+    path = match[2] ?? null;
+  }
+  return { content: content.replace(WRITE_FILE_RE, "").trimEnd(), path };
+}
+
 function stripGithubAutoLinkToolCall(content: string): { content: string; found: boolean } {
   let found = false;
   const stripped = content
@@ -464,8 +479,11 @@ export function useChatStream(
                 ghStatus = gr.ok ? GITHUB_AUTO_LINK_SUCCESS : GITHUB_AUTO_LINK_FAILURE;
               } catch { ghStatus = GITHUB_AUTO_LINK_FAILURE; }
             }
+            let jsonWriteFilePath: string | null = null;
             if (typeof res.content === "string") {
-              const { content: stripped } = stripGithubAutoLinkToolCall(res.content);
+              const { content: noWriteFile, path: wfp } = stripWriteFileSignal(res.content);
+              jsonWriteFilePath = wfp;
+              const { content: stripped } = stripGithubAutoLinkToolCall(noWriteFile);
               const driftMatch = stripped.match(/LENS_DRIFT:\s*(flow|build|look|scenario)/i);
               if (driftMatch) {
                 const drifted = driftMatch[1].toLowerCase();
@@ -517,6 +535,7 @@ export function useChatStream(
                   : {}),
               imageGen: res.imageGen ?? null,
               ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
+              ...(jsonWriteFilePath ? { writeFileProposal: { path: jsonWriteFilePath } } : {}),
               surface: res.surface ?? null,
               executionTimeMs: res.executionTimeMs ?? null,
               inputTokens: res.inputTokens ?? null,
@@ -585,7 +604,8 @@ export function useChatStream(
           const decoder = new TextDecoder();
           let buffer = "";
           const renderFrom = (raw: string) => {
-            const { content } = stripGithubAutoLinkToolCall(raw);
+            const { content: noGh } = stripGithubAutoLinkToolCall(raw);
+            const { content } = stripWriteFileSignal(noGh);
             return appendGithubAutoLinkStatus(content, githubAutoLinkStatus);
           };
           // Pacer: decouples network token bursts from the visible reveal.
@@ -731,8 +751,11 @@ export function useChatStream(
                   if (!res) return;
           if (typeof res.content === "string") triggerGithubAutoLink(res.content);
           if (githubAutoLinkPromise) await githubAutoLinkPromise;
+          let writeFilePath: string | null = null;
           if (res.content && typeof res.content === "string") {
-            const { content: contentWithoutToolCall } = stripGithubAutoLinkToolCall(res.content);
+            const { content: noWriteFile, path: wfPath } = stripWriteFileSignal(res.content);
+            writeFilePath = wfPath;
+            const { content: contentWithoutToolCall } = stripGithubAutoLinkToolCall(noWriteFile);
             const driftMatch = contentWithoutToolCall.match(/LENS_DRIFT:\s*(flow|build|look|scenario)/i);
             if (driftMatch) {
               const drifted = driftMatch[1].toLowerCase();
@@ -783,6 +806,7 @@ export function useChatStream(
                 : {}),
             imageGen: res.imageGen ?? null,
             ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
+            ...(writeFilePath ? { writeFileProposal: { path: writeFilePath } } : {}),
             surface: res.surface ?? null,
             executionTimeMs: res.executionTimeMs ?? null,
             inputTokens: res.inputTokens ?? null,

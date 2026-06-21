@@ -7,6 +7,7 @@ import InlineSketchOffer from "@/components/chat/InlineSketchOffer";
 import { InlineTerminalBlock } from "@/components/InlineTerminalBlock";
 import { LiveGenerationCard } from "@/components/workspace/LiveGenerationCard";
 import { TimelineRail } from "../TimelineRail";
+import { WriteFileCard } from "@/components/workspace/WriteFileCard";
 
 import type { ChatMessage, LinkedRepo, PushRecord } from "@/pages/workspace";
 import type { PlanExecution } from "@/lib/plan";
@@ -456,6 +457,15 @@ export function ChatStream(props: ChatStreamProps) {
               {Boolean(msg.terminalCmd || msg.terminalResult) && (
                 <div style={{ maxWidth: "80%", marginTop: -18, marginBottom: 24 }}>
                   <InlineTerminalBlock terminalCmd={msg.terminalCmd} terminalResult={msg.terminalResult} projectId={projectId} />
+                </div>
+              )}
+              {msg.writeFileProposal && !msg.streaming && (
+                <div style={{ maxWidth: "80%", marginTop: -8, marginBottom: 4, paddingLeft: 4 }}>
+                  <WriteFileCard
+                    filePath={msg.writeFileProposal.path}
+                    content={msg.content}
+                    projectId={projectId}
+                  />
                 </div>
               )}
               {/* Sketch offer now lives as an icon in AssistantBubble's action bar. */}
