@@ -101,7 +101,7 @@ function ShellWordmark() {
         aria-label={location === "/home" ? "Return to ambient Nexus" : "Go home"}
         style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}
       >
-        <svg width="28" height="28" viewBox="0 0 512 512" display="block" style={{ flexShrink: 0, borderRadius: "50%" }} aria-hidden>
+        <svg width={isTinyMobile ? 22 : 28} height={isTinyMobile ? 22 : 28} viewBox="0 0 512 512" display="block" style={{ flexShrink: 0, borderRadius: "50%" }} aria-hidden>
           <defs>
             <radialGradient id="hwmpg" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
@@ -468,7 +468,7 @@ function ShellProjectSwitcher({ projectId }: { projectId: number | null }) {
   if (projectId == null) return null;
 
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 4, maxWidth: "min(320px, 100%)", minWidth: 0 }}>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: isTinyMobile ? 2 : 4, maxWidth: isTinyMobile ? "min(200px, 100%)" : "min(320px, 100%)", minWidth: 0 }}>
       {(() => {
         const state = deriveLifecycle({
           status: project?.status ?? null,
@@ -498,7 +498,7 @@ function ShellProjectSwitcher({ projectId }: { projectId: number | null }) {
               readinessScore={project?.latestSnapshotScore ?? null}
               decisionCount={ps.decisions?.length ?? 0}
               hasRepo={Boolean(project?.linkedRepo)}
-              size={13}
+              size={isTinyMobile ? 10 : 13}
             />
           </span>
         );
@@ -552,22 +552,22 @@ function ShellProjectSwitcher({ projectId }: { projectId: number | null }) {
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: 6,
+            gap: isTinyMobile ? 4 : 6,
             minWidth: 0,
             background: "color-mix(in oklab, var(--atlas-fg) 6%, transparent)",
-            border: "1px solid var(--atlas-border)",
+            border: isTinyMobile ? "1px solid color-mix(in oklab, var(--atlas-border) 60%, transparent)" : "1px solid var(--atlas-border)",
             borderRadius: 999,
-            padding: "3px 8px 3px 8px",
+            padding: isTinyMobile ? "2px 6px" : "3px 8px",
             cursor: "pointer",
             color: "var(--atlas-fg)",
             fontFamily: "var(--app-font-sans)",
-            fontSize: "var(--ts-body)",
+            fontSize: isTinyMobile ? 11 : "var(--ts-body)",
             fontWeight: 500,
             lineHeight: "var(--lh-snug)",
             letterSpacing: "var(--ls-tight)",
             opacity: 0.95,
             pointerEvents: "auto",
-            maxWidth: 180,
+            maxWidth: isTinyMobile ? 120 : 180,
           }}
         >
           {/* GitHub mark — only shown when a repo is actually linked */}
@@ -677,6 +677,7 @@ function ShellConversationTitle({ title }: { title: string | null }) {
 
 function ShellReadinessChip({ projectId }: { projectId: number | null }) {
   const ps = useProjectState(projectId);
+  const isTinyMobile = useIsTinyScreen();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<ReadinessMode>(() => {
     try {
@@ -736,8 +737,8 @@ function ShellReadinessChip({ projectId }: { projectId: number | null }) {
         title={`${meta.label} — ${meta.description}. Tap to switch · long-press for breakdown.`}
         aria-label={`Readiness mode ${meta.label}, ${score} percent. Tap to switch mode, long-press for breakdown.`}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          padding: "4px 8px", borderRadius: 999, cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap: isTinyMobile ? 3 : 6,
+          padding: isTinyMobile ? "3px 5px" : "4px 8px", borderRadius: 999, cursor: "pointer",
           background: "transparent",
           border: "none",
           color: "var(--atlas-gold)", flexShrink: 0,
@@ -751,15 +752,15 @@ function ShellReadinessChip({ projectId }: { projectId: number | null }) {
         onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.9"; }}
       >
         <span style={{
-          fontFamily: "var(--app-font-mono)", fontSize: 8.5, fontWeight: 700,
+          fontFamily: "var(--app-font-mono)", fontSize: isTinyMobile ? 7 : 8.5, fontWeight: 700,
           letterSpacing: "0.12em", color: "var(--atlas-muted)", lineHeight: 1,
         }}>{meta.abbr}</span>
         <span style={{
-          width: 4, height: 4, borderRadius: 999,
+          width: isTinyMobile ? 3 : 4, height: isTinyMobile ? 3 : 4, borderRadius: 999,
           background: score >= 80 ? "#4ade80" : score >= 50 ? "var(--atlas-gold)" : "rgba(252,165,165,0.9)",
         }} />
         <span style={{
-          fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700,
+          fontFamily: "var(--app-font-mono)", fontSize: isTinyMobile ? 8.5 : 10, fontWeight: 700,
           letterSpacing: "0.02em", lineHeight: 1,
         }}>{score}%</span>
       </button>
@@ -1789,6 +1790,7 @@ function ShellFooter() {
 
 export function UnifiedShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const isTinyMobile = useIsTinyScreen();
   const [currentDepth, setCurrentDepth] = useState<ShellDepth>(() => depthFromPath(location));
   const [activeProjectId, setActiveProjectIdState] = useState<number | null>(() => projectIdFromPath(location));
   const [activeConversationTitle, setActiveConversationTitleState] = useState<string | null>(null);
@@ -1895,12 +1897,12 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
             left: 0,
             right: 0,
             zIndex: 20,
-            height: 50,
+            height: isTinyMobile ? 42 : 50,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
-            padding: "0 clamp(14px, 4vw, 24px)",
+            gap: isTinyMobile ? 6 : 12,
+            padding: isTinyMobile ? "0 10px" : "0 clamp(14px, 4vw, 24px)",
             borderBottom: currentDepth === "ambient" ? "none" : undefined,
             boxShadow: "none",
             opacity: 1,
@@ -1922,7 +1924,7 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
               display: "flex",
               justifyContent: "center",
               pointerEvents: "auto",
-              maxWidth: "min(60vw, 320px)",
+              maxWidth: isTinyMobile ? "min(48vw, 200px)" : "min(60vw, 320px)",
               zIndex: 1,
             }}
           >

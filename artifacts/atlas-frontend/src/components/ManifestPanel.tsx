@@ -11,6 +11,10 @@ const BORDER = "var(--atlas-border)";
 const GREEN = "#6EE7B7";
 const AMBER = "#f59e0b";
 
+// Theme-aware alternatives for hardcoded rgba-white values
+const CIRCLE_EMPTY = "color-mix(in oklab, var(--atlas-fg) 35%, transparent)";
+const LOCKED_ICON = "color-mix(in oklab, var(--atlas-fg) 28%, transparent)";
+
 const READINESS_THRESHOLD = 40;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -100,10 +104,10 @@ function ReadinessRing({ score }: { score: number }) {
   const circ = 2 * Math.PI * r;
   const pct = Math.min(100, Math.max(0, score));
   const dash = (pct / 100) * circ;
-  const color = score >= 67 ? GREEN : score >= 34 ? AMBER : "rgba(255,255,255,0.28)";
+  const color = score >= 67 ? GREEN : score >= 34 ? AMBER : CIRCLE_EMPTY;
   return (
     <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-      <circle cx="14" cy="14" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" />
+      <circle cx="14" cy="14" r={r} fill="none" stroke="color-mix(in oklab, var(--atlas-fg) 10%, transparent)" strokeWidth="2.5" />
       <circle
         cx="14" cy="14" r={r} fill="none" stroke={color} strokeWidth="2.5"
         strokeDasharray={`${dash} ${circ}`}
@@ -124,7 +128,7 @@ function TargetRow({ target, selected, onSelect }: { target: Target; selected: b
   const [hovered, setHovered] = useState(false);
   const isLocked = target.status === "locked";
   const isAvailable = target.status === "available";
-  const iconColor = isAvailable ? GOLD : target.status === "warning" ? AMBER : "rgba(255,255,255,0.2)";
+  const iconColor = isAvailable ? GOLD : target.status === "warning" ? AMBER : LOCKED_ICON;
 
   return (
     <div
@@ -134,9 +138,9 @@ function TargetRow({ target, selected, onSelect }: { target: Target; selected: b
       style={{
         display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7,
         cursor: isLocked ? "default" : "pointer",
-        background: selected ? "rgba(201,162,76,0.09)" : hovered ? "rgba(255,255,255,0.035)" : "transparent",
+        background: selected ? "rgba(201,162,76,0.09)" : hovered ? "color-mix(in oklab, var(--atlas-fg) 4%, transparent)" : "transparent",
         border: `1px solid ${selected ? "rgba(201,162,76,0.28)" : "transparent"}`,
-        opacity: isLocked ? 0.32 : 1,
+        opacity: isLocked ? 0.52 : 1,
         transition: "background 150ms ease, border-color 150ms ease",
         marginBottom: 1,
       }}
@@ -145,8 +149,12 @@ function TargetRow({ target, selected, onSelect }: { target: Target; selected: b
         {isAvailable ? "▶" : isLocked ? "🔒" : "⚠"}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontFamily: SANS, color: FG, fontWeight: selected ? 600 : 400, opacity: 0.85 }}>{target.label}</div>
-        <div style={{ fontSize: 9, fontFamily: MONO, color: MUTED, opacity: 0.4, letterSpacing: "0.02em", marginTop: 1 }}>{target.reason}</div>
+        <div style={{
+          fontSize: 12, fontFamily: SANS, color: FG,
+          fontWeight: isAvailable ? 600 : selected ? 600 : 400,
+          opacity: isAvailable ? 1 : 0.88,
+        }}>{target.label}</div>
+        <div style={{ fontSize: 9, fontFamily: MONO, color: MUTED, opacity: 0.65, letterSpacing: "0.02em", marginTop: 1 }}>{target.reason}</div>
       </div>
       {selected && <div style={{ width: 5, height: 5, borderRadius: "50%", background: GOLD, flexShrink: 0 }} />}
     </div>
@@ -158,7 +166,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       fontFamily: MONO, fontSize: 8, letterSpacing: "0.16em",
-      textTransform: "uppercase", color: MUTED, opacity: 0.45, marginBottom: 10,
+      textTransform: "uppercase", color: MUTED, opacity: 0.65, marginBottom: 10,
     }}>
       {children}
     </div>
@@ -230,10 +238,10 @@ export function ManifestPanel({
         display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.18em", textTransform: "uppercase", color: MUTED, opacity: 0.45, marginBottom: 3 }}>
+          <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.18em", textTransform: "uppercase", color: MUTED, opacity: 0.65, marginBottom: 3 }}>
             Manifest
           </div>
-          <div style={{ fontFamily: SANS, fontSize: 11, color: MUTED, opacity: 0.55 }}>
+          <div style={{ fontFamily: SANS, fontSize: 11, color: FG, opacity: 0.75 }}>
             What can become real
           </div>
         </div>
@@ -244,7 +252,7 @@ export function ManifestPanel({
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {genomeLoading ? (
           <div style={{ padding: 24, display: "flex", justifyContent: "center" }}>
-            <div style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.4, letterSpacing: "0.12em" }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.65, letterSpacing: "0.12em" }}>
               Reading project…
             </div>
           </div>
@@ -257,19 +265,19 @@ export function ManifestPanel({
               <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                 {projectName && (
                   <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                    <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.4, flexShrink: 0, minWidth: 60 }}>Project</span>
-                    <span style={{ fontFamily: SANS, fontSize: 12, color: FG, opacity: 0.65 }}>{projectName}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.6, flexShrink: 0, minWidth: 60 }}>Project</span>
+                    <span style={{ fontFamily: SANS, fontSize: 12, color: FG, opacity: 0.9 }}>{projectName}</span>
                   </div>
                 )}
                 {known.length === 0 && (
-                  <div style={{ fontFamily: SANS, fontSize: 12, color: MUTED, opacity: 0.4, lineHeight: 1.5, paddingLeft: 2 }}>
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: MUTED, opacity: 0.65, lineHeight: 1.5, paddingLeft: 2 }}>
                     Keep talking with Atlas — understanding builds with every message.
                   </div>
                 )}
                 {known.map(a => (
                   <div key={a.label} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                     <span style={{ color: GREEN, fontSize: 11, flexShrink: 0, marginTop: 1, lineHeight: 1 }}>✓</span>
-                    <div style={{ fontFamily: SANS, fontSize: 12, color: FG, opacity: 0.78, lineHeight: 1.5 }}>{a.value}</div>
+                    <div style={{ fontFamily: SANS, fontSize: 12, color: FG, fontWeight: 500, lineHeight: 1.5 }}>{a.value}</div>
                   </div>
                 ))}
               </div>
@@ -282,14 +290,14 @@ export function ManifestPanel({
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {missing.map(a => (
                     <div key={a.label} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                      <span style={{ color: "rgba(255,255,255,0.22)", fontSize: 11, flexShrink: 0, lineHeight: 1 }}>○</span>
-                      <div style={{ fontFamily: SANS, fontSize: 12, color: MUTED, opacity: 0.55 }}>{a.label}</div>
+                      <span style={{ color: CIRCLE_EMPTY, fontSize: 11, flexShrink: 0, lineHeight: 1 }}>○</span>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: MUTED, opacity: 0.82 }}>{a.label}</div>
                     </div>
                   ))}
                   {openQuestions.slice(0, 3).map((q, i) => (
                     <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                      <span style={{ color: "rgba(255,255,255,0.22)", fontSize: 11, flexShrink: 0, lineHeight: 1, marginTop: 1 }}>○</span>
-                      <div style={{ fontFamily: SANS, fontSize: 12, color: MUTED, opacity: 0.5, lineHeight: 1.45 }}>{q}</div>
+                      <span style={{ color: CIRCLE_EMPTY, fontSize: 11, flexShrink: 0, lineHeight: 1, marginTop: 1 }}>○</span>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: MUTED, opacity: 0.72, lineHeight: 1.45 }}>{q}</div>
                     </div>
                   ))}
                 </div>
@@ -316,13 +324,13 @@ export function ManifestPanel({
               <div style={{
                 padding: "11px 13px",
                 borderRadius: 8,
-                background: "rgba(255,255,255,0.03)",
+                background: "color-mix(in oklab, var(--atlas-fg) 3%, transparent)",
                 border: `1px solid ${BORDER}`,
               }}>
-                <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.15em", textTransform: "uppercase", color: MUTED, opacity: 0.35, marginBottom: 5 }}>
+                <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.15em", textTransform: "uppercase", color: MUTED, opacity: 0.6, marginBottom: 5 }}>
                   Next
                 </div>
-                <div style={{ fontFamily: SANS, fontSize: 12, color: FG, opacity: 0.58, lineHeight: 1.55 }}>
+                <div style={{ fontFamily: SANS, fontSize: 12, color: FG, opacity: 0.82, lineHeight: 1.55 }}>
                   {nextAction}
                 </div>
               </div>
@@ -347,22 +355,22 @@ export function ManifestPanel({
               border: `1px solid ${hasSelected && selectedIsAvailable ? "rgba(201,162,76,0.4)" : BORDER}`,
               background: hasSelected && selectedIsAvailable
                 ? (materializeHover ? "rgba(201,162,76,0.15)" : "rgba(201,162,76,0.08)")
-                : "rgba(255,255,255,0.03)",
+                : "color-mix(in oklab, var(--atlas-fg) 3%, transparent)",
               cursor: hasSelected && selectedIsAvailable && !manifestLoading ? "pointer" : "default",
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               transition: "all 160ms ease",
-              opacity: hasSelected && selectedIsAvailable ? 1 : 0.4,
+              opacity: hasSelected && selectedIsAvailable ? 1 : 0.5,
             }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <polygon points="2,1 11,6 2,11" fill={hasSelected && selectedIsAvailable ? GOLD : "rgba(255,255,255,0.4)"} />
+              <polygon points="2,1 11,6 2,11" fill={hasSelected && selectedIsAvailable ? GOLD : "color-mix(in oklab, var(--atlas-fg) 40%, transparent)"} />
             </svg>
             <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: hasSelected && selectedIsAvailable ? GOLD : MUTED }}>
               {manifestLoading ? "Materializing…" : hasSelected ? "Materialize" : "Select a target above"}
             </span>
           </button>
         ) : (
-          <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: MUTED, opacity: 0.28, textAlign: "center" }}>
+          <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: MUTED, opacity: 0.55, textAlign: "center" }}>
             ▶ available at {READINESS_THRESHOLD}% signal
           </div>
         )}
