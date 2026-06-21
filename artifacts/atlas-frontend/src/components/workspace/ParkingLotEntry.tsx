@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { timeAgo } from "@/lib/formatters";
 import { haptic } from "@/lib/long-press-tip";
 
-export function ParkingLotEntry({ entry }: { entry: Entry }) {
+export function ParkingLotEntry({ entry, projectName }: { entry: Entry; projectName?: string }) {
   const queryClient = useQueryClient();
   const updateEntry = useUpdateEntry();
   const [done, setDone] = useState(false);
@@ -21,7 +21,7 @@ export function ParkingLotEntry({ entry }: { entry: Entry }) {
   };
 
   const handleSpecify = () => {
-    window.dispatchEvent(new CustomEvent("axiom:open-specify", { detail: { change: entry.title } }));
+    window.dispatchEvent(new CustomEvent("axiom:open-specify", { detail: { change: entry.title, projectName: projectName ?? "" } }));
   };
 
   const handleConvertToDecision = () => {

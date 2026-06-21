@@ -951,6 +951,7 @@ export function AssistantBubble({
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
+  const [dismissedChipLabels, setDismissedChipLabels] = useState<Set<string>>(new Set());
   const [intakeDone, setIntakeDone] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [showPushModal, setShowPushModal] = useState(false);
@@ -1306,7 +1307,7 @@ export function AssistantBubble({
         {/* Memory chips — click to expand insight and park */}
         {message.memoryChips && message.memoryChips.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 5, marginBottom: 8 }}>
-            {message.memoryChips.map((chip) => (
+            {message.memoryChips.filter(c => !dismissedChipLabels.has(c.label)).map((chip) => (
               <InsightChip
                 key={chip.label}
                 chip={chip}
@@ -1315,6 +1316,7 @@ export function AssistantBubble({
                   message.id,
                   c.label,
                 )}
+                onDismiss={(label) => setDismissedChipLabels(prev => new Set([...prev, label]))}
               />
             ))}
           </div>

@@ -327,6 +327,7 @@ export default function ParkingLot() {
                   noteValue={noteDrafts[entry.id] ?? entry.details ?? ""}
                   onOpen={() => setDetailEntry(entry)}
                   onResume={() => handleResume(entry)}
+                  onSpecify={() => { window.dispatchEvent(new CustomEvent("axiom:open-specify", { detail: { change: entry.title, projectName: projects.find(p => p.id === entry.projectId)?.name ?? "" } })); }}
                   onCommit={() => handleCommit(entry)}
                   onDelete={() => handleDelete(entry)}
                   onNoteOpen={() => {
@@ -382,6 +383,7 @@ function ParkingLotRow({
   noteValue,
   onOpen,
   onResume,
+  onSpecify,
   onCommit,
   onDelete,
   onNoteOpen,
@@ -394,6 +396,7 @@ function ParkingLotRow({
   noteValue: string;
   onOpen: () => void;
   onResume: () => void;
+  onSpecify: () => void;
   onCommit: () => void;
   onDelete: () => void;
   onNoteOpen: () => void;
@@ -449,7 +452,7 @@ function ParkingLotRow({
               </button>
             </div>
             <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.08em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase", marginBottom: 7 }}>
-              chat message · {timeAgo(entry.createdAt)}
+              {entry.contextWhat ? `From: ${entry.contextWhat}` : "Parked"} · {timeAgo(entry.createdAt)}
             </div>
             <p style={{ margin: 0, color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.55 }}>
               {summary}
@@ -488,10 +491,11 @@ function ParkingLotRow({
 
         <div style={{ height: 1, background: "linear-gradient(to right, transparent, var(--atlas-border), transparent)" }} />
 
-        <footer style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, padding: "8px 14px" }}>
+        <footer style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, padding: "8px 14px", flexWrap: "wrap" }}>
           <ParkingLotButton disabled={busy} onClick={onResume}>Resume</ParkingLotButton>
+          <ParkingLotButton disabled={busy} onClick={onSpecify}>Specify</ParkingLotButton>
           <ParkingLotButton disabled={busy} onClick={onDelete} tone="danger">Delete</ParkingLotButton>
-          <ParkingLotButton disabled={busy} onClick={onCommit} tone="gold">{busy ? "Committing..." : "Commit"}</ParkingLotButton>
+          <ParkingLotButton disabled={busy} onClick={onCommit} tone="gold">{busy ? "Moving..." : "→ Decision"}</ParkingLotButton>
         </footer>
       </div>
     </article>
