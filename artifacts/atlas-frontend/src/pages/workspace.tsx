@@ -27,6 +27,7 @@ import { VisualVault } from "../components/VisualVault";
 import { GenerateBlueprintPill } from "../components/BlueprintsTab";
 import { ImageGenerator } from "../components/ImageGenerator";
 import { ManifestMode } from "../components/ManifestMode";
+import { ManifestPanel } from "../components/ManifestPanel";
 
 import { UnifiedContextDock } from "../components/UnifiedContextDock";
 import { UnifiedSubheader, type UnifiedSubheaderTab } from "../components/UnifiedSubheader";
@@ -258,7 +259,7 @@ type ManifestDecisionResponse = {
   componentName?: string;
 };
 
-type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "blueprints" | "connections" | "secrets" | "jobs" | "mcp" | "image" | "forge" | "artifacts" | "workbench";
+type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "blueprints" | "connections" | "secrets" | "jobs" | "mcp" | "image" | "forge" | "artifacts" | "workbench" | "manifest";
 type WorkspaceLeftTab = "chat" | "review" | "diff" | "blueprints" | "terminal" | "artifacts";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 const OPENING_MESSAGE_STORAGE_KEY = "atlas-opening-message";
@@ -945,6 +946,8 @@ function RightPanel({
   sessionId,
   manifestDecision,
   manifestPreviewHtml,
+  manifestLoading,
+  onMaterialize,
   pendingTerminalCommand,
   onTerminalCommandConsumed,
   onCommandComplete,
@@ -1001,6 +1004,8 @@ function RightPanel({
   sessionId?: number;
   manifestDecision?: ManifestDecision | null;
   manifestPreviewHtml?: string | null;
+  manifestLoading?: boolean;
+  onMaterialize?: (targetId: string) => void;
   pendingTerminalCommand?: string | null;
   onTerminalCommandConsumed?: () => void;
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
@@ -1083,6 +1088,15 @@ function RightPanel({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.1" />
           <circle cx="3.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} />
           <circle cx="5.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} />
+        </svg>
+      ),
+    },
+    {
+      id: "manifest" as RightTab,
+      label: "Manifest",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="8,1.5 10,5.5 14.5,6.2 11.5,9.2 12.2,13.5 8,11.5 3.8,13.5 4.5,9.2 1.5,6.2 6,5.5" />
         </svg>
       ),
     },
@@ -1396,6 +1410,16 @@ function RightPanel({
         </div>
       )}
       {tab === "preview" && <PreviewPanel projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} sessionId={sessionId} onSwitchToFiles={() => setTab("files")} manifestDecision={manifestDecision} manifestPreviewHtml={manifestPreviewHtml} />}
+      {tab === "manifest" && (
+        <ManifestPanel
+          projectId={projectId}
+          projectName={projectName}
+          readiness={displayedReadinessScore ?? 0}
+          onMaterialize={onMaterialize ?? (() => {})}
+          manifestDecision={manifestDecision}
+          manifestLoading={manifestLoading}
+        />
+      )}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <FlowPanel projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onNavLedger={onNavLedger ?? (() => setTab("ledger"))} onNavPreview={onNavPreview ?? (() => setTab("preview"))} onMapReadinessChange={onMapReadinessChange} displayedReadinessScore={displayedReadinessScore} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} onForgeCompleted={onForgeCompleted} entryCount={entries?.length} />}
       {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} projectId={projectId} />}
@@ -3186,7 +3210,7 @@ export default function Workspace() {
     return "chat";
   });
   const [subheaderOpen, setSubheaderOpen] = useState(false);
-  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "blueprints" | "files" | "map" | "preview" | "memory" | "connections" | "artifacts" | "workbench" | "mcp">(() =>
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "blueprints" | "files" | "map" | "preview" | "manifest" | "memory" | "connections" | "artifacts" | "workbench" | "mcp">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
   const [rightOpen, setRightOpen] = useState(() =>
@@ -5227,6 +5251,19 @@ export default function Workspace() {
     readinessMode === "decisions" ? healthPct :
     blendedReadiness;
 
+  // ── Auto-open Manifest panel when readiness crosses threshold ─────────────
+  const manifestAutoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (manifestAutoOpenedRef.current) return;
+    if (displayedReadinessScore >= 40) {
+      manifestAutoOpenedRef.current = true;
+      if (!isMobile) {
+        setDesktopForceTab("manifest");
+        setTimeout(() => setDesktopForceTab(undefined), 80);
+      }
+    }
+  }, [displayedReadinessScore, isMobile]);
+
   // ── Manual + auto readiness rescan ────────────────────────────────────────
   const [isScanning, setIsScanning] = useState(false);
   const autoScanTriggeredRef = useRef<Set<number>>(new Set());
@@ -5961,7 +5998,10 @@ export default function Workspace() {
         isMobile={isMobile}
         showWorkspaceMenu
         projectStatus={project?.status}
-        onManifest={() => setManifestModeOpen(true)}
+        onManifest={() => {
+          if (isMobile) { setMobileTab("manifest"); setRightOpen(true); }
+          else { setDesktopForceTab("manifest"); setTimeout(() => setDesktopForceTab(undefined), 80); }
+        }}
         manifestLoading={manifestLoading}
         onLaunch={() => {
           // Preview-first toggle. Play ALWAYS surfaces the running app preview,
@@ -6364,7 +6404,7 @@ export default function Workspace() {
             pushHistory={pushHistory}
             onRollbackPush={handleRollbackPush}
             onHomeNav={() => setLocation("/home")}
-            forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : isMobile && mobileTab === "blueprints" ? "blueprints" : isMobile && mobileTab === "memory" ? "memory" : isMobile && mobileTab === "connections" ? "connections" : desktopForceTab}
+            forceTab={isMobile && mobileTab === "manifest" ? "manifest" : isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : isMobile && mobileTab === "blueprints" ? "blueprints" : isMobile && mobileTab === "memory" ? "memory" : isMobile && mobileTab === "connections" ? "connections" : desktopForceTab}
             onSendIntent={sendFromIntentCapture}
             onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
             onMapReadinessChange={setMapReadiness}
@@ -6388,6 +6428,8 @@ export default function Workspace() {
             sessionId={sessionId ?? undefined}
             manifestDecision={manifestDecision}
             manifestPreviewHtml={manifestPreviewHtml}
+            manifestLoading={manifestLoading}
+            onMaterialize={handleManifest}
             pendingTerminalCommand={pendingTerminalCommand}
             onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
             onCommandComplete={handleTerminalComplete}
@@ -6992,6 +7034,7 @@ export default function Workspace() {
                   mobileTab === "map" ? "map" :
                   mobileTab === "files" ? "files" :
                   mobileTab === "preview" ? "preview" :
+                  mobileTab === "manifest" ? "manifest" :
                   mobileTab === "blueprints" ? "blueprints" :
                   mobileTab === "memory" ? "memory" :
                   mobileTab === "connections" ? "connections" :
@@ -7020,6 +7063,8 @@ export default function Workspace() {
                 sessionId={sessionId ?? undefined}
                 manifestDecision={manifestDecision}
                 manifestPreviewHtml={manifestPreviewHtml}
+                manifestLoading={manifestLoading}
+                onMaterialize={handleManifest}
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
@@ -7056,7 +7101,7 @@ export default function Workspace() {
       {isMobile && mobileTab !== "map" && (
         <UnifiedContextDock
           mode="operational"
-          activeOperationalTab={(["chat","ledger","preview","map","files"].includes(mobileTab) ? mobileTab : undefined) as "chat" | "ledger" | "preview" | "map" | "files" | undefined}
+          activeOperationalTab={(["chat","ledger","manifest","map","files"].includes(mobileTab) ? mobileTab : undefined) as "chat" | "ledger" | "manifest" | "map" | "files" | undefined}
           onAtlasCore={() => { setMobileTab("chat"); setLeftTab("chat"); setRightOpen(false); }}
           onChat={() => { setMobileTab("chat"); setLeftTab("chat"); }}
 
@@ -7064,7 +7109,7 @@ export default function Workspace() {
             setMobileTab("ledger");
             setRightOpen(true);
           }}
-          onPreview={() => setMobileTab("preview")}
+          onManifest={() => { setMobileTab("manifest"); setRightOpen(true); }}
           onFlow={() => setLocation("/map")}
           entryCount={entryCount}
         />

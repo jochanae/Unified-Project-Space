@@ -24,7 +24,7 @@ const LAST_PROJECT_KEY = "atlas-last-project-id";
  * decisions live here.
  */
 export type DockMode = "ambient" | "active" | "operational";
-export type OperationalTab = "chat" | "ledger" | "preview" | "map" | "files";
+export type OperationalTab = "chat" | "ledger" | "manifest" | "map" | "files";
 
 export interface UnifiedContextDockProps {
   mode: DockMode;
@@ -45,7 +45,7 @@ export interface UnifiedContextDockProps {
   // operational
   onChat?: () => void;
   onLedger?: () => void;
-  onPreview?: () => void;
+  onManifest?: () => void;
   onFlow?: () => void;
   activeOperationalTab?: OperationalTab;
 
@@ -130,6 +130,11 @@ const ICONS = {
       <rect x="2" y="3" width="20" height="15" rx="2" />
       <path d="M2 8h20" />
       <path d="M8 22h8M12 18v4" />
+    </svg>
+  ),
+  manifest: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12,2 15.5,9 23,10 17.5,15.5 19,23 12,19.5 5,23 6.5,15.5 1,10 8.5,9" />
     </svg>
   ),
 };
@@ -319,7 +324,7 @@ export function UnifiedContextDock(props: UnifiedContextDockProps) {
       },
     ];
     right = [
-      { id: "preview", label: "Preview", icon: ICONS.preview, onClick: props.onPreview, active: at === "preview" },
+      { id: "manifest", label: "Manifest", icon: ICONS.manifest, onClick: props.onManifest, active: at === "manifest" },
       { id: "flow", label: "Map", icon: ICONS.map, onClick: props.onFlow, active: at === "map" },
     ];
   }
