@@ -353,6 +353,13 @@ export default function Projects() {
     (p as any).entity_type !== "idea"
   ) ?? [];
 
+  const tabCounts = PROJECT_STATUS_TABS.reduce<Record<string, number>>((acc, tab) => {
+    acc[tab.value] = (projects ?? []).filter(
+      p => p.status === tab.value && (p as any).entity_type !== "idea"
+    ).length;
+    return acc;
+  }, {});
+
   // Build set/map of already-linked fullNames for fast lookup
   const linkedRepoToProject = new Map<string, typeof projects[number]>();
   (projects ?? []).forEach((p) => {
@@ -601,6 +608,23 @@ export default function Projects() {
                     }}
                   >
                     {tab.label}
+                    {tabCounts[tab.value] > 0 && (
+                      <span style={{
+                        marginLeft: 6,
+                        fontSize: 9,
+                        fontWeight: 600,
+                        letterSpacing: "0.04em",
+                        background: selected ? "rgba(201,162,76,0.18)" : "rgba(255,255,255,0.07)",
+                        color: selected ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                        borderRadius: 10,
+                        padding: "1px 6px",
+                        lineHeight: 1.6,
+                        display: "inline-block",
+                        verticalAlign: "middle",
+                      }}>
+                        {tabCounts[tab.value]}
+                      </span>
+                    )}
                   </button>
                 );
               })}
