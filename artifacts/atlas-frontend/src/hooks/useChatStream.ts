@@ -644,9 +644,27 @@ export function useChatStream(
               }
               if (!evtData) continue;
 
+              // ── Server sends type-embedded events: data: {"type":"done",...}
+              // instead of SSE event: lines. Detect and normalise here so all
+              // branches below work regardless of which format the server uses.
+              let typeEmbedded: Record<string, unknown> | null = null;
+              if (!evtName) {
+                try {
+                  const p = JSON.parse(evtData);
+                  if (p && typeof p === "object" && typeof (p as Record<string, unknown>).type === "string") {
+                    typeEmbedded = p as Record<string, unknown>;
+                    evtName = typeEmbedded.type as string;
+                  }
+                } catch { /* not JSON — leave evtName empty */ }
+              }
+
               try {
                 if (evtName === "token") {
-                  const chunk = JSON.parse(evtData) as string;
+                  // type-embedded: {"type":"token","content":"chunk"}
+                  // event: format: data: "chunk" (JSON string)
+                  const chunk = typeEmbedded
+                    ? String(typeEmbedded.content ?? "")
+                    : JSON.parse(evtData) as string;
                   if (!sawFirstToken) {
                     sawFirstToken = true;
                     onFirstStreamingToken?.();
@@ -658,10 +676,14 @@ export function useChatStream(
                   // and call setMessages at most once per frame.
                   pacer?.push(chunk);
                 } else if (evtName === "narration") {
-                  const text = JSON.parse(evtData) as string;
+                  // type-embedded: {"type":"narration","content":"text"}
+                  const text = typeEmbedded
+                    ? String(typeEmbedded.content ?? "")
+                    : JSON.parse(evtData) as string;
                   setActivityStream({ active: true, content: text });
                 } else if (evtName === "step") {
-                  const step = JSON.parse(evtData) as {
+                  // type-embedded: {"type":"step","verb":"...","target":"..."}
+                  const step = (typeEmbedded ?? JSON.parse(evtData)) as {
                     phase?: unknown;
                     verb?: string;
                     target?: string;
@@ -671,8 +693,25 @@ export function useChatStream(
                     setLiveStep({ verb: step.verb, target: step.target, status: step.status });
                     onStepEvent?.(step);
                   }
+                } else if (evtName === "error") {
+                  // Server error event — clear activity, show message, stop stream.
+                  const payload = typeEmbedded ?? JSON.parse(evtData) as unknown;
+                  const errorMsg = payload && typeof payload === "object"
+                    ? String((payload as Record<string, unknown>).content ?? "Something went wrong. Please try again.")
+                    : "Something went wrong. Please try again.";
+                  if (streamingId !== null) {
+                    setMessages((prev) => prev.filter((m) => m.id !== streamingId));
+                    streamingId = null;
+                  }
+                  setMessages((prev) => [...prev, {
+                    role: "assistant", content: errorMsg, sentAt: new Date().toISOString(),
+                  }]);
+                  setActivityStream({ active: false, content: "" });
+                  streamingFinished = true;
                 } else if (evtName === "done") {
-                  const res = JSON.parse(evtData);
+                  // type-embedded: {"type":"done","content":"...","messageId":...,...}
+                  // event: format: data: {...} (JSON object)
+                  const res = typeEmbedded ?? JSON.parse(evtData);
                   // Normalize snake_case → camelCase so we don't miss image payloads
                   if (res && !res.imageGen && res.image_gen) res.imageGen = res.image_gen;
                   if (res?.imageGen) {
@@ -811,6 +850,9 @@ export function useChatStream(
           if (!streamingFinished && streamingId !== null) {
             setMessages((prev) => prev.filter((m) => m.id !== streamingId));
           }
+          // Always clear activity — done/error handlers may have already cleared it,
+          // but if the stream closed without a proper done event this is the safety net.
+          setActivityStream({ active: false, content: "" });
           setChatPending(false);
           setLiveStep(null);
           abortControllerRef.current = null;
