@@ -101,16 +101,23 @@ function ShellWordmark() {
         aria-label={location === "/home" ? "Return to ambient Nexus" : "Go home"}
         style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}
       >
-        <svg width="26" height="26" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }} aria-hidden>
+        <svg width="28" height="28" viewBox="0 0 512 512" display="block" style={{ flexShrink: 0, borderRadius: "50%" }} aria-hidden>
           <defs>
-            <linearGradient id="swmgs" x1="18" y1="4" x2="18" y2="32" gradientUnits="userSpaceOnUse">
+            <radialGradient id="hwmpg" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#0D0B09" stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id="hwmgs" cx="50%" cy="40%" r="50%">
               <stop offset="0%" stopColor="#F5D97A" />
               <stop offset="50%" stopColor="#D4AF37" />
               <stop offset="100%" stopColor="#A07820" />
-            </linearGradient>
+            </radialGradient>
           </defs>
-          <polygon points="18,4 30,32 24,32 18,18 12,32 6,32" fill="url(#swmgs)" />
-          <rect x="10" y="22" width="16" height="2.5" rx="1.25" fill="url(#swmgs)" opacity="0.85" />
+          <circle cx="256" cy="256" r="256" fill="#0D0B09" />
+          <circle cx="256" cy="256" r="256" fill="url(#hwmpg)" />
+          <polygon points="256,130 178,390 216,390 268,188" fill="url(#hwmgs)" />
+          <polygon points="256,130 334,390 296,390 244,188" fill="url(#hwmgs)" />
+          <rect x="192" y="292" width="128" height="30" rx="5" fill="url(#hwmgs)" />
         </svg>
         {!isTinyMobile && (
           <span
