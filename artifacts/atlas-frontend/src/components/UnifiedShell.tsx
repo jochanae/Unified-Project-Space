@@ -1276,6 +1276,13 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
           fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700,
           letterSpacing: "0.02em", lineHeight: 1, color: ringColor,
         }}>{completion}%</span>
+        {isTinyMobile && active && (
+          <span
+            aria-hidden="true"
+            className="atlas-pulse-dot"
+            style={{ width: 5, height: 5, borderRadius: 999, background: "#4ade80", display: "inline-block", flexShrink: 0 }}
+          />
+        )}
       </button>
 
       {open && (
