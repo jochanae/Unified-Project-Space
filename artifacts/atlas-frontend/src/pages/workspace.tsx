@@ -42,6 +42,7 @@ import { MapTab } from "@/components/workspace/MapTab";
 import { ParkingLotEntry } from "@/components/workspace/ParkingLotEntry";
 import { StreamingText, ChunkedBubbles } from "@/components/workspace/StreamingText";
 import { LinePatchReviewCard, ReviewPlanCard, ReviewTabPanel, PushDiffCard } from "@/components/workspace/ReviewCards";
+import { SessionTimeline } from "@/components/workspace/SessionTimeline";
 import { MenuBtn, AtlasLogo } from "@/components/workspace/atoms";
 import { CommitHistoryCard, CommitHistorySkeleton, buildTree, GhTreeNodeRow } from "@/components/workspace/CommitHistory";
 export { CommitHistoryCard, CommitHistorySkeleton, buildTree, GhTreeNodeRow };
@@ -6620,33 +6621,13 @@ export default function Workspace() {
               onPrCreated={(url) => { setSessionPrUrl(url); setLeftTab("diff"); }}
             />
           ) : leftTab === "diff" ? (
-            <div style={{ flex: 1, height: "100%", overflowY: "auto", padding: "16px 14px" }} className="scrollbar-none">
-                    {pushHistory.length === 0 ? (
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, paddingBottom: 40 }}>
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinecap="round" style={{ opacity: 0.25 }}>
-                          <path d="M9 1H3a1 1 0 00-1 1v18a1 1 0 001 1h18a1 1 0 001-1V9L13 1z"/><path d="M13 1v8h8"/><path d="M8 13h8M8 17h5"/>
-                        </svg>
-                        <div style={{ fontSize: "var(--ts-label)", color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.65 }}>
-                          No code changes this session yet.<br />
-                          <span style={{ fontSize: "var(--ts-sm)" }}>Push files from a Build response to see diffs here.</span>
-                        </div>
-                      </div>
-                    ) : (() => {
-                      const groups: PushRecord[][] = [];
-                      const seen = new Map<string, PushRecord[]>();
-                      for (const r of [...pushHistory].reverse()) {
-                        const key = r.commitUrl || r.id;
-                        if (!seen.has(key)) { seen.set(key, []); groups.push(seen.get(key)!); }
-                        seen.get(key)!.push(r);
-                      }
-                      return groups.map((group) => (
-                        <PushDiffCard
-                          key={group[0].commitUrl || group[0].id}
-                          records={group}
-                          onRollbackAll={async () => { for (const r of group) await handleRollbackPush(r); }}
-                        />
-                      ));
-                    })()}
+            <div style={{ flex: 1, height: "100%", overflowY: "auto" }} className="scrollbar-none">
+              <SessionTimeline
+                messages={messages}
+                pushHistory={pushHistory}
+                onRollbackPush={handleRollbackPush}
+                projectId={id}
+              />
             </div>
           ) : leftTab === "terminal" ? (
             <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={() => setPendingTerminalCommand(null)} onCommandComplete={handleTerminalComplete} scenarioLens={wsLens === "scenario"} projectId={project?.id} />
