@@ -1177,7 +1177,7 @@ function ProjectRow({
             textOverflow: "ellipsis",
             transition: "color 180ms ease",
           }}>
-            {p.name}
+            {p.name || <span style={{ opacity: 0.35, fontStyle: "italic", fontSize: 13 }}>Untitled</span>}
           </div>
           {p.description && (
             <div style={{
