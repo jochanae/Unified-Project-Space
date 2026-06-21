@@ -3534,6 +3534,94 @@ router.post("/scenario-keep", async (req, res): Promise<void> => {
 });
 
 // ── Quick Prompt generation ───────────────────────────────────────────────────
+router.post("/specify", async (req, res) => {
+  const { intent, targetSurfaces, targetDevice, doNotChange, currentProblem, projectName, projectContext } = req.body as {
+    intent: string;
+    targetSurfaces?: string;
+    targetDevice?: string;
+    doNotChange?: string;
+    currentProblem?: string;
+    projectName?: string;
+    projectContext?: string;
+  };
+
+  if (!intent?.trim()) {
+    res.status(400).json({ error: "intent is required" });
+    return;
+  }
+
+  const contextParts: string[] = [];
+  if (projectName) contextParts.push(`PROJECT: ${projectName}`);
+  if (projectContext) contextParts.push(`PROJECT CONTEXT:\n${projectContext.slice(0, 2000)}`);
+
+  const userText = [
+    contextParts.length > 0 ? contextParts.join("\n") : null,
+    `INTENT: ${intent.trim()}`,
+    targetSurfaces ? `TARGET SURFACES (user-specified): ${targetSurfaces}` : null,
+    targetDevice ? `TARGET DEVICE/BREAKPOINT (user-specified): ${targetDevice}` : null,
+    doNotChange ? `DO NOT CHANGE (user-specified): ${doNotChange}` : null,
+    currentProblem ? `CURRENT PROBLEM (user-specified): ${currentProblem}` : null,
+  ].filter(Boolean).join("\n\n");
+
+  const specSystemPrompt = `You are Atlas — the strategic intelligence inside Axiom. Convert raw human intent into a precise 10-section change specification that acts as a boundary document before any AI builder touches the code.
+
+Output exactly this structure, in this order, with exactly these section headers in ALL CAPS followed by a colon on its own line:
+
+GOAL:
+One sentence: what will exist or work after this change is done.
+
+TARGET SURFACES:
+Comma-separated list of UI surfaces, pages, or API endpoints affected. If the user specified them, use those; otherwise infer from intent.
+
+TARGET BREAKPOINT/DEVICE:
+Primary breakpoint or device context. If the user specified it, use that; otherwise default to mobile-first and be specific.
+
+ALLOWED TO CHANGE:
+Bullet list (using "•") of what can be modified — components, files, styles, logic.
+
+DO NOT CHANGE:
+Bullet list (using "•") of hard constraints. Use user-specified constraints. Also add sensible defaults inferred from context.
+
+CURRENT PROBLEM:
+1-2 sentences describing what is broken, missing, or suboptimal right now.
+
+SUCCESS CRITERIA:
+Bullet list (using "•") of 3-5 testable statements that confirm the change is correct.
+
+RISK LEVEL:
+LOW / MED / or HIGH — followed by one sentence explaining why.
+
+BLAST RADIUS:
+Comma-separated list of likely file paths that will need to change. Be specific.
+
+VALIDATION STEPS:
+[ ] Step 1
+[ ] Step 2
+[ ] Step 3
+
+RULES:
+- Output ONLY the spec. No preamble, no "Here is your spec:", no explanation after.
+- Every section must be present, even if you must infer from context.
+- Be precise and surgical. This is a contract, not a wish list.
+- Never use vague language like "various files" or "as needed."
+- Sections GOAL, TARGET SURFACES, TARGET BREAKPOINT/DEVICE, DO NOT CHANGE, and CURRENT PROBLEM draw from user input.
+- Sections ALLOWED TO CHANGE, SUCCESS CRITERIA, RISK LEVEL, BLAST RADIUS, and VALIDATION STEPS are Atlas-generated.`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      system: specSystemPrompt,
+      messages: [{ role: "user", content: userText }],
+    });
+    const text = msg.content.find((b) => b.type === "text")?.text ?? "";
+    res.send(text);
+  } catch (err) {
+    req.log?.error(err, "specify failed");
+    res.status(500).json({ error: "Generation failed" });
+  }
+});
+
 router.post("/quick-prompt", async (req, res) => {
   const { description, builder, images, fileContent, filePath, projectMap } = req.body as {
     description: string;

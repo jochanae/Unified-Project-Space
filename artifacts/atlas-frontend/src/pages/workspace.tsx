@@ -7659,7 +7659,7 @@ export default function Workspace() {
         }}
         onOpenLedger={(projectId) => { setLocation(`/ledger/${projectId}`); setShowDrawer(false); }}
         onOpenParking={() => { setLocation(`/parking?project=${id}`); setShowDrawer(false); }}
-        onOpenQuickPrompt={() => { setShowDrawer(false); setShowForgeExternal(true); }}
+        onOpenSpecify={() => { setShowDrawer(false); window.dispatchEvent(new CustomEvent("axiom:open-specify")); }}
         userLabel={loadProfile().name || null}
       />
 

@@ -1774,7 +1774,7 @@ export default function Home() {
   }, []);
   const isParchment = useThemeMode() === "parchment";
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const [showQuickPrompt, setShowQuickPrompt] = useState(false);
+
   const { user: authUser } = useRequireAuth();
   const { data: projectsRaw, isLoading } = useListProjects({
     query: {
@@ -5311,7 +5311,7 @@ export default function Home() {
         onNewProject={() => { setShowDrawer(false); handleNewProject("New Project"); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
         onOpenParking={() => setLocation("/parking")}
-        onOpenQuickPrompt={() => { setShowDrawer(false); setShowQuickPrompt(true); }}
+        onOpenSpecify={() => { setShowDrawer(false); window.dispatchEvent(new CustomEvent("axiom:open-specify")); }}
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
 
@@ -5323,14 +5323,6 @@ export default function Home() {
       )}
 
 
-      {showQuickPrompt && (
-        <TheForge
-          defaultTab="prompt"
-          projectId={homeFocus ?? undefined}
-          activeProjectName={homeFocus ? (projects?.find(p => p.id === homeFocus)?.name ?? undefined) : undefined}
-          onClose={() => setShowQuickPrompt(false)}
-        />
-      )}
 
       {/* Time-travel sheet (History | Bookmarks) — opened from composer More → History */}
       <HistoryBookmarksSheet
@@ -5590,7 +5582,7 @@ export default function Home() {
           onYou={() => setShowProfile(true)}
           onMap={() => setLocation("/map")}
           onFiles={() => setShowDrawer(true)}
-          onForge={() => setShowQuickPrompt(true)}
+          onForge={() => window.dispatchEvent(new CustomEvent("axiom:open-specify"))}
         />
       </div>
 

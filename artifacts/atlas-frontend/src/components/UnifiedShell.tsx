@@ -20,6 +20,7 @@ import { UserMenuDropdown } from "@/components/UserMenuDropdown";
 import { HudToggleDot } from "@/components/HudToggleDot";
 import AtlasMemoryHUD from "@/components/workspace/AtlasMemoryHUD";
 import { LifecycleGlyph } from "@/components/LifecycleGlyph";
+import { SpecifySheet } from "@/components/SpecifySheet";
 import { deriveLifecycle, LIFECYCLE_META } from "@/lib/lifecycle";
 import { parseLinkedRepo } from "@/lib/githubRepo";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1520,18 +1521,14 @@ function ShellFooterNavItem({ item, visible }: { item: ShellNavItem; visible: bo
 
 function ShellCenterButton({
   onTap,
-  onMediumPress,
   onLongPress,
 }: {
   onTap: () => void;
-  onMediumPress: () => void;
   onLongPress: () => void;
 }) {
   // Gesture thresholds (ms)
-  // tap         : < 350           → home
-  // medium      : 350 – 899        → last active project
-  // long        : >= 900           → all projects
-  const MED_MS = 350;
+  // tap         : < 900           → home
+  // long        : >= 900          → Specify
   const LONG_MS = 900;
   const MOVE_CANCEL_PX = 10;
 
@@ -1540,7 +1537,7 @@ function ShellCenterButton({
   const medTimerRef = useRef<number | null>(null);
   const longTimerRef = useRef<number | null>(null);
   const cancelledRef = useRef(false);
-  const [stage, setStage] = useState<"idle" | "tap" | "medium" | "long">("idle");
+  const [stage, setStage] = useState<"idle" | "tap" | "long">("idle");
 
   const haptic = useCallback((ms: number) => {
     try { if ("vibrate" in navigator) navigator.vibrate(ms); } catch {}
@@ -1566,10 +1563,6 @@ function ShellCenterButton({
     startXYRef.current = { x: e.clientX, y: e.clientY };
     cancelledRef.current = false;
     setStage("tap");
-    medTimerRef.current = window.setTimeout(() => {
-      setStage("medium");
-      haptic(20);
-    }, MED_MS);
     longTimerRef.current = window.setTimeout(() => {
       setStage("long");
       haptic(35);
@@ -1593,9 +1586,8 @@ function ShellCenterButton({
     setStage("idle");
     downAtRef.current = null;
     if (dur >= LONG_MS) onLongPress();
-    else if (dur >= MED_MS) onMediumPress();
     else onTap();
-  }, [clearTimers, reset, onTap, onMediumPress, onLongPress]);
+  }, [clearTimers, reset, onTap, onLongPress]);
 
   const ringColor =
     stage === "long" ? "rgba(var(--atlas-gold-rgb),0.95)" :
@@ -1608,8 +1600,8 @@ function ShellCenterButton({
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <button
         type="button"
-        title="Tap: home · Medium press: last project · Long press: all projects"
-        aria-label="Axiom. Tap for home, medium press for last active project, long press to open all projects."
+        title="Tap: home · Long press: Specify"
+        aria-label="Axiom. Tap for home, long press to open Specify."
         className="atlas-home-center-btn"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1715,21 +1707,9 @@ function ShellFooter() {
     setLocation("/home");
   }, [currentDepth, scrollHomeConversationToTop, setLocation]);
 
-  const openLastProject = useCallback(() => {
-    let lastId: string | null = null;
-    try {
-      lastId = localStorage.getItem("atlas-last-project") || localStorage.getItem("atlas-last-project-id");
-    } catch {}
-    if (lastId && lastId !== "null" && lastId !== "undefined") {
-      setLocation(`/project/${lastId}`);
-    } else {
-      setLocation("/projects");
-    }
-  }, [setLocation]);
-
-  const openAllProjects = useCallback(() => {
-    setLocation("/projects");
-  }, [setLocation]);
+  const openSpecify = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("axiom:open-specify"));
+  }, []);
 
 
   const navItems = useMemo<[ShellNavItem, ShellNavItem, ShellNavItem, ShellNavItem]>(() => {
@@ -1758,16 +1738,21 @@ function ShellFooter() {
         icon: "projects",
         action: () => {
           if (location === "/projects") {
-            openLastProject();
-          } else {
-            setLocation("/projects");
+            try {
+              const lastId = localStorage.getItem("atlas-last-project") || localStorage.getItem("atlas-last-project-id");
+              if (lastId && lastId !== "null" && lastId !== "undefined") {
+                setLocation(`/project/${lastId}`);
+                return;
+              }
+            } catch {}
           }
+          setLocation("/projects");
         },
       },
       { label: "Decisions", icon: "decisions", action: () => setLocation("/ledger") },
       { label: "You", icon: "you", action: () => setLocation("/you") },
     ];
-  }, [openProjectTab, renderDepth, setLocation, location, openLastProject]);
+  }, [openProjectTab, renderDepth, setLocation, location]);
 
   if (!isMobile) return null;
 
@@ -1803,7 +1788,7 @@ function ShellFooter() {
       >
         <ShellFooterNavItem item={navItems[0]} visible={itemsVisible} />
         <ShellFooterNavItem item={navItems[1]} visible={itemsVisible} />
-        <ShellCenterButton onTap={centerAction} onMediumPress={openLastProject} onLongPress={openAllProjects} />
+        <ShellCenterButton onTap={centerAction} onLongPress={openSpecify} />
         <ShellFooterNavItem item={navItems[2]} visible={itemsVisible} />
         <ShellFooterNavItem item={navItems[3]} visible={itemsVisible} />
       </div>
@@ -1994,6 +1979,7 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
         activeProjectId={location !== "/home" ? activeProjectId : null}
         surface={location !== "/home" ? "memory" : "activity"}
       />
+      <SpecifySheet />
     </ShellStateContext.Provider>
   );
 }

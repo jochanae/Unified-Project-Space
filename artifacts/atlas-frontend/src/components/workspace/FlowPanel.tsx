@@ -238,7 +238,6 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
   const [pendingNodes, setPendingNodes] = useState<ArchNode[]>([]);
   const [lensView, setLensView] = useState<"designer" | "builder" | "storyteller">("designer");
   const [showChat, setShowChat] = useState(true);
-  const [showQuickPrompt, setShowQuickPrompt] = useState(false);
   const [signals, setSignals] = useState<string[]>([""]);
   const [activeSignalIdx, setActiveSignalIdx] = useState(0);
   const [signalAdded, setSignalAdded] = useState(false);
@@ -1274,18 +1273,6 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
         </div>
       )}
 
-      {/* Quick Prompt sheet */}
-      {showQuickPrompt && (
-        <TheForge
-          platform={platform}
-          readinessScore={readinessScore}
-          activeProjectName={activeProjectName}
-          projectId={projectId}
-          onClose={() => setShowQuickPrompt(false)}
-          onNodesReady={(nodes) => { setPendingNodes(nodes); onForgeCompleted?.(); setShowQuickPrompt(false); }}
-          onFillChatInput={onFillIntent}
-        />
-      )}
 
       {/* Dock owned by parent workspace — do not render a second one here
           (caused the stacked mobile footer when Flow tab was active). */}

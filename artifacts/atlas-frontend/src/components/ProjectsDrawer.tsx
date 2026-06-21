@@ -26,11 +26,11 @@ type Props = {
   onNewProject: () => void;
   onOpenLedger?: (id: number) => void;
   onOpenParking?: () => void;
-  onOpenQuickPrompt?: () => void;
+  onOpenSpecify?: () => void;
   userLabel?: string | null;
 };
 
-export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, onOpenQuickPrompt, userLabel }: Props) {
+export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, onOpenSpecify, userLabel }: Props) {
   const [, setLocation] = useLocation();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(false);
@@ -342,8 +342,8 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           <div style={{ height: 1, background: "var(--atlas-gold-border)", margin: "8px 6px" }} />
 
           <SectionLabel>Tools</SectionLabel>
-          {onOpenQuickPrompt && (
-            <NavRow icon={<Wand2 size={14} strokeWidth={1.6} />} label="Quick Prompt" onClick={() => { onOpenQuickPrompt(); onClose(); }} />
+          {onOpenSpecify && (
+            <NavRow icon={<Wand2 size={14} strokeWidth={1.6} />} label="Specify" onClick={() => { onOpenSpecify(); onClose(); }} />
           )}
           <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={() => navigate("/workshop")} />
           {activeProjectId && (

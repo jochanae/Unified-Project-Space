@@ -91,7 +91,7 @@ interface Props {
 export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, defaultTab = "forge", preloadContent, onClose, onNodesReady, onFillChatInput, scopeNodeId, scopeNodeLabel, onClearScope }: Props) {
   const [isMobile] = useState(() => window.innerWidth < 768);
   const theme = useThemeMode();
-  const [tab, setTab] = useState<"forge" | "prompt">(defaultTab === "prompt" ? "prompt" : "forge");
+  void defaultTab;
 
   // Forge state — pre-fill transcript from preloadContent if provided
   const [transcript, setTranscript] = useState(preloadContent ?? "");
@@ -1099,22 +1099,16 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--atlas-gold)", letterSpacing: "0.06em", fontFamily: "var(--app-font-mono)" }}>
-            {tab === "forge" ? "THE FORGE" : "QUICK PROMPT"}
+            THE FORGE
           </span>
           <span style={{ fontSize: 10, color: "rgba(var(--atlas-muted-rgb),0.6)" }}>
-            {tab === "forge"
-              ? `Decompose your thinking into a strategic map${activeProjectName ? ` · ${activeProjectName}` : ""}${readinessScore > 0 ? ` · ${readinessScore}% ready` : ""}`
-              : "Generate a ready-to-paste prompt for any AI builder"}
+            {`Decompose your thinking into a strategic map${activeProjectName ? ` · ${activeProjectName}` : ""}${readinessScore > 0 ? ` · ${readinessScore}% ready` : ""}`}
           </span>
         </div>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.55)", fontSize: 22, lineHeight: 1, padding: "2px 0 2px 4px" }}>×</button>
       </div>
 
-      {/* Tab bar */}
-      <div style={{ display: "flex", gap: 4, padding: "0 16px 12px", borderBottom: "1px solid rgba(var(--atlas-gold-rgb),0.10)" }}>
-        <button style={tabBtn(tab === "forge")} onClick={() => setTab("forge")}>The Forge</button>
-        <button style={tabBtn(tab === "prompt")} onClick={() => setTab("prompt")}>Quick Prompt</button>
-      </div>
+      <div style={{ borderBottom: "1px solid rgba(var(--atlas-gold-rgb),0.10)" }} />
 
       {/* Transitional banner — Project DNA moved to Settings (remove after ~2 weeks). */}
       <div style={{
@@ -1173,8 +1167,8 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     </div>
   );
 
-  const tabContent = tab === "forge" ? forgeContent : quickPromptContent;
-  const tabLabel = tab === "forge" ? "THE FORGE" : "QUICK PROMPT";
+  const tabContent = forgeContent;
+  const tabLabel = "THE FORGE";
   const forgeBackgroundImage = theme === "parchment" ? "none" : FORGE_ATMOSPHERE_BACKGROUND;
 
   if (!isMobile) {
