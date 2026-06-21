@@ -101,24 +101,14 @@ function ShellWordmark() {
         aria-label={location === "/home" ? "Return to ambient Nexus" : "Go home"}
         style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}
       >
-        <svg width={isTinyMobile ? 22 : 28} height={isTinyMobile ? 22 : 28} viewBox="0 0 512 512" display="block" style={{ flexShrink: 0, borderRadius: 5 }} aria-hidden>
-          <defs>
-            <radialGradient id="hwmpg" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#0D0B09" stopOpacity="0" />
-            </radialGradient>
-            <radialGradient id="hwmgs" cx="50%" cy="40%" r="50%">
-              <stop offset="0%" stopColor="#F5D97A" />
-              <stop offset="50%" stopColor="#D4AF37" />
-              <stop offset="100%" stopColor="#A07820" />
-            </radialGradient>
-          </defs>
-          <circle cx="256" cy="256" r="256" fill="#0D0B09" />
-          <circle cx="256" cy="256" r="256" fill="url(#hwmpg)" />
-          <polygon points="256,130 178,390 216,390 268,188" fill="url(#hwmgs)" />
-          <polygon points="256,130 334,390 296,390 244,188" fill="url(#hwmgs)" />
-          <rect x="192" y="292" width="128" height="30" rx="5" fill="url(#hwmgs)" />
-        </svg>
+        <img
+          src="/axiom-logo.svg"
+          alt=""
+          aria-hidden
+          width={isTinyMobile ? 22 : 24}
+          height={isTinyMobile ? 22 : 24}
+          style={{ flexShrink: 0, borderRadius: "20%", display: "block" }}
+        />
         {!isTinyMobile && (
           <span
             style={{
