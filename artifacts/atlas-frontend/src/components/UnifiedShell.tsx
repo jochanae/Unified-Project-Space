@@ -1586,7 +1586,8 @@ function ShellCenterButton({
     setStage("idle");
     downAtRef.current = null;
     if (dur >= LONG_MS) onLongPress();
-    else onTap();
+    else if (dur < 350) onTap();
+    // 350–899ms dead zone: medium press removed — no action.
   }, [clearTimers, reset, onTap, onLongPress]);
 
   const ringColor =

@@ -3573,7 +3573,7 @@ One sentence: what will exist or work after this change is done.
 TARGET SURFACES:
 Comma-separated list of UI surfaces, pages, or API endpoints affected. If the user specified them, use those; otherwise infer from intent.
 
-TARGET BREAKPOINT/DEVICE:
+TARGET BREAKPOINT / DEVICE:
 Primary breakpoint or device context. If the user specified it, use that; otherwise default to mobile-first and be specific.
 
 ALLOWED TO CHANGE:
@@ -3589,7 +3589,7 @@ SUCCESS CRITERIA:
 Bullet list (using "•") of 3-5 testable statements that confirm the change is correct.
 
 RISK LEVEL:
-LOW / MED / or HIGH — followed by one sentence explaining why.
+LOW / MEDIUM / HIGH — followed by one sentence explaining why.
 
 BLAST RADIUS:
 Comma-separated list of likely file paths that will need to change. Be specific.
@@ -3604,11 +3604,35 @@ RULES:
 - Every section must be present, even if you must infer from context.
 - Be precise and surgical. This is a contract, not a wish list.
 - Never use vague language like "various files" or "as needed."
-- GOAL, TARGET SURFACES, TARGET BREAKPOINT/DEVICE draw from CHANGE and SCOPE inputs.
+- GOAL, TARGET SURFACES, TARGET BREAKPOINT / DEVICE draw from CHANGE and SCOPE inputs.
 - DO NOT CHANGE draws from the EXCLUSIONS input; supplement with sensible defaults.
 - CURRENT PROBLEM draws from the BROKEN input.
 - SUCCESS CRITERIA: if the user supplied "SUCCESS LOOKS LIKE", use it as the seed and expand into 3-5 testable bullet points; otherwise generate from context.
 - ALLOWED TO CHANGE, RISK LEVEL, BLAST RADIUS, and VALIDATION STEPS are Atlas-generated.`;
+
+  const REQUIRED_SECTIONS = [
+    "GOAL",
+    "TARGET SURFACES",
+    "TARGET BREAKPOINT / DEVICE",
+    "ALLOWED TO CHANGE",
+    "DO NOT CHANGE",
+    "CURRENT PROBLEM",
+    "SUCCESS CRITERIA",
+    "RISK LEVEL",
+    "BLAST RADIUS",
+    "VALIDATION STEPS",
+  ];
+
+  const guardSpec = (raw: string): string => {
+    let out = raw.trim();
+    for (const section of REQUIRED_SECTIONS) {
+      const pattern = new RegExp(`(?:^|\\n)${section.replace(/\//g, "\\/")}\\s*:`, "m");
+      if (!pattern.test(out)) {
+        out += `\n\n${section}:\n—`;
+      }
+    }
+    return out;
+  };
 
   try {
     const msg = await anthropic.messages.create({
@@ -3617,8 +3641,8 @@ RULES:
       system: specSystemPrompt,
       messages: [{ role: "user", content: userText }],
     });
-    const text = msg.content.find((b) => b.type === "text")?.text ?? "";
-    res.send(text);
+    const raw = msg.content.find((b) => b.type === "text")?.text ?? "";
+    res.send(guardSpec(raw));
   } catch (err) {
     req.log?.error(err, "specify failed");
     res.status(500).json({ error: "Generation failed" });
