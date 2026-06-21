@@ -1936,8 +1936,8 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
             )}
             {!(location === "/home" && currentDepth === "ambient") && <HudToggleDot />}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, position: "relative", zIndex: 2 }}>
-            {!isTinyMobile && <ShellCompletionChip projectId={location === "/home" ? null : activeProjectId} />}
+          <div style={{ display: "flex", alignItems: "center", gap: isTinyMobile ? 3 : 8, flexShrink: 0, position: "relative", zIndex: 2 }}>
+            <ShellCompletionChip projectId={location === "/home" ? null : activeProjectId} />
             <UserMenuDropdown onOpenProfile={() => window.dispatchEvent(new CustomEvent("axiom:open-account-hub"))} />
           </div>
 
