@@ -1837,8 +1837,8 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
     ? "100%"
     : currentDepth === "active"
       ? 780
-      : 680;
-  const contentPadding = currentDepth === "operational"
+      : "100%";  // ambient: home page owns its own max-width and padding
+  const contentPadding = currentDepth === "operational" || currentDepth === "ambient"
     ? 0
     : "0 clamp(14px, 4vw, 24px)";
 
