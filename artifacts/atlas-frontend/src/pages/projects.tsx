@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { getLinkedRepoFullName, normalizeGitHubRepoInput, serializeLinkedRepo } from "../lib/githubRepo";
+import { ProjectStagingSheet, type StagingProject } from "../components/ProjectStagingSheet";
 import { API_BASE } from "@/lib/api";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useIsTinyScreen } from "@/hooks/useBreakpoints";
@@ -115,6 +116,7 @@ export default function Projects() {
   const [showArchived, setShowArchived] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectStatusTab>("committed");
   const [committingId, setCommittingId] = useState<number | null>(null);
+  const [stagingProject, setStagingProject] = useState<StagingProject | null>(null);
 
   // GitHub importer
   const [showGithubSheet, setShowGithubSheet] = useState(false);
@@ -635,6 +637,7 @@ export default function Projects() {
                     onArchive={() => handleArchive(p.id, true)}
                     onCommit={activeTab === "shaping" ? () => handleCommitProject(p.id) : undefined}
                     onLinkRepo={hasGithubAccess && backendReady ? () => openGithubSheet(p.id) : undefined}
+                    onOpenStaging={activeTab === "shaping" ? () => setStagingProject(p) : undefined}
                   />
                 ))
               )}
@@ -764,6 +767,19 @@ export default function Projects() {
               {targetProjectId && (
                 <div style={{ ...sMono, fontSize: 10, color: "var(--atlas-muted)", letterSpacing: "0.06em", marginTop: 6 }}>
                   Linking to: <span style={{ color: "var(--atlas-gold)" }}>{(projects ?? []).find(p => p.id === targetProjectId)?.name}</span>
+                </div>
+              )}
+              {recentlyLinked && (
+                <div style={{
+                  marginTop: 10, padding: "9px 12px", borderRadius: 7,
+                  background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}>
+                  <span style={{ color: "rgba(74,222,128,0.9)", fontSize: 14 }}>✓</span>
+                  <div>
+                    <span style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, color: "var(--atlas-fg)", fontWeight: 500 }}>{recentlyLinked.split("/").pop()}</span>
+                    <span style={{ ...sMono, fontSize: 10, color: "var(--atlas-muted)", marginLeft: 6, letterSpacing: "0.04em" }}>added → In Progress tab</span>
+                  </div>
                 </div>
               )}
               {githubRepos.length > 0 && (
@@ -954,6 +970,12 @@ export default function Projects() {
         creating={createProject.isPending}
         error={createError}
       />
+      <ProjectStagingSheet
+        project={stagingProject}
+        onClose={() => setStagingProject(null)}
+        onCommit={async (id) => { await handleCommitProject(id); }}
+        onRemove={(id) => { setConfirmDeleteId(id); }}
+      />
     </div>
   );
 }
@@ -1105,6 +1127,7 @@ function ProjectRow({
   onArchive,
   onCommit,
   onLinkRepo,
+  onOpenStaging,
   isArchived = false,
 }: {
   project: ProjectItem;
@@ -1121,6 +1144,7 @@ function ProjectRow({
   onArchive: () => void;
   onCommit?: () => void;
   onLinkRepo?: () => void;
+  onOpenStaging?: () => void;
   isArchived?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1162,7 +1186,10 @@ function ProjectRow({
       <Link
         href={`/project/${p.id}`}
         style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}
-        onClick={(e) => { if (confirmDelete) e.preventDefault(); }}
+        onClick={(e) => {
+          if (confirmDelete) { e.preventDefault(); return; }
+          if (p.status === "shaping" && onOpenStaging) { e.preventDefault(); onOpenStaging(); return; }
+        }}
       >
         {/* Index dot */}
         <span style={{
