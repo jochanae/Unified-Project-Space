@@ -1254,7 +1254,7 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
           display: "inline-flex", alignItems: "center", gap: 6,
           padding: "3px 8px", borderRadius: 999,
           background: open ? "rgba(var(--atlas-muted-rgb),0.12)" : "transparent",
-          border: "1px solid rgba(var(--atlas-muted-rgb),0.14)",
+          border: "1px solid transparent",
           cursor: "pointer", userSelect: "none", WebkitUserSelect: "none",
           color: "var(--atlas-fg)",
         }}
