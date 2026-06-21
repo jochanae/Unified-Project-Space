@@ -270,18 +270,7 @@ export function ViewChangesPanel({
 
       <div style={{ borderTop: "1px solid rgba(201,162,76,0.06)" }} />
 
-      {/* ── Section 2: GitHub Commits ── */}
-      <SectionHeader
-        icon={<Github size={11} strokeWidth={1.7} />}
-        label="GitHub Commits"
-        expanded={githubOpen}
-        onToggle={() => setGithubOpen((o) => !o)}
-      />
-      <GitHubSection projectId={projectId} open={githubOpen} />
-
-      <div style={{ borderTop: "1px solid rgba(201,162,76,0.06)" }} />
-
-      {/* ── Section 3: Atlas Activity ── */}
+      {/* ── Section 2: Atlas Activity ── */}
       <SectionHeader
         icon={<Sparkles size={11} strokeWidth={1.7} />}
         label="Atlas Activity"
@@ -297,6 +286,17 @@ export function ViewChangesPanel({
           projectId={projectId}
         />
       )}
+
+      <div style={{ borderTop: "1px solid rgba(201,162,76,0.06)" }} />
+
+      {/* ── Section 3: GitHub Commits ── */}
+      <SectionHeader
+        icon={<Github size={11} strokeWidth={1.7} />}
+        label="GitHub Commits"
+        expanded={githubOpen}
+        onToggle={() => setGithubOpen((o) => !o)}
+      />
+      <GitHubSection projectId={projectId} open={githubOpen} />
 
     </div>
   );
