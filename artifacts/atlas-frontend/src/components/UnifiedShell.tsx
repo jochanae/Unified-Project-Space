@@ -1165,7 +1165,7 @@ function ShellStatusChip({ projectId }: { projectId: number | null }) {
 function ShellCompletionChip({ projectId }: { projectId: number | null }) {
   const ps = useProjectState(projectId);
   const [, navigate] = useLocation();
-
+  const isTinyMobile = useIsTinyScreen();
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<ReadinessMode>(() => {
@@ -1231,8 +1231,8 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
     try { localStorage.setItem(READINESS_MODE_KEY, m); } catch {}
   };
 
-  const SIZE = 26;
-  const R = 10;
+  const SIZE = isTinyMobile ? 20 : 26;
+  const R = isTinyMobile ? 7.5 : 10;
   const CX = SIZE / 2;
   const CY = SIZE / 2;
   const C = 2 * Math.PI * R;
@@ -1274,7 +1274,7 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
           )}
         </svg>
         <span style={{
-          fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700,
+          fontFamily: "var(--app-font-mono)", fontSize: isTinyMobile ? 8.5 : 10, fontWeight: 700,
           letterSpacing: "0.02em", lineHeight: 1, color: ringColor,
         }}>{completion}%</span>
       </button>
