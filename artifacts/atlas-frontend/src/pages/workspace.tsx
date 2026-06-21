@@ -7370,29 +7370,62 @@ export default function Workspace() {
                overscrollBehavior: "contain",
              }}
            >
-            {isMobile && window.innerWidth < 420 && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  margin: "8px 6px 6px",
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  background: "rgba(28,25,23,0.55)",
-                  border: "1px solid rgba(201,162,76,0.18)",
-                }}
-                title="Current branch"
+            {isMobile && (
+              <details
+                style={{ margin: "8px 6px 6px", borderRadius: 8 }}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ opacity: 0.75, color: "var(--atlas-gold)", flexShrink: 0 }}>
-                  <line x1="6" y1="3" x2="6" y2="15" />
-                  <circle cx="18" cy="6" r="3" />
-                  <circle cx="6" cy="18" r="3" />
-                  <path d="M18 9a9 9 0 0 1-9 9" />
-                </svg>
-                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)" }}>Branch</span>
-                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, color: "var(--atlas-fg)", marginLeft: "auto" }}>main</span>
-              </div>
+                <summary
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: "color-mix(in oklab, var(--atlas-surface) 80%, transparent)",
+                    border: "1px solid rgba(201,162,76,0.18)",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    listStyle: "none",
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ opacity: 0.75, color: "var(--atlas-gold)", flexShrink: 0 }}>
+                    <line x1="6" y1="3" x2="6" y2="15" />
+                    <circle cx="18" cy="6" r="3" />
+                    <circle cx="6" cy="18" r="3" />
+                    <path d="M18 9a9 9 0 0 1-9 9" />
+                  </svg>
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)" }}>Branch</span>
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, color: "var(--atlas-fg)", marginLeft: "auto" }}>main</span>
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ color: "var(--atlas-muted)", flexShrink: 0, opacity: 0.7 }}>
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </summary>
+                <div style={{
+                  marginTop: 4,
+                  background: "color-mix(in oklab, var(--atlas-surface) 96%, transparent)",
+                  backdropFilter: "blur(18px)",
+                  border: "1px solid rgba(201,162,76,0.22)",
+                  borderRadius: 10,
+                  padding: 6,
+                }}>
+                  <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", padding: "6px 10px 4px" }}>
+                    Branch
+                  </div>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "8px 10px", borderRadius: 8,
+                    background: "rgba(201,162,76,0.10)",
+                    border: "none",
+                  }}>
+                    <span style={{ color: "var(--atlas-gold)", fontSize: 12, lineHeight: 1 }}>✓</span>
+                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, color: "var(--atlas-fg)" }}>main</span>
+                  </div>
+                  <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 11, color: "var(--atlas-muted)", padding: "6px 10px 4px", opacity: 0.7 }}>
+                    More branches coming soon.
+                  </div>
+                </div>
+              </details>
             )}
             {(allProjects ?? []).filter((p: any) => p.id !== id && p.status !== "archived").length > 0 && (() => {
 
