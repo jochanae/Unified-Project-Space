@@ -5995,12 +5995,6 @@ export default function Workspace() {
         hasProject={Boolean(project)}
         isMobile={isMobile}
         showWorkspaceMenu
-        projectStatus={project?.status}
-        onManifest={() => {
-          if (isMobile) { setMobileTab("manifest"); setRightOpen(true); }
-          else { setDesktopForceTab("manifest"); setTimeout(() => setDesktopForceTab(undefined), 80); }
-        }}
-        manifestLoading={manifestLoading}
         onLaunch={() => {
           // Preview-first toggle. Play ALWAYS surfaces the running app preview,
           // regardless of which tab/module is currently active. Panel maximize

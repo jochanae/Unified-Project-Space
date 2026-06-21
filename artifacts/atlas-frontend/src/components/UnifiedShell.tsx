@@ -85,9 +85,9 @@ function projectIdFromPath(pathname: string): number | null {
 
 function ShellWordmark() {
   const [location, setLocation] = useLocation();
+  const isTinyMobile = useIsTinyScreen();
   const handleClick = () => {
     if (location === "/home") {
-      // Already on home — reset the tray to ambient instead of being a no-op.
       window.dispatchEvent(new CustomEvent("axiom:home-reset"));
     } else {
       setLocation("/home");
@@ -101,26 +101,32 @@ function ShellWordmark() {
         aria-label={location === "/home" ? "Return to ambient Nexus" : "Go home"}
         style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}
       >
-        <img
-          src="/axiom-logo.svg"
-          alt="Axiom"
-          width={26}
-          height={26}
-          style={{ borderRadius: "20%", flexShrink: 0 }}
-        />
-        <span
-          style={{
-            fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
-            fontSize: "var(--ts-label)",
-            fontWeight: 700,
-            letterSpacing: "0.18em",
-            lineHeight: "var(--lh-tight)",
-            color: "var(--atlas-gold)",
-            textTransform: "uppercase",
-          }}
-        >
-          AXIOM
-        </span>
+        <svg width="26" height="26" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }} aria-hidden>
+          <defs>
+            <linearGradient id="swmgs" x1="18" y1="4" x2="18" y2="32" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#F5D97A" />
+              <stop offset="50%" stopColor="#D4AF37" />
+              <stop offset="100%" stopColor="#A07820" />
+            </linearGradient>
+          </defs>
+          <polygon points="18,4 30,32 24,32 18,18 12,32 6,32" fill="url(#swmgs)" />
+          <rect x="10" y="22" width="16" height="2.5" rx="1.25" fill="url(#swmgs)" opacity="0.85" />
+        </svg>
+        {!isTinyMobile && (
+          <span
+            style={{
+              fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
+              fontSize: "var(--ts-label)",
+              fontWeight: 700,
+              letterSpacing: "0.18em",
+              lineHeight: "var(--lh-tight)",
+              color: "var(--atlas-gold)",
+              textTransform: "uppercase",
+            }}
+          >
+            AXIOM
+          </span>
+        )}
       </button>
     </div>
   );
@@ -611,7 +617,7 @@ function ShellProjectSwitcher({ projectId }: { projectId: number | null }) {
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
-        {!isTinyMobile && <ShellBranchChip />}
+        {!isMobile && <ShellBranchChip />}
         </>
 
       )}

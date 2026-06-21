@@ -14,9 +14,6 @@ type UnifiedSubheaderProps = {
   showLaunchWhenNoProject?: boolean;
   onMenuAction?: (action: UnifiedSubheaderMenuAction) => void;
   onLaunch?: () => void;
-  projectStatus?: string;
-  onManifest?: () => void;
-  manifestLoading?: boolean;
   hasConversation?: boolean;
   expanded?: boolean;
   onExpandedChange?: Dispatch<SetStateAction<boolean>>;
@@ -61,9 +58,6 @@ export function UnifiedSubheader({
   showWorkspaceMenu = false,
   showLaunchWhenNoProject = false,
   onLaunch,
-  projectStatus,
-  onManifest,
-  manifestLoading = false,
   hasConversation = true,
   expanded: controlledExpanded,
   onExpandedChange,
@@ -73,7 +67,6 @@ export function UnifiedSubheader({
   const setExpanded = onExpandedChange ?? setInternalExpanded;
   const [launchHover, setLaunchHover] = useState(false);
   const [launchActive, setLaunchActive] = useState(false);
-  const [manifestHover, setManifestHover] = useState(false);
   const longPressTimer = useRef<number | null>(null);
   const longPressFired = useRef(false);
 
@@ -142,8 +135,7 @@ export function UnifiedSubheader({
 
   const showRow = expanded && hasProject;
   const showLaunchButton = showWorkspaceMenu && (hasProject || showLaunchWhenNoProject);
-  const showManifestButton = hasProject && projectStatus !== "archived";
-  const showActionBar = showLaunchButton || showManifestButton;
+  const showActionBar = showLaunchButton;
   const launchTitle = hasProject
     ? expanded
       ? "Tap to launch · long-press to hide tabs"
@@ -261,44 +253,6 @@ export function UnifiedSubheader({
             gap: 8,
           }}
         >
-          {showManifestButton && (
-            <button
-              type="button"
-              onClick={onManifest}
-              disabled={manifestLoading}
-              onMouseEnter={() => setManifestHover(true)}
-              onMouseLeave={() => setManifestHover(false)}
-              title="Manifest Mode"
-              aria-label="Manifest Mode"
-              style={{
-                background: manifestHover && !manifestLoading
-                  ? "color-mix(in oklab, #C9A24C 10%, transparent)"
-                  : "transparent",
-                border: `1px solid ${manifestHover && !manifestLoading ? "rgba(201,162,76,0.42)" : "rgba(201,162,76,0.22)"}`,
-                borderRadius: 8,
-                padding: isMobile ? "5px 8px" : "5px 10px",
-                cursor: manifestLoading ? "not-allowed" : "pointer",
-                color: manifestLoading ? "color-mix(in oklab, #C9A24C 42%, var(--atlas-muted))" : "#C9A24C",
-                opacity: manifestLoading ? 0.55 : manifestHover ? 1 : 0.86,
-                lineHeight: 1,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "background 160ms ease, color 160ms ease, border-color 160ms ease, opacity 160ms ease",
-                WebkitTapHighlightColor: "transparent",
-                boxShadow: manifestHover && !manifestLoading ? "0 0 12px rgba(201,162,76,0.18)" : "none",
-                touchAction: "manipulation",
-                fontSize: isMobile ? 10 : 11,
-                fontFamily: "var(--app-font-mono)",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Manifest
-            </button>
-          )}
           {showLaunchButton && (
             <button
               type="button"

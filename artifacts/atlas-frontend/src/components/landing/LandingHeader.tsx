@@ -51,7 +51,17 @@ export function LandingHeader({ onSignIn }: { onSignIn?: () => void }) {
     >
       {/* Left: Logo */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <img src="/axiom-logo.svg" alt="Axiom" style={{ width: 32, height: 32, borderRadius: "22%", flexShrink: 0 }} />
+        <svg width="32" height="32" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }} aria-hidden>
+          <defs>
+            <linearGradient id="lphgs" x1="18" y1="4" x2="18" y2="32" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#F5D97A" />
+              <stop offset="50%" stopColor="#D4AF37" />
+              <stop offset="100%" stopColor="#A07820" />
+            </linearGradient>
+          </defs>
+          <polygon points="18,4 30,32 24,32 18,18 12,32 6,32" fill="url(#lphgs)" />
+          <rect x="10" y="22" width="16" height="2.5" rx="1.25" fill="url(#lphgs)" opacity="0.85" />
+        </svg>
         <span style={{
           ...smallUiText,
           fontSize: 14, color: "#D4AF37",
