@@ -40,9 +40,15 @@ Atlas does NOT silently apply. User controls the push gate.
 - `BATCH_EDIT` as a verb — implicit only (multiple FILE_EDIT blocks in one response)
 - Apply without GitHub — the entire push flow requires a linked GitHub token per project (CONNECTIONS tab)
 
-## Hard constraint
+## Hard constraint (resolved)
 
-**Everything requires a linked GitHub repo.** Without the token in CONNECTIONS, Atlas can propose edits in chat but the push button is inert. This is the only thing blocking the full "I updated that file" experience.
+~~Everything requires a linked GitHub repo.~~ **GitHub is now optional.**
+
+- `FILE_READ_REQUEST` now tries GitHub first, falls back to local workspace (`/workspaces/{projectId}/`)
+- If neither works, Atlas receives `[FILE_READ_UNAVAILABLE: <reason>]` and is told to explain clearly — no silent failures
+- Every session receives a `--- FILE SOURCE CONTEXT ---` block telling Atlas: repo linked, local workspace initialized, file source (github/local/none), apply mode (push-to-github/local-apply/none)
+- The "Apply Changes" button in the modal (`/api/github/apply-local`) writes to the Replit workspace root — no project scoping
+- Per-project isolated file ops use `/api/fs/:projectId/` routes in `fs.ts` (separate system)
 
 ## Phase ordering (user's stated direction)
 

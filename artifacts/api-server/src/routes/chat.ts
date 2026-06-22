@@ -21,6 +21,8 @@ import { prepareProjectRepo } from "../lib/terminalSandbox";
 import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
 import { ATLAS_IDENTITY } from "../lib/atlasIdentity";
 import { runBuildCheck } from "./devserver";
+import fsPromises from "node:fs/promises";
+import { projectWorkspaceDir, resolveWorkspacePath } from "../lib/projectWorkspace";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY || "not-configured" });
 const MAX_VAULT_B64_SIZE = 1500000;
@@ -616,6 +618,8 @@ FILE_READ:
 When you need a file not in context, ask at the end of your response:
 FILE_READ_REQUEST:{"paths":["src/components/Foo.tsx"]}
 Max 3 paths. Use exact paths from the file tree.
+
+File reads are fulfilled from GitHub (when a repo is linked) or from the local workspace (when initialized — see FILE SOURCE CONTEXT below). If neither is available you will receive [FILE_READ_UNAVAILABLE: <reason>] — in that case tell the user clearly why and what they need to set up. Never guess at file contents. Never emit a FILE_EDIT for a file you have not read in this session.
 
 ## Images — Seeing and Generating
 
@@ -2462,6 +2466,30 @@ HARD RULE: Never answer from the context of a different project unless the user 
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
   }
+
+  // Inject file source context — Atlas needs to know what it can read/write without guessing
+  {
+    const hasGithub = !!(repoData?.fullName && resolvedGithubToken);
+    const localWsDir = projectId ? projectWorkspaceDir(projectId) : null;
+    const localWsExists = localWsDir
+      ? await fsPromises.stat(localWsDir).then(() => true).catch(() => false)
+      : false;
+    const fileSource = hasGithub ? "github" : localWsExists ? "local" : "none";
+    const applyMode = hasGithub ? "push-to-github" : localWsExists ? "local-apply" : "none";
+    const fileSourceLines: string[] = [
+      `repo linked: ${hasGithub}`,
+      `local workspace initialized: ${localWsExists}`,
+      `available file source: ${fileSource}`,
+      `apply mode: ${applyMode}`,
+    ];
+    if (fileSource === "local") {
+      fileSourceLines.push("FILE_READ_REQUEST will be fulfilled from the local workspace. FILE_EDIT blocks apply directly — no GitHub needed.");
+    } else if (fileSource === "none") {
+      fileSourceLines.push("No file source available. Do not emit FILE_READ_REQUEST or FILE_EDIT — they cannot be fulfilled. If the user asks to edit files, tell them to link a GitHub repo or open the Files tab to initialize a local workspace.");
+    }
+    systemPrompt += `\n\n--- FILE SOURCE CONTEXT ---\n${fileSourceLines.join("\n")}\n--- END FILE SOURCE CONTEXT ---`;
+  }
+
   if (recentRepoActivityContext) {
     systemPrompt += `\n\n${recentRepoActivityContext}\n\nWhen referencing recent commits in your response, interpret them narratively — group by area of impact, synthesize what's changing (e.g. "Three commits hit the auth flow this week, one fixed a session timeout, another added a retry"), don't enumerate SHA hashes. Speak like a collaborator who understands what the code changes actually mean.`;
   }
@@ -2860,55 +2888,90 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
 
-  // FILE_READ intercept — Atlas requested specific files; fetch them and call model again
-  if (repoData?.fullName && resolvedGithubToken) {
+  // FILE_READ intercept — Atlas requested specific files; fetch from GitHub first, then local workspace
+  {
     const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
     if (readPaths.length > 0) {
-      try {
-        const fetchedFiles = await Promise.all(
-          readPaths.map(async (fp) => {
+      const hasGithub = !!(repoData?.fullName && resolvedGithubToken);
+      const localWsDir = projectId ? projectWorkspaceDir(projectId) : null;
+      const localWsExists = localWsDir
+        ? await fsPromises.stat(localWsDir).then(() => true).catch(() => false)
+        : false;
+
+      type FetchedFile = { path: string; content: string; truncated: boolean; lineCount: number };
+
+      const fetchedFiles = await Promise.all(
+        readPaths.map(async (fp): Promise<FetchedFile | { path: string; error: string } | null> => {
+          // 1. Try GitHub
+          if (hasGithub) {
             try {
               const r = await fetch(
                 `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
                 { headers: ghHeaders(resolvedGithubToken!) }
               );
-              if (!r.ok) return null;
-              const d = await r.json() as { encoding?: string; content?: string };
-              if (d.encoding !== "base64" || !d.content) return null;
-              const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
-              const lines = fileContent.split("\n");
+              if (r.ok) {
+                const d = await r.json() as { encoding?: string; content?: string };
+                if (d.encoding === "base64" && d.content) {
+                  const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
+                  const lines = fileContent.split("\n");
+                  const truncated = lines.length > 600;
+                  return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : fileContent, truncated, lineCount: lines.length };
+                }
+              }
+            } catch { /* fall through to local */ }
+          }
+
+          // 2. Try local workspace
+          if (localWsExists && localWsDir) {
+            try {
+              const absPath = resolveWorkspacePath(localWsDir, fp);
+              const buf = await fsPromises.readFile(absPath, "utf-8");
+              const lines = buf.split("\n");
               const truncated = lines.length > 600;
-              return {
-                path: fp,
-                content: truncated ? lines.slice(0, 600).join("\n") : fileContent,
-                truncated,
-                lineCount: lines.length,
-              };
-            } catch { return null; }
-          })
-        );
-        const validFiles = fetchedFiles.filter(
-          (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
-        );
-        if (validFiles.length > 0) {
-          validFiles.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
-          const filesSummary = validFiles
-            .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
-            .join("\n\n");
-          const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
-            ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
-            { role: "assistant", content: readCleanedContent },
-            {
-              role: "user",
-              content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`,
-            },
-          ];
-          modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
-          rawContent = modelResult.content;
-          assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
-          modelUsed = modelResult.model;
-        }
-      } catch { /* Non-fatal — keep rawContent from first call */ }
+              return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : buf, truncated, lineCount: lines.length };
+            } catch { /* file not found in local workspace */ }
+          }
+
+          // 3. Neither source could fulfill it — return a visible reason
+          const reason = !hasGithub && !localWsExists
+            ? "no GitHub repo linked and local workspace not initialized"
+            : !hasGithub
+            ? "no GitHub repo linked — tried local workspace but file not found"
+            : "file not found in GitHub repo";
+          return { path: fp, error: reason };
+        })
+      );
+
+      const validFiles = fetchedFiles.filter((f): f is FetchedFile => f !== null && !("error" in f));
+      const failedFiles = fetchedFiles.filter((f): f is { path: string; error: string } => f !== null && "error" in f);
+
+      validFiles.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
+
+      const filesSummary = validFiles
+        .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
+        .join("\n\n");
+
+      const unavailableSummary = failedFiles
+        .map(f => `[FILE_READ_UNAVAILABLE: ${f.path} — ${f.error}]`)
+        .join("\n");
+
+      if (validFiles.length > 0 || failedFiles.length > 0) {
+        const userContent = [
+          validFiles.length > 0 ? `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]` : null,
+          unavailableSummary || null,
+          "Proceed using the content above. For any unavailable files, tell the user clearly why they couldn't be read. Do not guess at their contents.",
+        ].filter(Boolean).join("\n\n");
+
+        const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+          ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+          { role: "assistant", content: readCleanedContent },
+          { role: "user", content: userContent },
+        ];
+        modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+        rawContent = modelResult.content;
+        assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+        modelUsed = modelResult.model;
+      }
     }
   }
 
