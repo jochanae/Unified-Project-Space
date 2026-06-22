@@ -4717,10 +4717,11 @@ export default function Workspace() {
           const r = results[i];
           if (r.status === "fulfilled" && r.value) {
             const file = r.value;
-            const lines = file.content.split("\n");
+            const content = file.content ?? "";
+            const lines = content.split("\n");
             const body = lines.length > 200
               ? lines.slice(0, 200).join("\n") + "\n// ... (truncated)"
-              : file.content;
+              : content;
             parts.push(`File: ${file.path}\n\`\`\`\n${body}\n\`\`\``);
           }
         }
