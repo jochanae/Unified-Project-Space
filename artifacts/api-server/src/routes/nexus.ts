@@ -1267,9 +1267,12 @@ router.post("/nexus/conversation/save", async (req, res): Promise<void> => {
 });
 
 router.get("/nexus/conversations", async (req, res): Promise<void> => {
-  console.log("nexus/conversations userId:", (req as any).session?.userId);
   try {
-    const userId = (req as any).authUser.id as number;
+    const userId = (req as any).authUser?.id as number | undefined;
+    if (typeof userId !== "number" || !Number.isFinite(userId)) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
     const hasMessageType = await hasNexusMessageTypeColumn();
     const rows = hasMessageType
       ? await db

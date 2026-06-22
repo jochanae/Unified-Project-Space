@@ -1782,6 +1782,7 @@ export default function Home() {
       queryKey: getListProjectsQueryKey(),
       refetchOnMount: "always",
       refetchOnWindowFocus: true,
+      enabled: !!authUser,
     },
   });
   // Defensive: backend may return an error object or unexpected shape on schema mismatch.
@@ -2529,6 +2530,7 @@ export default function Home() {
 
 
   useEffect(() => {
+    if (!authUser) return;
     if (conversationsRequestRef.current > 0) return;
     const requestId = 1;
     conversationsRequestRef.current = requestId;
@@ -2540,7 +2542,7 @@ export default function Home() {
         setConversations(list);
       })
       .catch(() => {});
-  }, []);
+  }, [authUser]);
 
 
   useEffect(() => {

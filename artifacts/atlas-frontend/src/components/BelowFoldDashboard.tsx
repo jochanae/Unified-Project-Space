@@ -4,6 +4,7 @@ import { useProjectState } from "../hooks/useProjectState";
 import { QuickEditRow, QuickActionLauncherButton, type QuickEditProjectOption } from "./home/QuickEditRow";
 import { QuickActionV2 } from "./home/QuickActionV2";
 import { Resume } from "./Resume";
+import { useAuth } from "../hooks/useAuth";
 
 type RecentProject = {
   id: number;
@@ -100,18 +101,20 @@ function ActivityHubCard({
   onOpenProject: (id: number) => void;
   projectOptions: QuickEditProjectOption[];
 }) {
+  const { user: authUser } = useAuth();
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
 
   useEffect(() => {
+    if (!authUser) return;
     fetch("/api/nexus/activity", { credentials: "include" })
       .then(r => r.ok ? r.json() : { items: [] })
       .then((data: { items: ActivityItem[] }) => setItems(data.items))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [authUser]);
 
   const visible = expanded ? items : items.slice(0, 6);
   const defaultLauncherProjectId =
