@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { fetchGitHubStatus } from "@/hooks/useGitHub";
 
 type Tool = "decision-editor" | "context-builder" | "diff-review" | "session-exporter" | "bulk-import" | "atlas-selfmap" | "connections";
+const SHELL_TOOLS = new Set<Tool>(["context-builder", "diff-review", "session-exporter", "bulk-import"]);
 
 export default function Workshop() {
   const [, setLocation] = useLocation();
@@ -103,23 +104,31 @@ export default function Workshop() {
           </div>
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {tools.map((tool) => (
-            <button
-              key={tool.id}
-              type="button"
-              onClick={() => setActiveTool(tool.id)}
-              style={{ padding: "14px 16px", borderRadius: 10, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", display: "flex", alignItems: "flex-start", gap: 14, textAlign: "left", cursor: "pointer", width: "100%", transition: "border-color 140ms ease" }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
-            >
-              <span style={{ color: "var(--atlas-gold)", opacity: 0.8, flexShrink: 0, marginTop: 2 }}>{tool.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--atlas-fg)", letterSpacing: "-0.01em", marginBottom: 4 }}>{tool.label}</div>
-                <p style={{ fontSize: 12, color: "var(--atlas-muted)", margin: 0, lineHeight: 1.6, opacity: 0.75 }}>{tool.desc}</p>
-              </div>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" style={{ color: "var(--atlas-muted)", opacity: 0.4, flexShrink: 0, marginTop: 4 }}><path d="M2 6h8M6 2l4 4-4 4" /></svg>
-            </button>
-          ))}
+          {tools.map((tool) => {
+            const soon = SHELL_TOOLS.has(tool.id);
+            return (
+              <button
+                key={tool.id}
+                type="button"
+                onClick={soon ? undefined : () => setActiveTool(tool.id)}
+                disabled={soon}
+                style={{ padding: "14px 16px", borderRadius: 10, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", display: "flex", alignItems: "flex-start", gap: 14, textAlign: "left", cursor: soon ? "default" : "pointer", width: "100%", transition: "border-color 140ms ease", opacity: soon ? 0.45 : 1 }}
+                onMouseEnter={(e) => { if (!soon) e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; }}
+                onMouseLeave={(e) => { if (!soon) e.currentTarget.style.borderColor = "var(--atlas-border)"; }}
+              >
+                <span style={{ color: "var(--atlas-gold)", opacity: 0.8, flexShrink: 0, marginTop: 2 }}>{tool.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--atlas-fg)", letterSpacing: "-0.01em", marginBottom: 4 }}>{tool.label}</div>
+                  <p style={{ fontSize: 12, color: "var(--atlas-muted)", margin: 0, lineHeight: 1.6, opacity: 0.75 }}>{tool.desc}</p>
+                </div>
+                {soon ? (
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", background: "rgba(255,255,255,0.05)", border: "1px solid var(--atlas-border)", borderRadius: 4, padding: "2px 6px", flexShrink: 0, marginTop: 2, whiteSpace: "nowrap" }}>Soon</span>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" style={{ color: "var(--atlas-muted)", opacity: 0.4, flexShrink: 0, marginTop: 4 }}><path d="M2 6h8M6 2l4 4-4 4" /></svg>
+                )}
+              </button>
+            );
+          })}
         </div>
       </main>
     </div>

@@ -40,7 +40,7 @@ export interface UnifiedContextDockProps {
   // active
   onMap?: () => void;
   onFiles?: () => void;
-  onForge?: () => void;
+  onSpecify?: () => void;
 
   // operational
   onChat?: () => void;
@@ -311,7 +311,7 @@ export function UnifiedContextDock(props: UnifiedContextDockProps) {
     ];
     right = [
       { id: "decisions", label: "Decisions", icon: ICONS.decisions, onClick: props.onDecisions },
-      { id: "forge", label: "Forge", icon: ICONS.forge, onClick: props.onForge },
+      { id: "specify", label: "Specify", icon: ICONS.forge, onClick: props.onSpecify },
     ];
   } else {
     const at = props.activeOperationalTab;

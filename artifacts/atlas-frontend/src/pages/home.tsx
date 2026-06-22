@@ -21,7 +21,7 @@ import { UnifiedContextDock } from "../components/UnifiedContextDock";
 import { UnifiedSubheader, type UnifiedSubheaderTab } from "../components/UnifiedSubheader";
 import { AccountHubPanel } from "../components/AccountHubPanel";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
-import { TheForge } from "../components/TheForge";
+
 import { InlineTerminalBlock } from "../components/InlineTerminalBlock";
 import { ResearchCard } from "../components/ResearchCard";
 import { ComposerActions } from "../components/composer/ComposerActions";
@@ -5622,7 +5622,7 @@ export default function Home() {
           onYou={() => setShowProfile(true)}
           onMap={() => setLocation("/map")}
           onFiles={() => setShowDrawer(true)}
-          onForge={() => window.dispatchEvent(new CustomEvent("axiom:open-specify"))}
+          onSpecify={() => window.dispatchEvent(new CustomEvent("axiom:open-specify"))}
         />
       </div>
 

@@ -33,14 +33,10 @@ import {
 } from "lucide-react";
 
 /* ──────────────────────────────────────────────────────────────────────────
-   /code — Generation Workspace (UI Shell with Mock Data)
+   /code — Generation Workspace
    ──────────────────────────────────────────────────────────────────────────
-   This page is the widescreen mirror of the inline chat code generation
-   engine. Atlas streams files here; the user reviews, diffs, pushes to
-   GitHub, downloads a zip, or extracts to Forge.
-
-   Backend contracts live at the bottom of this file (Developer Handoff
-   Blueprint). All data here is MOCK and conforms to those types.
+   Widescreen code generation viewer. Atlas streams files here; the user
+   reviews, diffs, pushes to GitHub, downloads a zip, or extracts to Forge.
    ────────────────────────────────────────────────────────────────────────── */
 
 export interface GeneratedFile {
