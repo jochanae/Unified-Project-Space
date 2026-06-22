@@ -7,3 +7,4 @@
 - [Provenance Layer](provenance-layer.md) — planned ⓘ affordance for memory-backed claims; source types: Ledger/Resume/Repo/Conversation/Inference; build after memory architecture stabilizes
 - [Explainability Layer rules](explainability-layer.md) — three scopes (Project/Portfolio/Global), never store conclusions, no new tables, consume existing systems only
 - [Atlas Builder Actions](atlas-builder-actions.md) — FILE_EDIT/LINE_PATCH/DiffViewer/GitHubPushModal already live; requires linked GitHub repo; FILE_DELETE/MOVE still missing
+- [Axiom Memory Architecture Roadmap](axiom-memory-architecture-roadmap.md) — V2–V5 sequencing: V2=synthesize+triggers, V3=text search, V4=vectors, V5=RAG; do not skip phases
