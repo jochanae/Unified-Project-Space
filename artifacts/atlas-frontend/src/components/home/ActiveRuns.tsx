@@ -253,19 +253,22 @@ async function _startRun(
 
 const PLACEHOLDERS: Record<Intent, string[]> = {
   decide: [
-    "Decide if pricing belongs above the fold…",
-    "Decide whether to ship the v2 onboarding now…",
-    "Decide if we keep the trial or move to freemium…",
-  ],
-  build: [
-    "Build the landing page hero…",
-    "Build a settings panel for notifications…",
-    "Build the empty state for first-time users…",
+    "Should pricing live above the fold?",
+    "Should we ship the v2 onboarding now?",
+    "Should we keep the trial or move to freemium?",
+    "Should the CTA say 'Start free' or 'Get started'?",
   ],
   think: [
-    "Think through onboarding friction…",
-    "Think through what 'done' means for the MVP…",
-    "Think through why activation is dropping…",
+    "Summarize what this project is for.",
+    "Why is activation dropping after sign-up?",
+    "What does 'done' mean for the MVP?",
+    "What is the riskiest assumption in this plan?",
+  ],
+  build: [
+    "Change the hero headline and update the CTA.",
+    "Add a settings panel for notification preferences.",
+    "Build the empty state for first-time users.",
+    "Refactor the onboarding flow to skip step 2.",
   ],
 };
 
@@ -798,17 +801,21 @@ function RunCard({
           )}
         </span>
 
-        {/* Intent badge */}
+        {/* Intent badge + status */}
         <span style={{
+          display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
           fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
           textTransform: "uppercase", fontWeight: 600,
-          padding: "2px 6px", borderRadius: 4,
+          padding: "2px 7px", borderRadius: 4,
           background: INTENT_BG[run.intent],
           border: `1px solid ${INTENT_BORDER[run.intent]}`,
           color: INTENT_COLOR[run.intent],
-          flexShrink: 0,
         }}>
           {run.intent}
+          <span style={{ opacity: 0.5, letterSpacing: "0.05em" }}>·</span>
+          <span style={{ opacity: 0.75, fontWeight: 500 }}>
+            {run.status === "running" ? "Running" : "Queued"}
+          </span>
         </span>
 
         {/* Project name */}
