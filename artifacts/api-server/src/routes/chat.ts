@@ -22,6 +22,7 @@ import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
 import { ATLAS_IDENTITY } from "../lib/atlasIdentity";
 import { runBuildCheck } from "./devserver";
 import fsPromises from "node:fs/promises";
+import nodePath from "node:path";
 import { projectWorkspaceDir, resolveWorkspacePath } from "../lib/projectWorkspace";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY || "not-configured" });
@@ -373,6 +374,40 @@ function formatCommitAge(timestamp: string, now: Date): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
+/** Build a flat file-listing string from the local project workspace. Returns [FILE_TREE_EMPTY] or [FILE_TREE_UNAVAILABLE: reason]. */
+async function buildLocalTreeContext(projectId: number): Promise<string> {
+  const wsDir = projectWorkspaceDir(projectId);
+  try { await fsPromises.stat(wsDir); } catch {
+    return "[FILE_TREE_UNAVAILABLE: local workspace directory not found]";
+  }
+
+  const ignore = /^(node_modules|\.git|\.next|dist|build|\.DS_Store)$/;
+  const lines: string[] = [];
+
+  async function walk(dir: string, rel: string, depth: number) {
+    if (depth > 8) return;
+    let entries: import("node:fs").Dirent[];
+    try { entries = await fsPromises.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (e.name.startsWith(".") || ignore.test(e.name)) continue;
+      const rel2 = rel ? `${rel}/${e.name}` : e.name;
+      const abs = nodePath.join(dir, e.name);
+      if (e.isDirectory()) await walk(abs, rel2, depth + 1);
+      else if (e.isFile()) {
+        try {
+          const { size } = await fsPromises.stat(abs);
+          lines.push(`  ${rel2} (${size < 1024 ? size + " B" : Math.round(size / 1024) + " KB"})`);
+        } catch { lines.push(`  ${rel2}`); }
+      }
+      if (lines.length >= 300) return; // cap
+    }
+  }
+
+  await walk(wsDir, "", 0);
+  if (lines.length === 0) return "[FILE_TREE_EMPTY]";
+  return `local workspace (${lines.length} file${lines.length === 1 ? "" : "s"}):\n${lines.join("\n")}`;
+}
+
 async function fetchRecentRepoActivity(fullName: string, token: string, now = new Date()): Promise<string | null> {
   try {
     const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -615,11 +650,20 @@ LINE_PATCH_END
 The FIND block must match EXACTLY. Copy it directly from the code in context.
 
 FILE_READ:
-When you need a file not in context, ask at the end of your response:
+When you need a file not in context, emit at the end of your response:
 FILE_READ_REQUEST:{"paths":["src/components/Foo.tsx"]}
-Max 3 paths. Use exact paths from the file tree.
+Max 3 paths. Use exact paths from the file tree (see LOCAL WORKSPACE FILES or LINKED REPO STRUCTURE in context).
 
 File reads are fulfilled from GitHub (when a repo is linked) or from the local workspace (when initialized — see FILE SOURCE CONTEXT below). If neither is available you will receive [FILE_READ_UNAVAILABLE: <reason>] — in that case tell the user clearly why and what they need to set up. Never guess at file contents. Never emit a FILE_EDIT for a file you have not read in this session.
+
+FILE_TREE:
+To get a fresh listing of all files in the local workspace, emit on its own line at the end of your response:
+FILE_TREE_REQUEST
+You will receive the current file tree and can then emit FILE_READ_REQUEST for specific paths.
+Possible results:
+  [FILE_TREE_EMPTY] — workspace directory exists but contains no files yet; tell user "Workspace initialized: yes. File source: local. Files found: none."
+  [FILE_TREE_UNAVAILABLE: reason] — workspace directory missing or inaccessible; tell user the reason.
+The file tree is also auto-injected at session start under LOCAL WORKSPACE FILES — use FILE_TREE_REQUEST only when you need a fresh listing mid-session.
 
 ## Images — Seeing and Generating
 
@@ -927,6 +971,17 @@ function extractFileReadRequest(content: string): { paths: string[]; cleanedCont
     }
   } catch { /* malformed JSON — ignore */ }
   return { paths: [], cleanedContent: content };
+}
+
+/** Extract a bare FILE_TREE_REQUEST token from Atlas's response */
+function extractFileTreeRequest(content: string): { requested: boolean; cleanedContent: string } {
+  const marker = "FILE_TREE_REQUEST";
+  const idx = content.lastIndexOf(marker);
+  if (idx === -1) return { requested: false, cleanedContent: content };
+  // Make sure it's not FILE_TREE_REQUEST: {...} (which would be a different syntax)
+  const after = content.slice(idx + marker.length).trim();
+  if (after.startsWith(":") || after.startsWith("{")) return { requested: false, cleanedContent: content };
+  return { requested: true, cleanedContent: content.slice(0, idx).trim() };
 }
 
 function detectMemoryChips(content: string): { content: string; memoryChips: MemoryChipRich[] } {
@@ -2207,6 +2262,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   let repoTreeContext: string | null = null;
   let repoFiles: Set<string> | null = null;
   let recentRepoActivityContext: string | null = null;
+  let localTreeContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project?.githubToken);
 
@@ -2237,6 +2293,15 @@ router.post("/chat", async (req, res): Promise<void> => {
       }
     } catch {
       // Non-fatal: continue without tree context
+    }
+  }
+
+  // Local workspace tree — equivalent of repoTreeContext but for local-only projects
+  if (!repoData && projectId && needsCodeContext) {
+    try {
+      localTreeContext = await buildLocalTreeContext(projectId);
+    } catch {
+      localTreeContext = "[FILE_TREE_UNAVAILABLE: error reading workspace]";
     }
   }
 
@@ -2466,6 +2531,15 @@ HARD RULE: Never answer from the context of a different project unless the user 
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
   }
+  if (localTreeContext) {
+    if (localTreeContext === "[FILE_TREE_EMPTY]") {
+      systemPrompt += `\n\n--- LOCAL WORKSPACE FILES ---\n[FILE_TREE_EMPTY]\nThe local workspace directory exists and is initialized, but contains no files yet. When the user asks what files exist, respond: "Workspace initialized: yes. File source: local. Files found: none." Do NOT ask them to paste files — the workspace is ready but empty.\n--- END LOCAL WORKSPACE FILES ---`;
+    } else if (localTreeContext.startsWith("[FILE_TREE_UNAVAILABLE")) {
+      systemPrompt += `\n\n--- LOCAL WORKSPACE FILES ---\n${localTreeContext}\n--- END LOCAL WORKSPACE FILES ---`;
+    } else {
+      systemPrompt += `\n\n--- LOCAL WORKSPACE FILES (use these exact paths in FILE_READ_REQUEST and FILE_EDIT blocks) ---\n${localTreeContext}\n--- END LOCAL WORKSPACE FILES ---`;
+    }
+  }
 
   // Inject file source context — Atlas needs to know what it can read/write without guessing
   {
@@ -2483,9 +2557,9 @@ HARD RULE: Never answer from the context of a different project unless the user 
       `apply mode: ${applyMode}`,
     ];
     if (fileSource === "local") {
-      fileSourceLines.push("FILE_READ_REQUEST will be fulfilled from the local workspace. FILE_EDIT blocks apply directly — no GitHub needed.");
+      fileSourceLines.push("FILE_READ_REQUEST will be fulfilled from the local workspace. FILE_TREE_REQUEST can be used to refresh the file listing at any time. FILE_EDIT blocks apply directly — no GitHub needed.");
     } else if (fileSource === "none") {
-      fileSourceLines.push("No file source available. Do not emit FILE_READ_REQUEST or FILE_EDIT — they cannot be fulfilled. If the user asks to edit files, tell them to link a GitHub repo or open the Files tab to initialize a local workspace.");
+      fileSourceLines.push("No file source available. Do not emit FILE_READ_REQUEST, FILE_TREE_REQUEST, or FILE_EDIT — they cannot be fulfilled. If the user asks to edit files, tell them to link a GitHub repo or open the Files tab to initialize a local workspace.");
     }
     systemPrompt += `\n\n--- FILE SOURCE CONTEXT ---\n${fileSourceLines.join("\n")}\n--- END FILE SOURCE CONTEXT ---`;
   }
@@ -2972,6 +3046,36 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
         modelUsed = modelResult.model;
       }
+    }
+  }
+
+  // FILE_TREE intercept — Atlas emitted FILE_TREE_REQUEST; build the current workspace tree and re-call
+  {
+    const { requested: treeRequested, cleanedContent: treeCleanedContent } = extractFileTreeRequest(rawContent);
+    if (treeRequested) {
+      let treeResult: string;
+      if (projectId) {
+        try { treeResult = await buildLocalTreeContext(projectId); }
+        catch { treeResult = "[FILE_TREE_UNAVAILABLE: error reading workspace]"; }
+      } else {
+        treeResult = "[FILE_TREE_UNAVAILABLE: no project context]";
+      }
+
+      const treeUserContent = treeResult === "[FILE_TREE_EMPTY]"
+        ? "[WORKSPACE FILE TREE]\n[FILE_TREE_EMPTY]\nThe workspace directory exists but contains no files yet.\n[END WORKSPACE FILE TREE]\n\nProceed: tell the user the workspace is initialized but empty."
+        : treeResult.startsWith("[FILE_TREE_UNAVAILABLE")
+        ? `[WORKSPACE FILE TREE]\n${treeResult}\n[END WORKSPACE FILE TREE]\n\nProceed: tell the user the workspace is not accessible and why.`
+        : `[WORKSPACE FILE TREE]\n${treeResult}\n[END WORKSPACE FILE TREE]\n\nUse the file listing above. You can now emit FILE_READ_REQUEST for any paths you need to inspect.`;
+
+      const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+        ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+        { role: "assistant", content: treeCleanedContent },
+        { role: "user", content: treeUserContent },
+      ];
+      modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+      rawContent = modelResult.content;
+      assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+      modelUsed = modelResult.model;
     }
   }
 
