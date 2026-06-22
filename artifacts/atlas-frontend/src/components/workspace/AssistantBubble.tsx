@@ -129,6 +129,9 @@ function InlineDiffCard({
   const [patchedEdits, setPatchedEdits] = useState<FileEdit[] | null>(null);
   const [showPushModal, setShowPushModal] = useState(false);
   const [originals, setOriginals] = useState<Record<string, string | null>>({});
+  const [inlineApplying, setInlineApplying] = useState(false);
+  const [inlineApplied, setInlineApplied] = useState<string[] | null>(null);
+  const [inlineApplyError, setInlineApplyError] = useState<string | null>(null);
   const pushSucceededRef = useRef(false);
 
   const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
@@ -235,7 +238,34 @@ function InlineDiffCard({
     }
   };
 
+  const applyLocal = async (edits: FileEdit[]) => {
+    setInlineApplying(true);
+    setInlineApplyError(null);
+    try {
+      const r = await fetch("/api/github/apply-local", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ projectId, files: edits.map(e => ({ path: e.path, content: e.content })) }),
+      });
+      if (!r.ok) { const d = await r.json() as { error?: string }; throw new Error(d.error ?? "Apply failed"); }
+      setInlineApplied(edits.map(e => e.path));
+      onPushSuccess([]);
+    } catch (e) {
+      setInlineApplyError(e instanceof Error ? e.message : "Apply failed");
+    } finally {
+      setInlineApplying(false);
+    }
+  };
+
   const handleApply = () => {
+    // Local workspace (no GitHub) — apply inline, no modal
+    if (!linkedRepo) {
+      if (fileEdits.length > 0) { void applyLocal(fileEdits); return; }
+      setError("Line patches require a GitHub repo. Ask Atlas to rewrite the full file instead.");
+      return;
+    }
+    // GitHub flow — open modal
     if (fileEdits.length > 0) {
       pushSucceededRef.current = false;
       setShowPushModal(true);
@@ -434,11 +464,11 @@ function InlineDiffCard({
           </button>
           <button
             type="button"
-            disabled={applying}
+            disabled={applying || inlineApplying || !!inlineApplied}
             onClick={(e) => { e.stopPropagation(); handleApply(); }}
-            style={{ padding: "5px 12px", borderRadius: 5, background: "var(--atlas-gold)", border: "1px solid var(--atlas-gold)", color: "var(--atlas-bg)", cursor: applying ? "not-allowed" : "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", opacity: applying ? 0.55 : 1 }}
+            style={{ padding: "5px 12px", borderRadius: 5, background: inlineApplied ? "rgba(52,211,153,0.12)" : "var(--atlas-gold)", border: inlineApplied ? "1px solid rgba(52,211,153,0.35)" : "1px solid var(--atlas-gold)", color: inlineApplied ? "rgba(52,211,153,0.9)" : "var(--atlas-bg)", cursor: (applying || inlineApplying || !!inlineApplied) ? "default" : "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", opacity: (applying || inlineApplying) ? 0.55 : 1, transition: "all 160ms ease" }}
           >
-            {applying ? "Applying..." : "Apply"}
+            {inlineApplying ? "Applying…" : inlineApplied ? "✓ Applied" : applying ? "Applying..." : "Apply"}
           </button>
         </div>
 
@@ -449,8 +479,13 @@ function InlineDiffCard({
           {error}
         </div>
       )}
+      {inlineApplyError && (
+        <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: "color-mix(in oklab, var(--atlas-ember) 9%, transparent)", border: "1px solid color-mix(in oklab, var(--atlas-ember) 24%, transparent)", color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)", fontSize: 11, lineHeight: 1.55 }}>
+          {inlineApplyError}
+        </div>
+      )}
 
-      {showPushModal && modalEdits && modalEdits.length > 0 && (
+      {linkedRepo && showPushModal && modalEdits && modalEdits.length > 0 && (
         <GitHubPushModal
           fileEdits={modalEdits}
           linkedRepo={linkedRepo}
