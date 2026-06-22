@@ -37,7 +37,6 @@ import type {
   NexusChatResponse,
   NexusMessage,
   Project,
-  ProjectSummary,
   ReadinessSnapshot,
   Session,
   SessionWithMessages,
@@ -1217,93 +1216,6 @@ export const useDeleteProject = <
 > => {
   return useMutation(getDeleteProjectMutationOptions(options));
 };
-
-/**
- * @summary Get project summary stats
- */
-export const getGetProjectSummaryUrl = (id: number) => {
-  return `/api/projects/${id}/summary`;
-};
-
-export const getProjectSummary = async (
-  id: number,
-  options?: RequestInit,
-): Promise<ProjectSummary> => {
-  return customFetch<ProjectSummary>(getGetProjectSummaryUrl(id), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetProjectSummaryQueryKey = (id: number) => {
-  return [`/api/projects/${id}/summary`] as const;
-};
-
-export const getGetProjectSummaryQueryOptions = <
-  TData = Awaited<ReturnType<typeof getProjectSummary>>,
-  TError = ErrorType<unknown>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getProjectSummary>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetProjectSummaryQueryKey(id);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getProjectSummary>>
-  > = ({ signal }) => getProjectSummary(id, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getProjectSummary>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetProjectSummaryQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getProjectSummary>>
->;
-export type GetProjectSummaryQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get project summary stats
- */
-
-export function useGetProjectSummary<
-  TData = Awaited<ReturnType<typeof getProjectSummary>>,
-  TError = ErrorType<unknown>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getProjectSummary>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetProjectSummaryQueryOptions(id, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
 
 /**
  * @summary List readiness score snapshots for a project

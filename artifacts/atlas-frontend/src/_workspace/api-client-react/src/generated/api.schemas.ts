@@ -99,15 +99,6 @@ export interface UpdateProjectBody {
   lastHandoverHash?: string | null;
 }
 
-export interface ProjectSummary {
-  projectId: number;
-  sessionCount: number;
-  committedCount: number;
-  parkedCount: number;
-  /** @nullable */
-  recentMode?: string | null;
-}
-
 export type SessionStatus = (typeof SessionStatus)[keyof typeof SessionStatus];
 
 export const SessionStatus = {

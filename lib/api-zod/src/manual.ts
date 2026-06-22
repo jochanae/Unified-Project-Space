@@ -28,7 +28,6 @@ export const GetProjectParams = z.object({ id: numericId });
 export const UpdateProjectParams = z.object({ id: numericId });
 export const DeleteProjectParams = z.object({ id: numericId });
 export const TouchProjectParams = z.object({ projectId: numericId });
-export const GetProjectSummaryParams = z.object({ id: numericId });
 export const ListReadinessSnapshotsParams = z.object({ id: numericId });
 export const RecordReadinessSnapshotParams = z.object({ id: numericId });
 

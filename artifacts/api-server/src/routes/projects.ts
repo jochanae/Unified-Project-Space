@@ -13,7 +13,6 @@ import {
   DeleteProjectParams,
   TouchProjectParams,
   ListRecentProjectsQueryParams,
-  GetProjectSummaryParams,
   ListReadinessSnapshotsParams,
   RecordReadinessSnapshotParams,
   RecordReadinessSnapshotBody,
@@ -556,53 +555,6 @@ router.delete("/projects/:id", async (req, res): Promise<void> => {
     .delete(projectsTable)
     .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)));
   res.sendStatus(204);
-});
-
-router.get("/projects/:id/summary", async (req, res): Promise<void> => {
-  const params = GetProjectSummaryParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const id = params.data.id;
-  const userId = (req as any).authUser.id as number;
-
-  // Verify ownership first
-  const [proj] = await db
-    .select({ id: projectsTable.id })
-    .from(projectsTable)
-    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
-  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
-
-  const [sessionCountRow] = await db
-    .select({ count: sql<number>`cast(count(*) as int)` })
-    .from(sessionsTable)
-    .where(eq(sessionsTable.projectId, id));
-
-  const [committedCountRow] = await db
-    .select({ count: sql<number>`cast(count(*) as int)` })
-    .from(entriesTable)
-    .where(eq(entriesTable.projectId, id));
-
-  const [parkedCountRow] = await db
-    .select({ count: sql<number>`cast(count(*) as int)` })
-    .from(entriesTable)
-    .where(eq(entriesTable.projectId, id));
-
-  const recentSession = await db
-    .select({ mode: sessionsTable.mode })
-    .from(sessionsTable)
-    .where(eq(sessionsTable.projectId, id))
-    .orderBy(sessionsTable.createdAt)
-    .limit(1);
-
-  res.json({
-    projectId: id,
-    sessionCount: sessionCountRow?.count ?? 0,
-    committedCount: committedCountRow?.count ?? 0,
-    parkedCount: parkedCountRow?.count ?? 0,
-    recentMode: recentSession[0]?.mode ?? null,
-  });
 });
 
 router.get("/projects/:id/readiness-snapshots", async (req, res): Promise<void> => {

@@ -318,41 +318,6 @@ router.post("/sessions/:id/idea-mode", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/projects/:projectId/runs", async (req, res): Promise<void> => {
-  const params = ListSessionsParams.safeParse({ projectId: req.params.projectId });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const userId = (req as any).authUser.id as number;
-  if (!(await projectBelongsToUser(params.data.projectId, userId))) {
-    res.status(404).json({ error: "Project not found" }); return;
-  }
-  const rows = await db
-    .select({
-      id: sessionsTable.id,
-      title: sessionsTable.title,
-      runStatus: (sessionsTable as any).runStatus,
-      runSummary: (sessionsTable as any).runSummary,
-      runActions: (sessionsTable as any).runActions,
-      runArtifacts: (sessionsTable as any).runArtifacts,
-      messageCount: sessionsTable.messageCount,
-      totalInputTokens: (sessionsTable as any).totalInputTokens,
-      totalOutputTokens: (sessionsTable as any).totalOutputTokens,
-      totalCostUsd: (sessionsTable as any).totalCostUsd,
-      totalExecutionMs: (sessionsTable as any).totalExecutionMs,
-      createdAt: sessionsTable.createdAt,
-      updatedAt: sessionsTable.updatedAt,
-    })
-    .from(sessionsTable)
-    .where(eq(sessionsTable.projectId, params.data.projectId))
-    .orderBy(desc(sessionsTable.updatedAt));
-  const runs = rows.map(r => ({
-    ...r,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-    costUsd: r.totalCostUsd == null ? null : Number(r.totalCostUsd),
-  }));
-  res.json({ runs });
-});
-
 router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
   const params = ListMessagesParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
