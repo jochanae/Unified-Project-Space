@@ -6,3 +6,4 @@
 - [Parking Lot two-tier enrichment](parking-lot-enrichment.md) — lite on park (category+complexity+whyItMatters), full on panel open; _level field distinguishes; ParkSheet is the canonical entry point
 - [Provenance Layer](provenance-layer.md) — planned ⓘ affordance for memory-backed claims; source types: Ledger/Resume/Repo/Conversation/Inference; build after memory architecture stabilizes
 - [Explainability Layer rules](explainability-layer.md) — three scopes (Project/Portfolio/Global), never store conclusions, no new tables, consume existing systems only
+- [Atlas Builder Actions](atlas-builder-actions.md) — FILE_EDIT/LINE_PATCH/DiffViewer/GitHubPushModal already live; requires linked GitHub repo; FILE_DELETE/MOVE still missing
