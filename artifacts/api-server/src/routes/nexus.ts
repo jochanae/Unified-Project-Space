@@ -1401,20 +1401,33 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
   const hasMessageType = await hasNexusMessageTypeColumn();
 
-  // Load projects + Living Thread in parallel
+  // Load projects + Living Thread in parallel.
+  // When conversationId is absent the caller is starting a brand-new thread —
+  // return no DB history so stale messages from previous conversations never
+  // bleed into the fresh context (the old fallback loaded every message for
+  // the user, which caused old workspace sessions to pollute new Global Insight
+  // conversations).
   const [projects, dbMessages] = await Promise.all([
     db
       .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, nodeState: projectsTable.nodeState })
       .from(projectsTable)
       .where(eq(projectsTable.userId, userId)),
-    loadNexusMessages(
-      conversationMessages(conversationId === "__legacy__"
-        ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
-        : conversationId
-          ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
-          : eq(nexusMessagesTable.userId, userId), hasMessageType),
-      hasMessageType,
-    ),
+    (() => {
+      if (conversationId === "__legacy__") {
+        return loadNexusMessages(
+          conversationMessages(and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId)), hasMessageType),
+          hasMessageType,
+        );
+      }
+      if (conversationId) {
+        return loadNexusMessages(
+          conversationMessages(and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId)), hasMessageType),
+          hasMessageType,
+        );
+      }
+      // No conversationId → fresh thread, no prior history to load.
+      return Promise.resolve([] as Awaited<ReturnType<typeof loadNexusMessages>>);
+    })(),
   ]);
 
   const shouldEnableIdeaMode = !ideaMode && (
