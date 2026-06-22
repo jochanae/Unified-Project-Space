@@ -3,7 +3,8 @@ import path from "path";
 import { db, projectsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 
-const PROJECT_WORKSPACE_ROOT = process.env.PROJECT_WORKSPACE_ROOT ?? "/workspaces";
+const PROJECT_WORKSPACE_ROOT =
+  process.env.PROJECT_WORKSPACE_ROOT ?? "/home/runner/workspace/.project-workspaces";
 
 /** Absolute path to a project's workspace directory. Never touches disk. */
 export function projectWorkspaceDir(projectId: number): string {

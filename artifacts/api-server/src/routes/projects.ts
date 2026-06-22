@@ -5,6 +5,7 @@ import { bustResumeCache } from "./nexus";
 import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable, artifactsTable, projectGenomeTable, nexusMessagesTable } from "@workspace/db";
 import { encryptToken, decryptToken } from "../lib/tokenCrypto";
 import { createProjectForUser, ensureProjectSchema, ProjectLimitReachedError } from "../lib/projectCreation";
+import { ensureProjectWorkspaceDir } from "../lib/projectWorkspace";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -161,6 +162,8 @@ router.post("/projects", async (req, res): Promise<void> => {
       description: parsed.data.description ?? null,
       entityType: parsed.data.entity_type ?? "project",
     });
+    // Auto-initialize local workspace directory so Files tab works without GitHub
+    void ensureProjectWorkspaceDir(project.id).catch(() => {/* non-fatal */});
     res.status(201).json(serializeProject(project, true));
   } catch (error) {
     if (error instanceof ProjectLimitReachedError) {
