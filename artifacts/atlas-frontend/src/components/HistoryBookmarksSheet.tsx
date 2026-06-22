@@ -40,6 +40,7 @@ const OVERLAY: React.CSSProperties = {
 const SHEET: React.CSSProperties = {
   width: "100%",
   maxWidth: 560,
+  minHeight: "55vh",
   maxHeight: "85vh",
   background:
     "linear-gradient(180deg, rgba(20,18,14,0.98) 0%, rgba(14,12,10,0.98) 100%)",
