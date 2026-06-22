@@ -4955,6 +4955,36 @@ export default function Home() {
 
 
 
+          {/* Empty state CTA — shown only when no projects exist */}
+          {!globalInsightOpen && (!projects || projects.length === 0) && (
+            <div style={{ marginTop: 28, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+              <div style={{ width: "100%", maxWidth: 340, height: 1, background: "linear-gradient(to right, transparent, rgba(212,175,55,0.18), transparent)" }} />
+              <span style={{ fontSize: "var(--ts-caption)", fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.5)", letterSpacing: "0.06em" }}>
+                No projects yet.
+              </span>
+              <button
+                type="button"
+                onClick={() => setLocation("/projects")}
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(212,175,55,0.35)",
+                  borderRadius: 8,
+                  padding: "8px 20px",
+                  color: "rgba(212,175,55,0.75)",
+                  cursor: "pointer",
+                  fontSize: "var(--ts-caption)",
+                  fontFamily: "var(--app-font-mono)",
+                  letterSpacing: "0.06em",
+                  transition: "border-color 160ms ease, color 160ms ease",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.65)"; e.currentTarget.style.color = "rgba(212,175,55,1)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.35)"; e.currentTarget.style.color = "rgba(212,175,55,0.75)"; }}
+              >
+                + Create your first project
+              </button>
+            </div>
+          )}
+
           {/* Continuity strip — status + expand CTA anchored below the suggestion chips */}
           {!globalInsightOpen && projects && projects.length > 0 && (() => {
             const activeProjects = (projects as Project[]).filter((p: Project) => p.status !== "archived");
@@ -5111,7 +5141,7 @@ export default function Home() {
           </>}
         />
 
-        {!globalInsightOpen && (
+        {!globalInsightOpen && projects && projects.length > 0 && (
           <aside className="atlas-home-desktop-overview" aria-label="Overview">
             <div className="atlas-home-desktop-overview-scroll">
               {renderOverviewDashboard()}
@@ -5246,7 +5276,7 @@ export default function Home() {
       )}
 
       {/* Below-the-fold: Recent Activity / Discovery section — hidden in Global Insight mode */}
-      {!globalInsightOpen && (
+      {!globalInsightOpen && projects && projects.length > 0 && (
         <div id="atlas-home-overview" className="atlas-home-tablet-overview" style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 24px 140px" }}>
           <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
             <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
