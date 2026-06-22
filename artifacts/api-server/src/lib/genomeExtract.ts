@@ -33,6 +33,8 @@ type RawGenomeUpdate = {
   coreEmotion?: string | null;
   audience?: string | null;
   identity?: string | null;
+  wedge?: string | null;
+  differentiator?: string | null;
   constraints?: string[];
   openQuestions?: string[];
   stage?: string;
@@ -67,6 +69,18 @@ function validStage(s: unknown): GenomeStage {
 function validObjectType(t: unknown): ObjectType {
   if (typeof t === "string" && OBJECT_TYPES.includes(t as ObjectType)) return t as ObjectType;
   return "Idea";
+}
+
+async function loadProjectMetadata(projectId: number): Promise<string> {
+  const [project] = await db
+    .select({ name: projectsTable.name, description: projectsTable.description })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+  if (!project) return "";
+  const parts: string[] = [`PROJECT NAME: ${project.name}`];
+  if (project.description?.trim()) parts.push(`DESCRIPTION: ${project.description.trim()}`);
+  return parts.join("\n");
 }
 
 async function loadConversationText(projectId: number): Promise<string> {
@@ -192,34 +206,40 @@ async function upsertObjects(
 }
 
 export async function runGenomeExtraction(projectId: number): Promise<void> {
-  const [conversationText, committedEntriesText] = await Promise.all([
+  const [conversationText, committedEntriesText, projectMetadata] = await Promise.all([
     loadConversationText(projectId),
     loadCommittedEntries(projectId),
+    loadProjectMetadata(projectId),
   ]);
 
-  if (!conversationText && !committedEntriesText) return;
+  if (!conversationText && !committedEntriesText && !projectMetadata) return;
 
   const contextBlocks: string[] = [];
+  if (projectMetadata) contextBlocks.push(projectMetadata);
   if (conversationText) contextBlocks.push(`CONVERSATION:\n${conversationText.slice(0, 7000)}`);
   if (committedEntriesText) contextBlocks.push(committedEntriesText.slice(0, 2000));
   const fullContext = contextBlocks.join("\n\n---\n\n");
+
+  const hasConversation = !!conversationText;
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 1200,
     messages: [{
       role: "user",
-      content: `You are analyzing a project's conversation history and committed objects to extract structured project DNA (the "Project Genome"). Be precise and concise.
+      content: `You are analyzing a project to extract structured project DNA (the "Project Genome"). Be precise and concise.${hasConversation ? " You have conversation history to draw from." : " You have only a project name and description — reason carefully from what is available."}
 
 ${fullContext}
 
 Extract the following and return ONLY valid JSON (no markdown, no preamble):
 
 {
-  "purpose": "one sentence — what this project does or solves, or null if not clear",
+  "purpose": "one sentence — what problem this solves or what it enables, or null if not clear",
   "coreEmotion": "the core feeling or value it creates (e.g. 'control', 'delight', 'clarity'), or null",
-  "audience": "who needs this most — specific, not generic — or null",
-  "identity": "what makes this distinct or ownable, or null",
+  "audience": "who needs this most — specific, not generic (e.g. 'early-stage founders', 'solo presenters with speaking anxiety') — or null",
+  "identity": "the project's ownable identity or positioning in one phrase, or null",
+  "wedge": "if 80% of this project were deleted, what single capability would survive and still be worth building? One crisp sentence or null.",
+  "differentiator": "what makes this meaningfully different from the obvious alternatives? One specific claim, or null.",
   "constraints": ["real constraint 1", "real constraint 2"],
   "openQuestions": ["unresolved question 1", "unresolved question 2", "unresolved question 3"],
   "stage": "Think | Shape | Decide | Workspace | Strategize | Build | Operate | Evolve",
@@ -232,6 +252,8 @@ Extract the following and return ONLY valid JSON (no markdown, no preamble):
 Rules:
 - stage reflects how far the thinking has progressed (Think = very early, Evolve = mature and deployed)
 - confidenceScore reflects how clear and grounded the project vision is (0 = vague, 100 = crystal clear)
+- wedge: this is the irreducible core — not a feature list, not the product category — the one thing that would make someone choose this over nothing
+- differentiator: be specific, not generic ("the only X that does Y" not "better UX")
 - objects: extract 3-8 distinct objects not already in the committed objects list. Skip duplicates.
 - constraints and openQuestions: max 5 each, only real ones from the conversation
 - All string values must be concise (under 200 chars)
@@ -253,6 +275,8 @@ Rules:
     ...(typeof parsed.coreEmotion === "string" ? { coreEmotion: parsed.coreEmotion || null } : {}),
     ...(typeof parsed.audience === "string" ? { audience: parsed.audience || null } : {}),
     ...(typeof parsed.identity === "string" ? { identity: parsed.identity || null } : {}),
+    ...(typeof parsed.wedge === "string" ? { wedge: parsed.wedge || null } : {}),
+    ...(typeof parsed.differentiator === "string" ? { differentiator: parsed.differentiator || null } : {}),
     ...(Array.isArray(parsed.constraints) ? { constraints: parsed.constraints.filter(Boolean).slice(0, 5) } : {}),
     ...(Array.isArray(parsed.openQuestions) ? { openQuestions: parsed.openQuestions.filter(Boolean).slice(0, 5) } : {}),
     ...(parsed.stage ? { stage: validStage(parsed.stage) } : {}),

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, projectGenomeTable, projectsTable, entriesTable, nexusMessagesTable, chatMessagesTable, sessionsTable } from "@workspace/db";
-import { eq, and, desc, sql, count, ne, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, count, ne, inArray, isNull } from "drizzle-orm";
 import { runGenomeExtraction, isOnCooldown } from "../lib/genomeExtract";
 import { GENOME_STAGES, OBJECT_TYPES } from "@workspace/db";
 import type { GenomeStage } from "@workspace/db";
@@ -194,6 +194,8 @@ async function serializeGenome(projectId: number, row: typeof projectGenomeTable
     coreEmotion: row.coreEmotion,
     audience: row.audience,
     identity: row.identity,
+    wedge: row.wedge,
+    differentiator: row.differentiator,
     constraints: row.constraints ?? [],
     openQuestions: row.openQuestions ?? [],
     stage: row.stage,
@@ -258,6 +260,8 @@ router.patch("/projects/:id/genome", async (req, res): Promise<void> => {
     if ("coreEmotion" in body) update.coreEmotion = typeof body.coreEmotion === "string" ? body.coreEmotion : null;
     if ("audience" in body) update.audience = typeof body.audience === "string" ? body.audience : null;
     if ("identity" in body) update.identity = typeof body.identity === "string" ? body.identity : null;
+    if ("wedge" in body) update.wedge = typeof body.wedge === "string" ? body.wedge : null;
+    if ("differentiator" in body) update.differentiator = typeof body.differentiator === "string" ? body.differentiator : null;
     if ("constraints" in body && Array.isArray(body.constraints)) update.constraints = body.constraints.filter((x: unknown) => typeof x === "string").slice(0, 5);
     if ("openQuestions" in body && Array.isArray(body.openQuestions)) update.openQuestions = body.openQuestions.filter((x: unknown) => typeof x === "string").slice(0, 5);
     if ("stage" in body) update.stage = validStage(body.stage);
@@ -353,6 +357,59 @@ router.get("/projects/:id/objects", async (req, res): Promise<void> => {
   } catch (err) {
     req.log?.error({ err }, "objects GET error");
     res.status(500).json({ error: "Failed to fetch objects" });
+  }
+});
+
+// POST /api/projects/genome/backfill — run extraction for all user projects with empty genomes
+router.post("/projects/genome/backfill", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+
+    const userProjects = await db
+      .select({ id: projectsTable.id, name: projectsTable.name })
+      .from(projectsTable)
+      .where(eq(projectsTable.userId, userId));
+
+    if (userProjects.length === 0) { res.json({ queued: 0, projects: [] }); return; }
+
+    const projectIds = userProjects.map(p => p.id);
+
+    const existingGenomes = await db
+      .select({ projectId: projectGenomeTable.projectId, lastExtractedAt: projectGenomeTable.lastExtractedAt })
+      .from(projectGenomeTable)
+      .where(inArray(projectGenomeTable.projectId, projectIds));
+
+    const extractedSet = new Set(
+      existingGenomes.filter(g => g.lastExtractedAt !== null).map(g => g.projectId),
+    );
+
+    const toBackfill = userProjects.filter(p => !extractedSet.has(p.id));
+
+    if (toBackfill.length === 0) {
+      res.json({ queued: 0, message: "All projects already have genome data.", projects: [] });
+      return;
+    }
+
+    // Run extractions serially to avoid hammering the AI API
+    void (async () => {
+      for (const p of toBackfill) {
+        try {
+          await runGenomeExtraction(p.id);
+          req.log?.info({ projectId: p.id, projectName: p.name }, "genome backfill: extracted");
+        } catch (err) {
+          req.log?.warn({ err, projectId: p.id }, "genome backfill: extraction failed for project");
+        }
+      }
+    })();
+
+    res.json({
+      queued: toBackfill.length,
+      message: `Extraction queued for ${toBackfill.length} project${toBackfill.length !== 1 ? "s" : ""}. This runs in the background.`,
+      projects: toBackfill.map(p => ({ id: p.id, name: p.name })),
+    });
+  } catch (err) {
+    req.log?.error({ err }, "genome backfill error");
+    res.status(500).json({ error: "Backfill failed" });
   }
 });
 

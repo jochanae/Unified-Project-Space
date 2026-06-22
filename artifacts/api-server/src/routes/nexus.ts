@@ -3073,7 +3073,15 @@ router.get("/nexus/resume", async (req, res): Promise<void> => {
         .orderBy(desc(entriesTable.createdAt))
         .limit(15),
       db
-        .select({ projectId: projectGenomeTable.projectId, purpose: projectGenomeTable.purpose, stage: projectGenomeTable.stage, openQuestions: projectGenomeTable.openQuestions })
+        .select({
+          projectId: projectGenomeTable.projectId,
+          purpose: projectGenomeTable.purpose,
+          audience: projectGenomeTable.audience,
+          wedge: projectGenomeTable.wedge,
+          differentiator: projectGenomeTable.differentiator,
+          stage: projectGenomeTable.stage,
+          openQuestions: projectGenomeTable.openQuestions,
+        })
         .from(projectGenomeTable)
         .where(inArray(projectGenomeTable.projectId, projectIds)),
       db
@@ -3099,6 +3107,9 @@ router.get("/nexus/resume", async (req, res): Promise<void> => {
       const parts = [`• ${p.name} (${p.status})`];
       if (genome?.stage) parts.push(`  Stage: ${genome.stage}`);
       if (genome?.purpose) parts.push(`  Purpose: ${genome.purpose}`);
+      if (genome?.audience) parts.push(`  Who: ${genome.audience}`);
+      if (genome?.wedge) parts.push(`  Wedge: ${genome.wedge}`);
+      if (genome?.differentiator) parts.push(`  Differentiator: ${genome.differentiator}`);
       if (genome?.openQuestions?.length) parts.push(`  Open questions: ${genome.openQuestions.slice(0, 2).join("; ")}`);
       return parts.join("\n");
     }).join("\n\n");
