@@ -28,7 +28,6 @@ import storageRouter from "./storage";
 import errorlogRouter from "./errorlog";
 import selfmapRouter from "./selfmap";
 import forgeStateRouter from "./forge-state";
-import serverApiRouter from "./server-api";
 import tensionsRouter from "./tensions";
 import scanRouter from "./scan";
 import blueprintRouter from "./blueprint";
@@ -55,7 +54,6 @@ router.use(googleAuthRouter);
 router.use(githubOAuthPublicRouter);  // GitHub OAuth callback must be public (cross-site redirect drops cookies)
 router.use(healthRouter);
 router.use(errorlogRouter);
-router.use("/server", serverApiRouter);
 router.use(errorsRouter);
 
 // Invite redemption is public so users can sign up via invite link
