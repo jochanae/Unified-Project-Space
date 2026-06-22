@@ -7,7 +7,7 @@ import { GenerateBlueprintPill } from "../BlueprintsTab";
 import type { WorkspaceLens } from "@/hooks/useChatLens";
 import type { ChatMessage } from "@/pages/workspace";
 import { ComposerActions, type ComposerMenuAction } from "@/components/composer/ComposerActions";
-import { ComposerAuraBorder, type AuraMode } from "@/components/composer/ComposerAuraBorder";
+import { ensureComposerAuraCSS, getAuraVars, type AuraContext } from "@/lib/composerAura";
 // CaptureBar removed from composer (2026-06-09) — intake lives in ForgeIntakeSheet.
 
 
@@ -40,6 +40,8 @@ function useComposerTypewriter(phrases: string[], paused: boolean) {
   const state = useRef({ phraseIdx: 0, charIdx: 0, phase: "typing" as "typing" | "erasing" });
   const phrasesRef = useRef(phrases);
   phrasesRef.current = phrases;
+
+  useEffect(() => { ensureComposerAuraCSS(); }, []);
 
   useEffect(() => {
     if (paused || phrases.length === 0) { setDisplay(""); return; }
@@ -378,8 +380,16 @@ export function ChatComposer(props: ChatComposerProps) {
         />
       )}
       {/* Input — hidden when Terminal tab is active (terminal has its own input row) */}
-      {composerActive && <div
-        className="atlas-composer-glass"
+      {composerActive && (() => {
+        const wsLensContext: Record<WorkspaceLens, AuraContext> = {
+          build:    "build",
+          flow:     "think",
+          scenario: "decide",
+          look:     "axiom",
+        };
+        const auraVars = getAuraVars(wsLensContext[wsLens] ?? "axiom");
+        return <div
+        className="atlas-composer-glass atlas-composer-live"
         data-atlas-composer
         data-composer-expanded={sheetVisible ? "true" : "false"}
         style={sheetVisible ? {
@@ -401,17 +411,8 @@ export function ChatComposer(props: ChatComposerProps) {
           bottom: 0,
           zIndex: 30,
           transition: "padding 320ms cubic-bezier(0.22, 1, 0.36, 1), border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1)",
-        }}>
-        {/* Animated border aura — reflects active workspace lens (collapsed state only) */}
-        {!sheetVisible && (() => {
-          const wsLensToAuraMode: Record<WorkspaceLens, AuraMode> = {
-            build:    "build",
-            flow:     "think",
-            scenario: "decide",
-            look:     "axiom",
-          };
-          return <ComposerAuraBorder mode={wsLensToAuraMode[wsLens] ?? "axiom"} borderRadius={0} />;
-        })()}
+          ...auraVars,
+        } as React.CSSProperties}>
         {/* Grip handle — visible only in expanded sheet mode. */}
         {sheetVisible && (
           <div
@@ -847,7 +848,8 @@ export function ChatComposer(props: ChatComposerProps) {
             </div>
           </div>
         </div>
-      </div>}
+      </div>;
+      })()}
 
       {/* Floating "{n} items" pill removed — parked count now renders inline
           in the CaptureBar mounted above the input. */}

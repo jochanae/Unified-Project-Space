@@ -10,13 +10,13 @@
  *   - Scroll lives ONLY inside `.atlas-global-insight-scroll`
  *   - Composer is pinned to the bottom edge (above the safe-area inset)
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useThemeMode } from "@/lib/theme";
 import { GenesisCard } from "./GenesisCard";
 import { GlobalInsightRenderer } from "./GlobalInsightRenderer";
 import { ComposerActions, type ComposerMenuAction } from "@/components/composer/ComposerActions";
-import { ComposerAuraBorder } from "@/components/composer/ComposerAuraBorder";
+import { ensureComposerAuraCSS, getAuraVars } from "@/lib/composerAura";
 import InlineSketchOffer from "@/components/chat/InlineSketchOffer";
 import SketchReveal from "@/components/chat/SketchReveal";
 import { DeepDiveSheet } from "@/components/DeepDiveSheet";
@@ -245,6 +245,8 @@ export function GlobalInsightSurface({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   // Manage object URLs for image previews
+  useEffect(() => { ensureComposerAuraCSS(); }, []);
+
   useEffect(() => {
     const current = new Set(attachedFiles);
     for (const [file, url] of filePreviewUrls.current.entries()) {
@@ -788,10 +790,8 @@ export function GlobalInsightSurface({
           background: "transparent",
         }}
       >
-        {/* Aura wrapper: ComposerAuraBorder sits behind the composer box */}
-        <div style={{ position: "relative", borderRadius: 16 }}>
-        <ComposerAuraBorder mode="axiom" />
         <div
+          className="atlas-composer-live"
           style={{
             position: "relative",
             display: "flex",
@@ -812,7 +812,8 @@ export function GlobalInsightSurface({
               : "0 2px 14px rgba(0,0,0,0.35), 0 0 0 1px rgba(212,175,55,0.06) inset",
             transition: "border-color 200ms ease, box-shadow 200ms ease",
             minHeight: 96,
-          }}
+            ...getAuraVars("axiom", isParchment),
+          } as CSSProperties}
         >
           {/* Attachment preview strip */}
           {attachedFiles.length > 0 && (
@@ -1026,7 +1027,6 @@ export function GlobalInsightSurface({
             </div>
           </div>
         </div>
-        </div>{/* end aura wrapper */}
       </div>
 
       <DeepDiveSheet
