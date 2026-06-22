@@ -3181,7 +3181,7 @@ export default function Workspace() {
   const [, setLocation] = useLocation();
   const id = Number(projectId) || Number(window.location.pathname.split('/project/')[1]?.split('/')[0]);
   const searchParams = new URLSearchParams(window.location.search);
-  const [showIntake, setShowIntake] = useState(searchParams.get("intake") === "true");
+  const [showIntake, setShowIntake] = useState(false);
   const globalMode = searchParams.get("global") === "true";
   const effectiveId = globalMode ? 0 : id;
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -3203,6 +3203,17 @@ export default function Workspace() {
     fileInputRef,
   } = useComposerDraft();
 
+  // Pre-fill composer from ?msg= param set by project creation with an initial thought
+  useEffect(() => {
+    const seedMsg = new URLSearchParams(window.location.search).get("msg");
+    if (seedMsg) {
+      setInput(decodeURIComponent(seedMsg));
+      const url = new URL(window.location.href);
+      url.searchParams.delete("msg");
+      window.history.replaceState({}, "", url.toString());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [planStates, setPlanStates] = useState<Map<number, PlanState>>(() => new Map());
   const [planExecutions, setPlanExecutions] = useState<Map<number, PlanExecution>>(() => new Map());
@@ -4158,7 +4169,7 @@ export default function Workspace() {
               body: JSON.stringify({ linkedRepo: serializeLinkedRepo({ fullName: normalizedRepo }) }),
             }).catch(() => {});
           }
-          setLocation(`/project/${project.id}?intake=true`);
+          setLocation(`/project/${project.id}`);
         },
         onError: (error) => {
           setCreateProjectError(error instanceof Error ? error.message : "Failed to create project");

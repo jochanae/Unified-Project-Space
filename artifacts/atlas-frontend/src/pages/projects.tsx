@@ -285,7 +285,7 @@ export default function Projects() {
                 mode: "decide",
               },
             });
-            setLocation(`/project/${created.id}?intake=true`);
+            setLocation(`/project/${created.id}`);
           }
         },
         onError: (err) => {

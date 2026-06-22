@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Session, Project } from "@workspace/api-client-react";
 
 const POETIC_NAMES = [
   "Quiet Forge", "North Star", "Slow Burn", "Open Field", "First Light",
@@ -27,13 +26,14 @@ function buildSuggestions(): string[] {
 type Props = {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string, githubRepo?: string) => void;
+  onCreate: (name: string, githubRepo?: string, initialThought?: string) => void;
   creating?: boolean;
   error?: string | null;
 };
 
 export function NewProjectModal({ open, onClose, onCreate, creating, error }: Props) {
   const [name, setName] = useState("");
+  const [initialThought, setInitialThought] = useState("");
   const [showGithub, setShowGithub] = useState(false);
   const [githubRepo, setGithubRepo] = useState("");
   const suggestions = useMemo(() => buildSuggestions(), [open]);
@@ -43,6 +43,7 @@ export function NewProjectModal({ open, onClose, onCreate, creating, error }: Pr
   useEffect(() => {
     if (open) {
       setName("");
+      setInitialThought("");
       setShowGithub(false);
       setGithubRepo("");
       idxRef.current = 0;
@@ -62,9 +63,11 @@ export function NewProjectModal({ open, onClose, onCreate, creating, error }: Pr
   const trimmed = name.trim();
   const canCreate = trimmed.length > 0 && !creating;
 
-  const submit = (withGithub: boolean) => {
+  const submit = () => {
     if (!canCreate) return;
-    onCreate(trimmed, withGithub && githubRepo.trim() ? githubRepo.trim() : undefined);
+    const repo = showGithub && githubRepo.trim() ? githubRepo.trim() : undefined;
+    const thought = initialThought.trim() || undefined;
+    onCreate(trimmed, repo, thought);
   };
 
   return (
@@ -100,16 +103,17 @@ export function NewProjectModal({ open, onClose, onCreate, creating, error }: Pr
           </button>
         </div>
 
+        {/* Project name */}
         <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>
-          Project name
+          Project title
         </label>
-        <div style={{ position: "relative", marginBottom: 14 }}>
+        <div style={{ position: "relative", marginBottom: 16 }}>
           <input
             ref={inputRef}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && canCreate) submit(showGithub); }}
-            placeholder="What are you building?"
+            onKeyDown={(e) => { if (e.key === "Enter" && canCreate) submit(); }}
+            placeholder="What are you calling it?"
             style={{
               width: "100%",
               padding: "10px 40px 10px 12px",
@@ -120,6 +124,7 @@ export function NewProjectModal({ open, onClose, onCreate, creating, error }: Pr
               fontSize: 14,
               outline: "none",
               fontFamily: "var(--app-font-sans)",
+              boxSizing: "border-box",
             }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "var(--atlas-gold)")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
@@ -141,6 +146,35 @@ export function NewProjectModal({ open, onClose, onCreate, creating, error }: Pr
             ✦
           </button>
         </div>
+
+        {/* Initial thought */}
+        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>
+          Tell Atlas what you're thinking about
+          <span style={{ marginLeft: 6, opacity: 0.5, fontWeight: 400 }}>optional</span>
+        </label>
+        <textarea
+          value={initialThought}
+          onChange={(e) => setInitialThought(e.target.value)}
+          placeholder="A rough idea, a problem, a direction — anything."
+          rows={3}
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: "var(--atlas-surface-alt)",
+            border: "1px solid var(--atlas-border)",
+            color: "var(--atlas-fg)",
+            fontSize: 13,
+            outline: "none",
+            fontFamily: "var(--app-font-sans)",
+            resize: "none",
+            lineHeight: 1.55,
+            marginBottom: 16,
+            boxSizing: "border-box",
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = "var(--atlas-gold)")}
+          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+        />
 
         {/* GitHub section */}
         <button
@@ -174,6 +208,7 @@ export function NewProjectModal({ open, onClose, onCreate, creating, error }: Pr
                 fontSize: 13,
                 outline: "none",
                 fontFamily: "var(--app-font-mono)",
+                boxSizing: "border-box",
               }}
               onFocus={(e) => (e.currentTarget.style.borderColor = "var(--atlas-gold)")}
               onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
@@ -190,43 +225,24 @@ export function NewProjectModal({ open, onClose, onCreate, creating, error }: Pr
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => submit(false)}
-            disabled={!canCreate}
-            style={{
-              flex: 1,
-              padding: "10px 12px", borderRadius: 8,
-              background: "transparent",
-              border: "1px solid var(--atlas-border)",
-              color: "var(--atlas-fg)",
-              fontSize: 12, fontWeight: 600, fontFamily: "var(--app-font-sans)",
-              cursor: canCreate ? "pointer" : "not-allowed",
-              opacity: canCreate ? 1 : 0.45,
-            }}
-          >
-            Start without GitHub
-          </button>
-          <button
-            type="button"
-            onClick={() => submit(showGithub)}
-            disabled={!canCreate}
-            style={{
-              flex: 1,
-              padding: "10px 12px", borderRadius: 8,
-              background: "var(--atlas-gold)",
-              border: "1px solid var(--atlas-gold)",
-              color: "#1a1208",
-              fontSize: 12, fontWeight: 700, fontFamily: "var(--app-font-mono)",
-              letterSpacing: "0.08em", textTransform: "uppercase",
-              cursor: canCreate ? "pointer" : "not-allowed",
-              opacity: canCreate ? 1 : 0.45,
-            }}
-          >
-            {creating ? "Creating…" : "Create Project"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canCreate}
+          style={{
+            width: "100%",
+            padding: "11px 12px", borderRadius: 8,
+            background: canCreate ? "var(--atlas-gold)" : "var(--atlas-surface-alt)",
+            border: canCreate ? "1px solid var(--atlas-gold)" : "1px solid var(--atlas-border)",
+            color: canCreate ? "#1a1208" : "var(--atlas-muted)",
+            fontSize: 12, fontWeight: 700, fontFamily: "var(--app-font-mono)",
+            letterSpacing: "0.08em", textTransform: "uppercase",
+            cursor: canCreate ? "pointer" : "not-allowed",
+            transition: "background 160ms, color 160ms",
+          }}
+        >
+          {creating ? "Creating…" : "Create Project"}
+        </button>
       </div>
 
       <style>{`

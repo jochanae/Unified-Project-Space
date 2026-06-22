@@ -728,6 +728,8 @@ router.get("/projects/:id/greeting", async (req, res): Promise<void> => {
     message = `Back on \`${repoName}\`. What are we working on?`;
   } else if (hasShaping) {
     message = `${project.name}.\n\n${shapingLines.join("\n")}\n\nWhat are we building today?`;
+  } else if (!repoName && ageMs < 2 * 60 * 60 * 1000 && sessionCount <= 1) {
+    message = `I've created ${project.name}.\n\nWe don't need to define everything right now — that's what this space is for.\n\nTell me where your head is today. Are we exploring an idea, solving a problem, designing something new, or refining something that already exists?`;
   } else {
     message = `${project.name} — what are we working on?`;
   }

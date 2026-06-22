@@ -2683,7 +2683,7 @@ export default function Home() {
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
 
-  const performCreateProject = useCallback((name: string, githubRepo?: string) => {
+  const performCreateProject = useCallback((name: string, githubRepo?: string, initialThought?: string) => {
     if (!backendReady) {
       setCreateError("Project creation is unavailable in this preview because the backend API URL is not configured.");
       return;
@@ -2712,7 +2712,10 @@ export default function Home() {
               runRepoScan(p.id, githubRepo!.trim());
             }
           }
-          setLocation(`/project/${p.id}?intake=true`);
+          const dest = initialThought?.trim()
+            ? `/project/${p.id}?msg=${encodeURIComponent(initialThought.trim())}`
+            : `/project/${p.id}`;
+          setLocation(dest);
         },
         onError: (err: any) => {
           const msg = extractApiErrorMessage(err);
@@ -3794,7 +3797,7 @@ export default function Home() {
                 }
                 runRepoScan(p.id, overlayRepoUrl);
                 sessionStorage.setItem("atlas-open-tab", "map");
-                setLocation(`/project/${p.id}?intake=true`);
+                setLocation(`/project/${p.id}`);
               },
               onError: (err: any) => {
                 setCreateError(extractApiErrorMessage(err) ?? "Failed to create project");
@@ -3818,7 +3821,7 @@ export default function Home() {
                   }).catch(() => {});
                 }
                 runRepoScan(p.id, overlayRepoUrl);
-                setLocation(`/project/${p.id}?intake=true`);
+                setLocation(`/project/${p.id}`);
               },
               onError: (err: any) => {
                 setCreateError(extractApiErrorMessage(err) ?? "Failed to create project");
@@ -5282,7 +5285,7 @@ export default function Home() {
       <NewProjectModal
         open={showNewProjectModal}
         onClose={() => { setShowNewProjectModal(false); setCreateError(null); }}
-        onCreate={(name, repo) => performCreateProject(name, repo)}
+        onCreate={(name, repo, thought) => performCreateProject(name, repo, thought)}
         creating={createProject.isPending}
         error={createError}
       />
