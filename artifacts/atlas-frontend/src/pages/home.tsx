@@ -3350,7 +3350,11 @@ export default function Home() {
         setLocation(`/project/${activeProjectId}`);
         return;
       }
-      await handleHandoff(undefined, surface.label || "New Project");
+      // No existing project — arm the CommitPill rather than auto-navigating.
+      // User stays in the active conversation and taps "Enter Workspace →" when ready.
+      // Auto-navigating here ejects the user mid-conversation and loses context.
+      if (surface.label?.trim()) setPendingWorkspace(null, surface.label.trim());
+      setShapingStatus("ready");
       return;
     }
 
@@ -3376,7 +3380,7 @@ export default function Home() {
         // Surface actions stay ambient; failures should not interrupt the thread.
       }
     }
-  }, [handleHandoff, homeProjectState.project?.id, mostRecentActiveProjectId, queryClient, setLocation]);
+  }, [homeProjectState.project?.id, mostRecentActiveProjectId, queryClient, setLocation, setShapingStatus, setPendingWorkspace]);
 
   const handleNewConversation = useCallback(() => {
     homeResetGenerationRef.current += 1;
