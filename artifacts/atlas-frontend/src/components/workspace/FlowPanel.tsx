@@ -674,10 +674,10 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
                   backdropFilter: "blur(4px)",
                 }}>
                   <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(var(--atlas-gold-rgb),0.85)" }}>
-                    {entryCount} decision{entryCount !== 1 ? "s" : ""} logged
+                    {entryCount} decision{entryCount !== 1 ? "s" : ""} logged — not yet mapped to Flow
                   </span>
                   <span style={{ fontFamily: "var(--app-font-sans)", fontSize: 11, color: "rgba(var(--atlas-muted-rgb),0.65)", lineHeight: 1.5 }}>
-                    Not yet mapped to Flow. Use Forge to extract them into structured nodes.
+                    Generate a Flow map from the project ledger.
                   </span>
                   {onOpenForge && (
                     <button
