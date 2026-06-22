@@ -38,7 +38,7 @@ export interface ActiveRun {
 
 const STORAGE_KEY = "atlas:active-runs";
 const STALE_THRESHOLD_MS = 10 * 60 * 1000;  // 10 min: running→failed on load
-const AUTO_DISMISS_MS = 2 * 60 * 1000;      // 2 min: remove completed/failed
+const AUTO_DISMISS_MS = 3_000;              // 3s flash, then remove from Active Runs
 
 type Listener = () => void;
 let _listeners: Listener[] = [];
@@ -136,8 +136,8 @@ const INTENT_BORDER: Record<Intent, string> = {
 };
 
 const STATUS_DOT_COLOR: Record<RunStatus, string> = {
-  queued:    "rgba(148,163,184,0.6)",
-  running:   "rgba(201,162,76,0.9)",
+  queued:    "rgba(201,162,76,0.85)",   // gold — waiting to start
+  running:   "hsl(217,80%,64%)",        // blue — in progress
   completed: "rgba(74,222,128,0.85)",
   failed:    "rgba(248,113,113,0.85)",
 };
@@ -696,7 +696,7 @@ function _ActiveRunsInner({ projects, setLocation }: Props & { setLocation: (to:
       </div>
 
       {/* Run cards */}
-      {runs.length === 0 ? (
+      {activeRuns.length === 0 ? (
         <div style={{
           padding: "16px 4px 4px",
           display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
@@ -710,7 +710,7 @@ function _ActiveRunsInner({ projects, setLocation }: Props & { setLocation: (to:
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {[...activeRuns, ...doneRuns].map((run) => (
+          {activeRuns.map((run) => (
             <RunCard
               key={run.id}
               run={run}
@@ -775,22 +775,25 @@ function RunCard({
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
         {/* Status dot / spinner */}
         <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center" }}>
-          {isLive ? (
+          {run.status === "running" ? (
             <Loader
               size={10}
               strokeWidth={2}
-              color="rgba(201,162,76,0.85)"
+              color="hsl(217,80%,64%)"
               style={{ animation: "ar-spin 1s linear infinite" }}
             />
           ) : (
             <span style={{
               width: 7, height: 7, borderRadius: "50%", flexShrink: 0, display: "inline-block",
               background: STATUS_DOT_COLOR[run.status],
-              boxShadow: run.status === "completed"
+              boxShadow: run.status === "queued"
+                ? "0 0 5px rgba(201,162,76,0.45)"
+                : run.status === "completed"
                 ? "0 0 6px rgba(74,222,128,0.5)"
                 : run.status === "failed"
                 ? "0 0 6px rgba(248,113,113,0.5)"
                 : "none",
+              animation: run.status === "queued" ? "ar-pulse 2s ease-in-out infinite" : "none",
             }} />
           )}
         </span>
