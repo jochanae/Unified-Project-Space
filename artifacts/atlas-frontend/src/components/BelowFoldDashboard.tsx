@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PortfolioHealthDashboard } from "./PortfolioHealthDashboard";
 import { useProjectState } from "../hooks/useProjectState";
-import { QuickEditRow, QuickActionLauncherButton, type QuickEditProjectOption } from "./home/QuickEditRow";
-import { QuickActionV2 } from "./home/QuickActionV2";
+import { QuickEditRow, type QuickEditProjectOption } from "./home/QuickEditRow";
+import { ActiveRuns } from "./home/ActiveRuns";
 import { Resume } from "./Resume";
 import { useAuth } from "../hooks/useAuth";
 
@@ -94,18 +94,15 @@ const TYPE_LABEL: Record<ActivityItem["type"], string> = {
   session:  "session",
 };
 
-function ActivityHubCard({
-  onOpenProject,
+function RecentActivityCard({
   projectOptions,
 }: {
-  onOpenProject: (id: number) => void;
   projectOptions: QuickEditProjectOption[];
 }) {
   const { user: authUser } = useAuth();
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
-  const [launcherOpen, setLauncherOpen] = useState(false);
 
   useEffect(() => {
     if (!authUser) return;
@@ -117,21 +114,14 @@ function ActivityHubCard({
   }, [authUser]);
 
   const visible = expanded ? items : items.slice(0, 6);
-  const defaultLauncherProjectId =
-    projectOptions[0]?.id ?? items[0]?.projectId ?? 0;
-  const defaultLauncherProjectName =
-    projectOptions[0]?.name ?? items[0]?.projectName ?? "project";
 
   return (
     <div className="atlas-discovery-card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-            Activity
+            Recent Activity
           </h3>
-          {defaultLauncherProjectId > 0 && (
-            <QuickActionLauncherButton onClick={() => setLauncherOpen(true)} />
-          )}
           <div style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.55 }}>
             {(["commit", "decision", "session"] as const).map(t => (
               <span key={t} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.04em" }}>
@@ -142,21 +132,9 @@ function ActivityHubCard({
           </div>
         </div>
         <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.4 }}>
-          Live
+          Ledger
         </span>
       </div>
-
-      {launcherOpen && defaultLauncherProjectId > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          <QuickActionV2
-            key="quick-action-v2"
-            projects={projectOptions}
-            defaultProjectId={defaultLauncherProjectId}
-            defaultProjectName={defaultLauncherProjectName}
-            onClose={() => setLauncherOpen(false)}
-          />
-        </div>
-      )}
 
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0" }}>
@@ -472,10 +450,16 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
         <PortfolioHealthDashboard onOpenProject={onOpenProject} />
       </RevealOnScroll>
 
-      {/* ACTIVITY HUB */}
+      {/* ACTIVE RUNS */}
       <RevealOnScroll delayMs={80} className="bfd-col-left">
-        <ActivityHubCard
-          onOpenProject={onOpenProject}
+        <ActiveRuns
+          projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        />
+      </RevealOnScroll>
+
+      {/* RECENT ACTIVITY */}
+      <RevealOnScroll delayMs={100} className="bfd-col-left">
+        <RecentActivityCard
           projectOptions={projects.map((p) => ({ id: p.id, name: p.name }))}
         />
       </RevealOnScroll>
