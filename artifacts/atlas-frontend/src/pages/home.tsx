@@ -4596,8 +4596,8 @@ export default function Home() {
             {/* Bottom action bar — hidden at rest, fades in when the surface anchors */}
             <div style={{
               display: "flex", alignItems: "center", marginTop: 12, gap: 2, position: "relative",
-              opacity: (inputFocused || hasInput || attachedFiles.length > 0 || showFocusPicker) ? 1 : 0,
-              pointerEvents: (inputFocused || hasInput || attachedFiles.length > 0 || showFocusPicker) ? "auto" : "none",
+              opacity: (inputFocused || hasInput || attachedFiles.length > 0 || showFocusPicker || homeFocus !== null) ? 1 : 0,
+              pointerEvents: (inputFocused || hasInput || attachedFiles.length > 0 || showFocusPicker || homeFocus !== null) ? "auto" : "none",
               transition: "opacity 200ms ease-in-out",
             }}>
               <div
@@ -5025,7 +5025,7 @@ export default function Home() {
                   }}
                 >
                   <span style={{ position: "relative", width: 6, height: 6, flexShrink: 0 }}>
-                    <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: isParchment ? "rgba(60,60,60,0.35)" : "rgba(201,162,76,0.5)", animation: "atlas-pulse 2.4s ease-in-out infinite" }} />
+                    <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: isParchment ? "rgba(60,60,60,0.35)" : "rgba(201,162,76,0.5)" }} />
                     <span style={{ position: "absolute", inset: 1, borderRadius: "50%", background: isParchment ? "rgba(40,40,40,0.85)" : "var(--atlas-gold)", opacity: 0.9 }} />
                   </span>
                   <span style={{ fontSize: "clamp(9px, 2.4vw, var(--ts-xs))", fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", textTransform: "uppercase", color: isParchment ? "rgba(50,45,40,0.85)" : "var(--atlas-muted)", opacity: 0.9, textAlign: "center", lineHeight: 1.4, overflowWrap: "anywhere" }}>
