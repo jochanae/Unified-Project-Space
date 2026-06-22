@@ -1398,7 +1398,7 @@ function RightPanel({
             flexShrink: 0,
             height: 33,
           }}>
-            {(["workspace", ...(hasLinkedRepo ? ["github"] : [])] as const).map((st) => {
+            {(["workspace", ...(hasLinkedRepo ? ["github"] : [])] as ("workspace" | "github")[]).map((st) => {
               const active = workspaceSubTab === st;
               return (
                 <button
@@ -3325,7 +3325,7 @@ export default function Workspace() {
           ? runs.find((r: any) => (r.runStatus ?? r.status) === "completed")
           : null;
         if (completed) {
-          setLatestRun((prev) => prev && latestRunKey(prev) === latestRunKey(completed) ? prev : completed);
+          setLatestRun((prev: any) => prev && latestRunKey(prev) === latestRunKey(completed) ? prev : completed);
         }
       } catch {}
     };

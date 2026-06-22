@@ -362,6 +362,7 @@ export function ReviewTabPanel({
   onStreamActivityComplete: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
   onPrCreated?: (prUrl: string) => void;
+  onWriteFile?: (path: string) => void;
 }) {
   return (
     <div style={{ flex: 1, height: "100%", overflowY: "auto", padding: "16px 22px 28px" }} className="scrollbar-none">

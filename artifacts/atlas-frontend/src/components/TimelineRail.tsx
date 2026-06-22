@@ -61,10 +61,9 @@ export function TimelineRail({
   const matchingIdx = useMemo(() => new Set(matchList), [matchList]);
 
   useEffect(() => {
-    if (showSearch) {
-      const t = window.setTimeout(() => searchInputRef.current?.focus(), 40);
-      return () => window.clearTimeout(t);
-    }
+    if (!showSearch) return;
+    const t = window.setTimeout(() => searchInputRef.current?.focus(), 40);
+    return () => window.clearTimeout(t);
   }, [showSearch]);
 
   // DOM highlight effect for search hits.
