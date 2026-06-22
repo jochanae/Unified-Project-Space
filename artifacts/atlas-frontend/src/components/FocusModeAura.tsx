@@ -55,27 +55,6 @@ export function FocusModeAura({ focus }: FocusModeAuraProps) {
                 "radial-gradient(ellipse at center, color-mix(in oklab, var(--focus-aura-color) 16%, transparent), transparent 68%)",
             }}
           />
-          <motion.span
-            initial={{ opacity: 0, x: "-42vw", scale: 0.72 }}
-            animate={{
-              opacity: [0, 1, 0.55, 0],
-              x: ["-42vw", "-8vw", "22vw", "44vw"],
-              scale: [0.72, 1, 0.86, 0.68],
-            }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 2.8, ease: "easeInOut", repeat: Infinity, repeatDelay: 1.4 }}
-            style={{
-              position: "absolute",
-              left: "50%",
-              bottom: "calc(22px + env(safe-area-inset-bottom, 0px))",
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: "var(--focus-aura-color)",
-              boxShadow:
-                "0 0 10px var(--focus-aura-color), 0 0 22px color-mix(in oklab, var(--focus-aura-color) 50%, transparent)",
-            }}
-          />
         </motion.div>
       )}
     </AnimatePresence>

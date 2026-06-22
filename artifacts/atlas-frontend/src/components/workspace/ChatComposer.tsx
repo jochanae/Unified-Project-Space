@@ -7,6 +7,7 @@ import { GenerateBlueprintPill } from "../BlueprintsTab";
 import type { WorkspaceLens } from "@/hooks/useChatLens";
 import type { ChatMessage } from "@/pages/workspace";
 import { ComposerActions, type ComposerMenuAction } from "@/components/composer/ComposerActions";
+import { ComposerAuraBorder, type AuraMode } from "@/components/composer/ComposerAuraBorder";
 // CaptureBar removed from composer (2026-06-09) — intake lives in ForgeIntakeSheet.
 
 
@@ -401,6 +402,16 @@ export function ChatComposer(props: ChatComposerProps) {
           zIndex: 30,
           transition: "padding 320ms cubic-bezier(0.22, 1, 0.36, 1), border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}>
+        {/* Animated border aura — reflects active workspace lens (collapsed state only) */}
+        {!sheetVisible && (() => {
+          const wsLensToAuraMode: Record<WorkspaceLens, AuraMode> = {
+            build:    "build",
+            flow:     "think",
+            scenario: "decide",
+            look:     "axiom",
+          };
+          return <ComposerAuraBorder mode={wsLensToAuraMode[wsLens] ?? "axiom"} borderRadius={0} />;
+        })()}
         {/* Grip handle — visible only in expanded sheet mode. */}
         {sheetVisible && (
           <div

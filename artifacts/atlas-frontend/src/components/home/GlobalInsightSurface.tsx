@@ -16,6 +16,7 @@ import { useThemeMode } from "@/lib/theme";
 import { GenesisCard } from "./GenesisCard";
 import { GlobalInsightRenderer } from "./GlobalInsightRenderer";
 import { ComposerActions, type ComposerMenuAction } from "@/components/composer/ComposerActions";
+import { ComposerAuraBorder } from "@/components/composer/ComposerAuraBorder";
 import InlineSketchOffer from "@/components/chat/InlineSketchOffer";
 import SketchReveal from "@/components/chat/SketchReveal";
 import { DeepDiveSheet } from "@/components/DeepDiveSheet";
@@ -787,6 +788,9 @@ export function GlobalInsightSurface({
           background: "transparent",
         }}
       >
+        {/* Aura wrapper: ComposerAuraBorder sits behind the composer box */}
+        <div style={{ position: "relative", borderRadius: 16 }}>
+        <ComposerAuraBorder mode="axiom" />
         <div
           style={{
             position: "relative",
@@ -1022,6 +1026,7 @@ export function GlobalInsightSurface({
             </div>
           </div>
         </div>
+        </div>{/* end aura wrapper */}
       </div>
 
       <DeepDiveSheet
