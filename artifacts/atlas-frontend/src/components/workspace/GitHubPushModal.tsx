@@ -232,16 +232,23 @@ export function GitHubPushModal({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 0" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M8 1C4.13 1 1 4.13 1 8c0 3.09 2 5.71 4.78 6.64.35.06.48-.15.48-.34v-1.2c-1.94.42-2.35-.94-2.35-.94-.32-.81-.78-1.03-.78-1.03-.64-.43.05-.42.05-.42.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.93-1.55-.18-3.18-.77-3.18-3.44 0-.76.27-1.38.72-1.87-.07-.18-.31-.88.07-1.84 0 0 .59-.19 1.92.72A6.6 6.6 0 018 4.82c.59 0 1.19.08 1.74.23 1.33-.9 1.92-.72 1.92-.72.38.96.14 1.66.07 1.84.45.49.72 1.11.72 1.87 0 2.68-1.63 3.26-3.19 3.44.25.22.48.64.48 1.3v1.92c0 .19.13.4.48.33C13 13.71 15 11.09 15 8c0-3.87-3.13-7-7-7z" fill="currentColor" style={{ color: "var(--atlas-gold)" }} />
-              </svg>
+              {linkedRepo ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1C4.13 1 1 4.13 1 8c0 3.09 2 5.71 4.78 6.64.35.06.48-.15.48-.34v-1.2c-1.94.42-2.35-.94-2.35-.94-.32-.81-.78-1.03-.78-1.03-.64-.43.05-.42.05-.42.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.93-1.55-.18-3.18-.77-3.18-3.44 0-.76.27-1.38.72-1.87-.07-.18-.31-.88.07-1.84 0 0 .59-.19 1.92.72A6.6 6.6 0 018 4.82c.59 0 1.19.08 1.74.23 1.33-.9 1.92-.72 1.92-.72.38.96.14 1.66.07 1.84.45.49.72 1.11.72 1.87 0 2.68-1.63 3.26-3.19 3.44.25.22.48.64.48 1.3v1.92c0 .19.13.4.48.33C13 13.71 15 11.09 15 8c0-3.87-3.13-7-7-7z" fill="currentColor" style={{ color: "var(--atlas-gold)" }} />
+                </svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 12.5V14h1.5l8.06-8.06-1.5-1.5L2 12.5zM13.71 4.29a1 1 0 000-1.41l-1.59-1.59a1 1 0 00-1.41 0l-1.24 1.24 3 3 1.24-1.24z" fill="currentColor" style={{ color: "var(--atlas-gold)" }} />
+                </svg>
+              )}
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)" }}>
-                Push to GitHub
+                {linkedRepo ? "Push to GitHub" : "Apply Changes"}
                 {fileEdits.length > 1 && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: "var(--atlas-gold)", opacity: 0.7, fontFamily: "var(--app-font-mono)" }}>{fileEdits.length} files</span>}
               </div>
               {linkedRepo && <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>{linkedRepo.fullName}</div>}
+              {!linkedRepo && <div style={{ fontSize: 10, color: "var(--atlas-muted)", marginTop: 1 }}>Writes directly to workspace · GitHub optional</div>}
             </div>
           </div>
           <button onClick={onClose} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 18, lineHeight: 1, padding: "4px 6px", opacity: 0.5 }} onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")} onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}>×</button>
@@ -439,9 +446,14 @@ export function GitHubPushModal({
                   }
                 }}
                 disabled={localApplying}
-                style={{ padding: "8px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: localApplied ? "rgba(52,211,153,0.1)" : "var(--atlas-glass-bg)", border: `1px solid ${localApplied ? "rgba(52,211,153,0.3)" : "var(--atlas-border)"}`, color: localApplied ? "rgba(52,211,153,0.8)" : "var(--atlas-muted)", cursor: localApplying ? "default" : "pointer", opacity: localApplying ? 0.55 : 1, transition: "all 150ms ease" }}
+                style={localApplied
+                  ? { padding: "8px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", color: "rgba(52,211,153,0.8)", cursor: "default", opacity: 1, transition: "all 150ms ease" }
+                  : linkedRepo
+                    ? { padding: "8px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "var(--atlas-glass-bg)", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: localApplying ? "default" : "pointer", opacity: localApplying ? 0.55 : 1, transition: "all 150ms ease" }
+                    : { padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: localApplying ? "default" : "pointer", opacity: localApplying ? 0.55 : 1, transition: "opacity 160ms ease" }
+                }
               >
-                {localApplying ? "Applying…" : localApplied ? "✓ Applied" : "Apply to workspace"}
+                {localApplying ? "Applying…" : localApplied ? "✓ Applied" : linkedRepo ? "Apply to workspace" : "Apply Changes →"}
               </button>
               <button
                 onClick={async () => {
@@ -464,25 +476,27 @@ export function GitHubPushModal({
               >
                 {typechecking ? "Checking…" : "Pre-check →"}
               </button>
-              <button
-                onClick={() => {
-                  if (!useNewBranch) {
-                    if (!confirmPush) {
-                      setConfirmPush(true);
-                      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
-                      confirmTimerRef.current = setTimeout(() => setConfirmPush(false), 5000);
-                      return;
+              {linkedRepo && (
+                <button
+                  onClick={() => {
+                    if (!useNewBranch) {
+                      if (!confirmPush) {
+                        setConfirmPush(true);
+                        if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+                        confirmTimerRef.current = setTimeout(() => setConfirmPush(false), 5000);
+                        return;
+                      }
+                      if (confirmTimerRef.current) { clearTimeout(confirmTimerRef.current); confirmTimerRef.current = null; }
+                      setConfirmPush(false);
                     }
-                    if (confirmTimerRef.current) { clearTimeout(confirmTimerRef.current); confirmTimerRef.current = null; }
-                    setConfirmPush(false);
-                  }
-                  void handlePush();
-                }}
-                disabled={pushing || !linkedRepo}
-                style={{ padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: pushing || !linkedRepo ? "not-allowed" : "pointer", opacity: pushing || !linkedRepo ? 0.5 : 1, transition: "opacity 160ms ease" }}
-              >
-                {pushing ? "Pushing…" : !useNewBranch && confirmPush ? "Confirm push →" : fileEdits.length > 1 ? `Push ${fileEdits.length} files →` : "Push to GitHub"}
-              </button>
+                    void handlePush();
+                  }}
+                  disabled={pushing}
+                  style={{ padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: pushing ? "not-allowed" : "pointer", opacity: pushing ? 0.5 : 1, transition: "opacity 160ms ease" }}
+                >
+                  {pushing ? "Pushing…" : !useNewBranch && confirmPush ? "Confirm push →" : fileEdits.length > 1 ? `Push ${fileEdits.length} files →` : "Push to GitHub"}
+                </button>
+              )}
             </div>
           </div>
         )}
