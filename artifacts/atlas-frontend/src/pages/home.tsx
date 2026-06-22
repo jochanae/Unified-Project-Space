@@ -2751,7 +2751,7 @@ export default function Home() {
     try { sessionStorage.setItem("atlas-choice-shown", "1"); } catch {}
     setOverlayDismissed(true);
   };
-  const showOverlay = !isLoading && projects !== undefined && projects.length === 0 && !overlayDismissed;
+  const showOverlay = false; // FirstRunOverlay retired — home is the natural empty state
   const firstHandoffMessageIndex = (nexusChat.messages as HomeMessage[]).findIndex(m => m.role === "assistant" && !!m.handoffSignal);
 
   const navigateToProject = useCallback(
