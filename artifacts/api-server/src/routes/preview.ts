@@ -78,6 +78,7 @@ function buildComponentPreview(componentCode: string, componentName: string): st
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -173,9 +174,13 @@ function stripModuleStatements(code: string): string {
     // Remove: import ... from '...'  /  import '...'
     .replace(/^import\s+.*?from\s+['"][^'"]*['"]\s*;?\s*$/gm, '')
     .replace(/^import\s+['"][^'"]*['"]\s*;?\s*$/gm, '')
-    // Remove: export default  /  export { ... }  /  export const/function/class
+    // export default function/class Name → function/class Name (keeps name accessible in outer scope)
+    .replace(/^export\s+default\s+(function|class)\s+(\w+)/gm, '$1 $2')
+    // export default <expr>; → var __defaultExport = <expr>;
     .replace(/^export\s+default\s+/gm, 'var __defaultExport = ')
+    // export { ... }  → remove
     .replace(/^export\s+\{[^}]*\}\s*;?\s*$/gm, '')
+    // export const/let/var/function/class Name → const/let/var/function/class Name
     .replace(/^export\s+(const|let|var|function|class)\s+/gm, '$1 ');
 }
 
@@ -229,6 +234,7 @@ function buildMultiFilePreview(files: Array<{ path: string; content: string }>):
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -258,20 +264,26 @@ function buildMultiFilePreview(files: Array<{ path: string; content: string }>):
     /* globals React, ReactDOM */
     const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
 
-    // Stub react-router-dom so apps that import it don't crash
-    const __routerStubs = {
-      BrowserRouter: ({ children }) => children,
-      HashRouter: ({ children }) => children,
-      MemoryRouter: ({ children }) => children,
-      Routes: ({ children }) => children,
-      Route: ({ element }) => element ?? null,
-      Link: ({ children, to, ...p }) => React.createElement('a', { href: to ?? '#', ...p }, children),
-      NavLink: ({ children, to, ...p }) => React.createElement('a', { href: to ?? '#', ...p }, children),
-      useNavigate: () => () => {},
-      useLocation: () => ({ pathname: '/', search: '', hash: '' }),
-      useParams: () => ({}),
-      Outlet: () => null,
+    // Stub react-router-dom — all names exposed as standalone vars so stripped imports don't leave undefineds
+    var BrowserRouter = ({ children }) => children;
+    var HashRouter = ({ children }) => children;
+    var MemoryRouter = ({ children }) => children;
+    var Routes = ({ children }) => children;
+    var Route = ({ element }) => element ?? null;
+    var Navigate = ({ to }) => null;
+    var Outlet = () => null;
+    var Link = ({ children, to, className, style, onClick }) =>
+      React.createElement('a', { href: to ?? '#', className, style, onClick }, children);
+    // NavLink supports both element children and render-prop children ({ isActive }) => ...
+    var NavLink = ({ children, to, className, style, onClick }) => {
+      const isActive = typeof window !== 'undefined' && window.location.pathname === to;
+      const resolvedChildren = typeof children === 'function' ? children({ isActive }) : children;
+      const resolvedClass = typeof className === 'function' ? className({ isActive }) : className;
+      return React.createElement('a', { href: to ?? '#', className: resolvedClass, style, onClick }, resolvedChildren);
     };
+    var useNavigate = () => () => {};
+    var useLocation = () => ({ pathname: '/', search: '', hash: '' });
+    var useParams = () => ({});
 
     class ErrorBoundary extends React.Component {
       constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -291,12 +303,14 @@ function buildMultiFilePreview(files: Array<{ path: string; content: string }>):
       ? ${componentName}
       : (typeof __defaultExport !== 'undefined' ? __defaultExport : null);
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
+    const rootEl = document.getElementById('root');
+    if (!rootEl) { throw new Error('#root element not found'); }
+    const root = ReactDOM.createRoot(rootEl);
     root.render(
       React.createElement(ErrorBoundary, null,
         RootComponent
-          ? React.createElement(__routerStubs.MemoryRouter, null, React.createElement(RootComponent))
-          : React.createElement('div', { className: 'error-banner' }, 'Component "${componentName}" not found')
+          ? React.createElement(MemoryRouter, null, React.createElement(RootComponent))
+          : React.createElement('div', { style: { padding: 16, color: '#ef4444', fontFamily: 'monospace' } }, 'Component "${componentName}" not found in generated code')
       )
     );
   </script>
