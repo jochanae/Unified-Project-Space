@@ -1,0 +1,1 @@
+ALTER TABLE public.finance_entries ADD COLUMN method TEXT;

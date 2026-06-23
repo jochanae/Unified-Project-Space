@@ -925,69 +925,6 @@ export function FilesPanel({
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Header breadcrumb */}
-      <div style={{ padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-        <button
-          onClick={() => { onSwitchToSource?.(); }}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            background: "rgba(255,255,255,0.04)",
-            border: "0.5px solid var(--atlas-border)",
-            borderRadius: 4, cursor: "pointer", padding: "3px 7px",
-            color: "var(--atlas-fg)",
-            fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-            flexShrink: 0, opacity: 0.75,
-          }}
-          title="Manage sources"
-        >
-          + source
-        </button>
-
-        {selectedRepo && (
-          <>
-            <span style={{ color: "var(--atlas-border)", fontSize: 10, flexShrink: 0 }}>/</span>
-            <button
-              onClick={() => { setFilesSubTab("files"); setView("tree"); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
-              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "tree" ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "tree" ? 1 : 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 }}
-            >
-              {selectedRepo.name}
-            </button>
-          </>
-        )}
-        {selectedPath && (
-          <>
-            <span style={{ color: "var(--atlas-border)", fontSize: 10, flexShrink: 0 }}>/</span>
-            <span style={{ color: "var(--atlas-gold)", fontSize: 10, fontFamily: "var(--app-font-mono)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>
-              {selectedPath.split("/").pop()}
-            </span>
-          </>
-        )}
-      </div>
-
-      {selectedRepo && (
-        <RepoControlBar
-          repoFullName={selectedRepo.fullName}
-          scanStatus={scanStatus}
-          importStatus={importStatus}
-          importResult={importResult}
-          permissionStatus={githubPermissionStatus}
-          statusLabel={githubStatusLabel}
-          onRunImport={runFullImport}
-          onHydrate={() => { if (selectedRepo && token) runAutoScan(selectedRepo, token); }}
-          onUnlink={unlinkRepo}
-          onConnectGitHub={async () => {
-            try {
-              const { stashOauthReturn } = await import("@/lib/oauthReturn");
-              stashOauthReturn();
-              const res = await fetch("/api/github/oauth/start", { method: "GET", credentials: "include", headers: { Accept: "application/json" } });
-              if (res.status === 401) { window.location.href = "/login?reason=session_expired"; return; }
-              const data = await res.json();
-              if (data.url) window.location.href = data.url;
-            } catch {}
-          }}
-          isUnlinking={isUnlinking}
-        />
-      )}
 
       {selectedRepo && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>

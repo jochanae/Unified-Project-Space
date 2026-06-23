@@ -990,7 +990,7 @@ function ConnectionsTab({
 }
 
 // ── DatabaseTab ──────────────────────────────────────────────────────────────
-type DbSection = "connection" | "secrets" | "env" | "schema";
+type DbSection = "connection" | "env" | "schema";
 
 function DatabaseTab({
   projectId,
@@ -1023,7 +1023,6 @@ function DatabaseTab({
 
   const sections: { id: DbSection; label: string }[] = [
     { id: "connection", label: "Connection" },
-    { id: "secrets", label: "Secrets 🔒" },
     { id: "env", label: "Environment" },
     { id: "schema", label: "Schema" },
   ];
@@ -1131,16 +1130,8 @@ function DatabaseTab({
           </div>
         )}
 
-        {section === "secrets" && (
-          <SecretsPanel projectId={projectId} projectName={projectName} />
-        )}
-
         {section === "env" && (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
-            <span style={{ ...muted, fontSize: 11, opacity: 0.45, textAlign: "center", lineHeight: 1.7 }}>
-              Environment variables<br />coming soon
-            </span>
-          </div>
+          <SecretsPanel projectId={projectId} projectName={projectName} />
         )}
 
         {section === "schema" && (
@@ -1459,27 +1450,45 @@ function SourceTab({
                         </div>
                       </div>
                     </button>
-                    <button
-                      title={`Create a new project for ${repo.name}`}
-                      onClick={() => {
-                        createProjectMut.mutate(
-                          { data: { name: repo.name } },
-                          {
-                            onSuccess: (newProject) => {
-                              updateProjectMut.mutate(
-                                { id: newProject.id, data: { linkedRepo: serializeLinkedRepo(repo) } },
-                                { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); navigate(`/project/${newProject.id}`); } }
-                              );
-                            },
-                          }
-                        );
-                      }}
-                      disabled={createProjectMut.isPending}
-                      style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "6px 9px", borderRadius: 6, background: "rgba(201,162,76,0.06)", border: "1px solid rgba(201,162,76,0.22)", cursor: createProjectMut.isPending ? "not-allowed" : "pointer", color: "rgba(201,162,76,0.85)", opacity: createProjectMut.isPending ? 0.4 : 1 }}
-                    >
-                      <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 1v10M1 6h10" /></svg>
-                      <span style={{ fontSize: 9, ...mono, letterSpacing: "0.05em" }}>project</span>
-                    </button>
+                    {isLinked ? (
+                      <button
+                        title={`Unlink ${repo.name} from this project`}
+                        onClick={() => {
+                          updateProjectMut.mutate(
+                            { id: projectId, data: { linkedRepo: null } },
+                            { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); onLinkedRepoChange(null); } }
+                          );
+                        }}
+                        disabled={updateProjectMut.isPending}
+                        style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "6px 9px", borderRadius: 6, background: "transparent", border: "1px solid rgba(239,68,68,0.2)", cursor: updateProjectMut.isPending ? "not-allowed" : "pointer", color: "rgba(252,165,165,0.7)", opacity: updateProjectMut.isPending ? 0.4 : 1, fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em", transition: "border-color 160ms, color 160ms" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; e.currentTarget.style.color = "rgba(252,165,165,0.95)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(239,68,68,0.2)"; e.currentTarget.style.color = "rgba(252,165,165,0.7)"; }}
+                      >
+                        {updateProjectMut.isPending ? "unlinking…" : "Unlink"}
+                      </button>
+                    ) : (
+                      <button
+                        title={`Create a new project for ${repo.name}`}
+                        onClick={() => {
+                          createProjectMut.mutate(
+                            { data: { name: repo.name } },
+                            {
+                              onSuccess: (newProject) => {
+                                updateProjectMut.mutate(
+                                  { id: newProject.id, data: { linkedRepo: serializeLinkedRepo(repo) } },
+                                  { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); navigate(`/project/${newProject.id}`); } }
+                                );
+                              },
+                            }
+                          );
+                        }}
+                        disabled={createProjectMut.isPending}
+                        style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "6px 9px", borderRadius: 6, background: "rgba(201,162,76,0.06)", border: "1px solid rgba(201,162,76,0.22)", cursor: createProjectMut.isPending ? "not-allowed" : "pointer", color: "rgba(201,162,76,0.85)", opacity: createProjectMut.isPending ? 0.4 : 1 }}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 1v10M1 6h10" /></svg>
+                        <span style={{ fontSize: 9, ...mono, letterSpacing: "0.05em" }}>project</span>
+                      </button>
+                    )}
                   </div>
                 );
               })}
