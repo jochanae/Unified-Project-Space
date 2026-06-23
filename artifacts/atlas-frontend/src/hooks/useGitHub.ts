@@ -69,7 +69,7 @@ function normalizeGitHubStatus(data: GitHubStatusResponse): NormalizedGitHubStat
     label: status === "connected"
       ? "GitHub connected"
       : status === "read-only"
-        ? "Read-only (no personal token)"
+        ? "Connected (read-only — add a PAT to enable push)"
         : "Not connected",
     tokenHeader: canWrite ? "__account__" : canRead && hasServerToken ? "__server__" : null,
   };

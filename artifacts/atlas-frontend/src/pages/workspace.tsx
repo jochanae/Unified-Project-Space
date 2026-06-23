@@ -711,7 +711,7 @@ function GitHubSettingsTab({ projectId }: { projectId: number }) {
           <div style={{ ...mono, fontSize: 9, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.55, marginBottom: 10 }}>Enable Write Access</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.65, opacity: 0.7 }}>
-              Add a personal access token with <span style={{ ...mono, color: "var(--atlas-gold)", opacity: 0.9 }}>repo</span> scope to allow Atlas to push commits.
+              Your GitHub account is connected but this environment doesn't have a personal access token with <span style={{ ...mono, color: "var(--atlas-gold)", opacity: 0.9 }}>repo</span> scope. Add one below to enable pushing commits. This is stored at the account level — all projects inherit it automatically.
             </div>
             <input
               type="password"
