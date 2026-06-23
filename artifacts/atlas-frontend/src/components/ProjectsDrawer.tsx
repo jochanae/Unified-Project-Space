@@ -3,7 +3,7 @@ import { useParkedCount } from "@/hooks/useParkedCount";
 import { Project } from "@workspace/api-client-react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
-import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Hammer, Compass, Archive, LayoutDashboard, Globe, Wand2, KeyRound, LayoutGrid } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Hammer, Archive, LayoutDashboard, Globe, Wand2 } from "lucide-react";
 import { CompactReadinessRing } from "./ReadinessRing";
 import { LifecycleGlyph } from "./LifecycleGlyph";
 
@@ -349,12 +349,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
             <NavRow icon={<Wand2 size={14} strokeWidth={1.6} />} label="Specify Change" onClick={() => { onOpenSpecify(); onClose(); }} />
           )}
           <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={() => navigate("/workshop")} />
-          {activeProjectId && (
-            <NavRow icon={<LayoutGrid size={14} strokeWidth={1.6} />} label="Workbench" onClick={() => { navigate(`/project/${activeProjectId}?tab=workbench`); onClose(); }} />
-          )}
-          <NavRow icon={<Compass size={14} strokeWidth={1.6} />} label="Project Compass" onClick={() => navigate("/compass")} />
           <NavRow icon={<Archive size={14} strokeWidth={1.6} />} label="The Vault" onClick={() => navigate("/vault")} />
-          <NavRow icon={<KeyRound size={14} strokeWidth={1.6} />} label="Secrets" onClick={() => navigate("/secrets")} />
         </div>
 
         {/* User footer */}

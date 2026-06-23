@@ -18,7 +18,6 @@ import EntryDetail from "./pages/entry-detail";
 import Workshop from "./pages/workshop";
 import CodePage from "./pages/code";
 import ConnectorsPage from "./pages/connectors";
-import ProjectCompass from "./pages/project-compass";
 import Vault from "./pages/vault";
 import MasterMap from "./pages/master-map";
 
@@ -210,14 +209,14 @@ function Router() {
           <Route path="/ledger" component={Ledger} />
           <Route path="/ledger/:projectId" component={Ledger} />
           <Route path="/parking" component={ParkingLot} />
-          <Route path="/guard-report" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/compass", { replace: true }), []); return null; }} />
+          <Route path="/guard-report" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/home", { replace: true }), []); return null; }} />
+          <Route path="/compass" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/home", { replace: true }), []); return null; }} />
           <Route path="/entry/:id" component={EntryDetail} />
           <Route path="/sessions" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/home", { replace: true }), []); return null; }} />
           
           <Route path="/workshop" component={Workshop} />
           <Route path="/code" component={CodePage} />
           <Route path="/connectors" component={ConnectorsPage} />
-          <Route path="/compass" component={ProjectCompass} />
           <Route path="/terms" component={Terms} />
           <Route path="/privacy" component={Privacy} />
           <Route path="/pricing" component={Pricing} />
