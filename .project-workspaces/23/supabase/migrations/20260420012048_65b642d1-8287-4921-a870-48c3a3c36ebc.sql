@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Anon can view social funnels by share token" ON public.marketing_assets;

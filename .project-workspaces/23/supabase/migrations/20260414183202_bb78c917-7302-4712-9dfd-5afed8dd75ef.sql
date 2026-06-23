@@ -1,0 +1,1 @@
+CREATE POLICY "Anon can insert subscribers via public forms" ON public.subscribers FOR INSERT TO anon WITH CHECK (true);
