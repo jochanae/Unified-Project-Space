@@ -263,7 +263,7 @@ type ManifestDecisionResponse = {
   componentName?: string;
 };
 
-type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "blueprints" | "connections" | "secrets" | "jobs" | "mcp" | "image" | "forge" | "artifacts" | "workbench" | "manifest";
+type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "blueprints" | "connections" | "jobs" | "mcp" | "image" | "forge" | "artifacts" | "workbench" | "manifest";
 type WorkspaceLeftTab = "chat" | "review" | "diff" | "blueprints" | "terminal" | "artifacts";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 const OPENING_MESSAGE_STORAGE_KEY = "atlas-opening-message";
@@ -913,15 +913,20 @@ function ConnectionsTab({
 }
 
 // ── DatabaseTab ──────────────────────────────────────────────────────────────
+type DbSection = "connection" | "secrets" | "env" | "schema";
+
 function DatabaseTab({
   projectId,
+  projectName,
   dbUrl,
   onDbUrlChange,
 }: {
   projectId: number;
+  projectName: string;
   dbUrl: string | null;
   onDbUrlChange: (url: string | null) => void;
 }) {
+  const [section, setSection] = useState<DbSection>("connection");
   const [value, setValue] = useState("");
   const mono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
   const muted: React.CSSProperties = { color: "var(--atlas-muted)", ...mono };
@@ -939,77 +944,133 @@ function DatabaseTab({
     onDbUrlChange(null);
   };
 
+  const sections: { id: DbSection; label: string }[] = [
+    { id: "connection", label: "Connection" },
+    { id: "secrets", label: "Secrets 🔒" },
+    { id: "env", label: "Environment" },
+    { id: "schema", label: "Schema" },
+  ];
+
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ padding: "7px 14px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
-        <span style={{ ...mono, fontSize: 9, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.55 }}>
-          Database Connection
-        </span>
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
-        {dbUrl ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 8, background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.2)" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 6px rgba(74,222,128,0.5)", flexShrink: 0 }} />
-              <span style={{ ...mono, fontSize: 11, color: "var(--atlas-fg)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                {dbUrl.replace(/:[^:@]*@/, ":***@")}
-              </span>
-            </div>
-            <div style={{ fontSize: 11, ...muted, opacity: 0.55, lineHeight: 1.6 }}>
-              Atlas can reference this schema when answering questions about your database structure.
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" onClick={() => {
-                const next = window.prompt("Paste new PostgreSQL connection string:");
-                if (next === null) return;
-                if (!next.trim()) { remove(); return; }
-                try { localStorage.setItem(`atlas-db-url-${projectId}`, next.trim()); } catch {}
-                onDbUrlChange(next.trim());
-              }} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--atlas-border)", background: "transparent", color: "var(--atlas-gold)", fontSize: 10, ...mono, letterSpacing: "0.06em", cursor: "pointer" }}>
-                Change
-              </button>
-              <button type="button" onClick={remove} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(239,68,68,0.25)", background: "transparent", color: "rgba(252,165,165,0.85)", fontSize: 10, ...mono, letterSpacing: "0.06em", cursor: "pointer" }}>
-                Remove
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 11, ...muted, opacity: 0.6, lineHeight: 1.7 }}>
-              Paste your project's Postgres connection string so Atlas can inspect its schema.
-            </div>
-            <input
-              type="password"
-              value={value}
-              onChange={e => setValue(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") save(); }}
-              placeholder="postgres://user:pass@host/db"
-              autoComplete="off"
-              style={{
-                width: "100%", padding: "10px 12px", borderRadius: 8,
-                background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
-                color: "var(--atlas-fg)", fontSize: 12, ...mono,
-                outline: "none", boxSizing: "border-box",
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
-              onBlur={e => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
-            />
+      {/* Section pill bar */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 4,
+        padding: "0 10px", height: 36,
+        borderBottom: "1px solid var(--atlas-border)",
+        flexShrink: 0, overflowX: "auto",
+      }} className="scrollbar-none">
+        {sections.map(s => {
+          const active = section === s.id;
+          return (
             <button
+              key={s.id}
               type="button"
-              disabled={!value.trim()}
-              onClick={save}
+              onClick={() => setSection(s.id)}
               style={{
-                padding: "9px", borderRadius: 8,
-                background: value.trim() ? "rgba(201,162,76,0.14)" : "var(--atlas-surface)",
-                border: `1px solid ${value.trim() ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
-                color: value.trim() ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                fontSize: 10, ...mono, letterSpacing: "0.12em", textTransform: "uppercase",
-                cursor: value.trim() ? "pointer" : "not-allowed",
-                transition: "all 120ms ease",
+                padding: "4px 10px", borderRadius: 999, whiteSpace: "nowrap", flexShrink: 0,
+                border: `1px solid ${active ? "var(--atlas-gold)" : "var(--atlas-border)"}`,
+                background: active ? "rgba(201,162,76,0.10)" : "transparent",
+                color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                cursor: "pointer", fontFamily: "var(--app-font-mono)",
+                fontSize: 9.5, letterSpacing: "0.08em", textTransform: "uppercase",
               }}
             >
-              Connect
+              {s.label}
             </button>
+          );
+        })}
+      </div>
+
+      {/* Section content */}
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {section === "connection" && (
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+            {dbUrl ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 8, background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.2)" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 6px rgba(74,222,128,0.5)", flexShrink: 0 }} />
+                  <span style={{ ...mono, fontSize: 11, color: "var(--atlas-fg)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                    {dbUrl.replace(/:[^:@]*@/, ":***@")}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, ...muted, opacity: 0.55, lineHeight: 1.6 }}>
+                  Atlas can reference this schema when answering questions about your database structure.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" onClick={() => {
+                    const next = window.prompt("Paste new PostgreSQL connection string:");
+                    if (next === null) return;
+                    if (!next.trim()) { remove(); return; }
+                    try { localStorage.setItem(`atlas-db-url-${projectId}`, next.trim()); } catch {}
+                    onDbUrlChange(next.trim());
+                  }} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--atlas-border)", background: "transparent", color: "var(--atlas-gold)", fontSize: 10, ...mono, letterSpacing: "0.06em", cursor: "pointer" }}>
+                    Change
+                  </button>
+                  <button type="button" onClick={remove} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(239,68,68,0.25)", background: "transparent", color: "rgba(252,165,165,0.85)", fontSize: 10, ...mono, letterSpacing: "0.06em", cursor: "pointer" }}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ fontSize: 11, ...muted, opacity: 0.6, lineHeight: 1.7 }}>
+                  Paste your project's Postgres connection string so Atlas can inspect its schema.
+                </div>
+                <input
+                  type="password"
+                  value={value}
+                  onChange={e => setValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") save(); }}
+                  placeholder="postgres://user:pass@host/db"
+                  autoComplete="off"
+                  style={{
+                    width: "100%", padding: "10px 12px", borderRadius: 8,
+                    background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
+                    color: "var(--atlas-fg)", fontSize: 12, ...mono,
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                  onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
+                  onBlur={e => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+                />
+                <button
+                  type="button"
+                  disabled={!value.trim()}
+                  onClick={save}
+                  style={{
+                    padding: "9px", borderRadius: 8,
+                    background: value.trim() ? "rgba(201,162,76,0.14)" : "var(--atlas-surface)",
+                    border: `1px solid ${value.trim() ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
+                    color: value.trim() ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                    fontSize: 10, ...mono, letterSpacing: "0.12em", textTransform: "uppercase",
+                    cursor: value.trim() ? "pointer" : "not-allowed",
+                    transition: "all 120ms ease",
+                  }}
+                >
+                  Connect
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === "secrets" && (
+          <SecretsPanel projectId={projectId} projectName={projectName} />
+        )}
+
+        {section === "env" && (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+            <span style={{ ...muted, fontSize: 11, opacity: 0.45, textAlign: "center", lineHeight: 1.7 }}>
+              Environment variables<br />coming soon
+            </span>
+          </div>
+        )}
+
+        {section === "schema" && (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+            <span style={{ ...muted, fontSize: 11, opacity: 0.45, textAlign: "center", lineHeight: 1.7 }}>
+              Schema inspector<br />coming soon
+            </span>
           </div>
         )}
       </div>
@@ -1587,19 +1648,6 @@ function RightPanel({
       ),
     },
     {
-      id: "secrets" as RightTab,
-      label: "Secrets",
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-          <rect x="3" y="7" width="10" height="7" rx="1.5" 
-            stroke="currentColor" strokeWidth="1.2"/>
-          <path d="M5 7V5a3 3 0 016 0v2" 
-            stroke="currentColor" strokeWidth="1.2" 
-            strokeLinecap="round"/>
-        </svg>
-      ),
-    },
-    {
       id: "jobs" as RightTab,
       label: "Jobs",
       icon: (
@@ -1902,7 +1950,7 @@ function RightPanel({
               />
             )}
             {workspaceSubTab === "database" && (
-              <DatabaseTab projectId={projectId} dbUrl={dbUrl} onDbUrlChange={onDbUrlChange} />
+              <DatabaseTab projectId={projectId} projectName={projectName} dbUrl={dbUrl} onDbUrlChange={onDbUrlChange} />
             )}
             {workspaceSubTab === "source" && (
               <SourceTab
@@ -1916,12 +1964,7 @@ function RightPanel({
         </div>
       )}
       {tab === "connections" && <ConnectionsTab projectId={projectId} onSwitchToFiles={() => setTab("files")} onOpenAccountSettings={onOpenAccountSettings} showModelPicker={showModelPicker} onShowModelPickerChange={onShowModelPickerChange} />}
-      {tab === "secrets" && (
-        <SecretsPanel 
-          projectId={projectId} 
-          projectName={projectName} 
-        />
-      )}
+
       {tab === "jobs" && (
         <JobsPanel projectId={projectId} />
       )}
