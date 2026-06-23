@@ -24,3 +24,4 @@ export * from "./flowCanvas";
 export * from "./mcp_connections";
 export * from "./image_versions";
 export * from "./scheduled_checks";
+export * from "./zip_imports";

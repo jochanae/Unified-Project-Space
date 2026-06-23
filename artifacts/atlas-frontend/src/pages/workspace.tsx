@@ -1021,16 +1021,12 @@ function DatabaseTab({
 function SourceTab({
   projectId,
   onLinkedRepoChange,
-  onZipTrigger,
-  zipLoaded,
-  zipFileName,
+  onZipFile,
   onSwitchToGitHub,
 }: {
   projectId: number;
   onLinkedRepoChange: (repo: any) => void;
-  onZipTrigger?: () => void;
-  zipLoaded?: boolean;
-  zipFileName?: string;
+  onZipFile?: (file: File) => void;
   onSwitchToGitHub: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -1039,6 +1035,7 @@ function SourceTab({
   const createProjectMut = useCreateProject();
   const updateProjectMut = useUpdateProject();
   const [, navigate] = useLocation();
+
   const [oauthConnected, setOauthConnected] = useState(false);
   const [repos, setRepos] = useState<GhRepo[]>([]);
   const [reposLoading, setReposLoading] = useState(false);
@@ -1046,7 +1043,57 @@ function SourceTab({
   const [autoLinkStatus, setAutoLinkStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [autoLinkResult, setAutoLinkResult] = useState<{ linked: Array<{ projectName: string; repoFullName: string }>; skipped: string[] } | null>(null);
 
+  type ZipImport = { fileName: string; fileCount: number; fileTree: Array<{ path: string; lines: number; truncated: boolean }>; importedAt: string };
+  const [zipImport, setZipImport] = useState<ZipImport | null>(null);
+  const [zipImportLoading, setZipImportLoading] = useState(true);
+  const [zipUploadStatus, setZipUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [zipUploadError, setZipUploadError] = useState<string | null>(null);
+  const [showFileTree, setShowFileTree] = useState(false);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+
   const mono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
+
+  // Load persisted zip import on mount / project change
+  useEffect(() => {
+    setZipImportLoading(true);
+    fetch(`/api/projects/${projectId}/zip-import`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => setZipImport(d ?? null))
+      .catch(() => setZipImport(null))
+      .finally(() => setZipImportLoading(false));
+  }, [projectId]);
+
+  const handleZipFile = async (file: File) => {
+    setZipUploadStatus("uploading");
+    setZipUploadError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/zip-import`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-File-Name": file.name,
+        },
+        credentials: "include",
+        body: file,
+      });
+      const data = await res.json() as any;
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setZipImport({ fileName: data.fileName, fileCount: data.fileCount, fileTree: data.fileTree, importedAt: new Date().toISOString() });
+      setZipUploadStatus("done");
+      onZipFile?.(file);
+    } catch (e: any) {
+      setZipUploadStatus("error");
+      setZipUploadError(e?.message ?? "Upload failed");
+    }
+  };
+
+  const handleClearZip = async () => {
+    await fetch(`/api/projects/${projectId}/zip-import`, { method: "DELETE", credentials: "include" });
+    setZipImport(null);
+    setZipUploadStatus("idle");
+    setZipUploadError(null);
+    setShowFileTree(false);
+  };
 
   useEffect(() => {
     fetch("/api/github/status", { credentials: "include" })
@@ -1113,45 +1160,107 @@ function SourceTab({
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px 24px", display: "flex", flexDirection: "column", gap: 20 }} className="scrollbar-none">
 
-        {/* ── Upload ZIP ── */}
+        {/* ── ZIP Import ── */}
         <section>
           <div style={{ ...mono, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.6, marginBottom: 10 }}>
-            Upload ZIP
+            Import ZIP
           </div>
-          <button
-            type="button"
-            onClick={() => onZipTrigger?.()}
-            style={{
-              ...glassCard,
-              width: "100%", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
-              cursor: "pointer", textAlign: "left",
-              borderColor: zipLoaded ? "rgba(201,162,76,0.35)" : "rgba(38,38,38,0.85)",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)")}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = zipLoaded ? "rgba(201,162,76,0.35)" : "rgba(38,38,38,0.85)")}
-          >
-            <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, color: "var(--atlas-fg)", fontWeight: 500 }}>
-                {zipLoaded ? (zipFileName ?? "ZIP loaded") : "Import from ZIP"}
+
+          <input
+            ref={zipInputRef}
+            type="file"
+            accept=".zip"
+            style={{ display: "none" }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleZipFile(f); e.target.value = ""; }}
+          />
+
+          {zipImportLoading ? (
+            <div style={{ padding: "16px 12px", ...mono, fontSize: 10, color: "var(--atlas-muted)", opacity: 0.4 }}>Checking…</div>
+          ) : zipImport ? (
+            <div style={{ ...glassCard, borderColor: "rgba(201,162,76,0.3)", overflow: "hidden" }}>
+              <div style={{ padding: "13px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, color: "var(--atlas-fg)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{zipImport.fileName}</div>
+                  <div style={{ ...mono, fontSize: 10, color: "var(--atlas-muted)", opacity: 0.6, marginTop: 2 }}>
+                    {zipImport.fileCount} file{zipImport.fileCount !== 1 ? "s" : ""} · {new Date(zipImport.importedAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowFileTree(v => !v)}
+                    style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid var(--atlas-border)", background: "transparent", color: "var(--atlas-muted)", fontSize: 9, ...mono, letterSpacing: "0.07em", cursor: "pointer", opacity: 0.7 }}
+                  >
+                    {showFileTree ? "hide" : "files"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => zipInputRef.current?.click()}
+                    style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid var(--atlas-border)", background: "transparent", color: "var(--atlas-gold)", fontSize: 9, ...mono, letterSpacing: "0.07em", cursor: "pointer" }}
+                  >
+                    replace
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearZip}
+                    style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid rgba(239,68,68,0.25)", background: "transparent", color: "rgba(252,165,165,0.8)", fontSize: 9, ...mono, letterSpacing: "0.07em", cursor: "pointer" }}
+                  >
+                    clear
+                  </button>
+                </div>
               </div>
-              <div style={{ ...mono, fontSize: 10, color: "var(--atlas-muted)", opacity: 0.55, marginTop: 3 }}>
-                {zipLoaded ? "Active — files in context" : "No GitHub repo needed"}
-              </div>
+              {showFileTree && zipImport.fileTree.length > 0 && (
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "10px 14px 12px", maxHeight: 200, overflowY: "auto" }} className="scrollbar-none">
+                  {zipImport.fileTree.map(f => (
+                    <div key={f.path} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "2px 0" }}>
+                      <span style={{ fontSize: 10.5, ...mono, color: "var(--atlas-fg)", opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{f.path}</span>
+                      <span style={{ fontSize: 9, ...mono, color: "var(--atlas-muted)", opacity: 0.4, flexShrink: 0 }}>{f.lines}L{f.truncated ? "…" : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {zipLoaded && (
-              <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 999, background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.3)", color: "var(--atlas-gold)", ...mono, letterSpacing: "0.08em", flexShrink: 0 }}>
-                Active
-              </span>
-            )}
-          </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => zipInputRef.current?.click()}
+              disabled={zipUploadStatus === "uploading"}
+              style={{
+                ...glassCard,
+                width: "100%", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+                cursor: zipUploadStatus === "uploading" ? "not-allowed" : "pointer", textAlign: "left",
+                opacity: zipUploadStatus === "uploading" ? 0.7 : 1,
+              }}
+              onMouseEnter={e => { if (zipUploadStatus !== "uploading") e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(38,38,38,0.85)"; }}
+            >
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {zipUploadStatus === "uploading" ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                )}
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, color: "var(--atlas-fg)", fontWeight: 500 }}>
+                  {zipUploadStatus === "uploading" ? "Uploading…" : "Import from ZIP"}
+                </div>
+                <div style={{ ...mono, fontSize: 10, color: zipUploadStatus === "error" ? "rgba(252,165,165,0.75)" : "var(--atlas-muted)", opacity: zipUploadStatus === "error" ? 1 : 0.55, marginTop: 3 }}>
+                  {zipUploadStatus === "error" ? (zipUploadError ?? "Upload failed") : "No GitHub repo needed · persists across sessions"}
+                </div>
+              </div>
+            </button>
+          )}
         </section>
 
-        {/* ── Active Repos ── */}
+        {/* ── GitHub Repos ── */}
         <section>
           <div style={{ ...mono, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.6, marginBottom: 10 }}>
             GitHub Repos
@@ -1172,7 +1281,6 @@ function SourceTab({
 
           {!reposLoading && repos.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {/* Auto-link banner */}
               {(allProjects ?? []).some(p => !p.linkedRepo) && (
                 <div style={{ ...glassCard, padding: "10px 14px", borderColor: "rgba(201,162,76,0.2)", marginBottom: 4 }}>
                   {autoLinkStatus !== "done" ? (
@@ -1301,6 +1409,7 @@ function RightPanel({
   onOpenConnections,
   onOpenAccountSettings,
   onZipTrigger,
+  onZipFile,
   zipLoaded,
   zipFileName,
   showModelPicker,
@@ -1361,6 +1470,7 @@ function RightPanel({
   onOpenConnections?: () => void;
   onOpenAccountSettings: () => void;
   onZipTrigger?: () => void;
+  onZipFile?: (file: File) => void;
   zipLoaded?: boolean;
   zipFileName?: string;
   showModelPicker: boolean;
@@ -1798,9 +1908,7 @@ function RightPanel({
               <SourceTab
                 projectId={projectId}
                 onLinkedRepoChange={onLinkedRepoChange}
-                onZipTrigger={onZipTrigger}
-                zipLoaded={zipLoaded}
-                zipFileName={zipFileName}
+                onZipFile={onZipFile}
                 onSwitchToGitHub={() => setWorkspaceSubTab("github")}
               />
             )}
@@ -6941,6 +7049,7 @@ export default function Workspace() {
               const input = document.getElementById("ws-file-input") as HTMLInputElement | null;
               input?.click();
             }}
+            onZipFile={processZip}
             zipLoaded={zipFiles.length > 0}
             zipFileName={zipName}
             showModelPicker={showModelPicker}
@@ -7563,6 +7672,7 @@ export default function Workspace() {
                   const input = document.getElementById("ws-file-input") as HTMLInputElement | null;
                   input?.click();
                 }}
+                onZipFile={processZip}
                 zipLoaded={zipFiles.length > 0}
                 zipFileName={zipName}
                 showModelPicker={showModelPicker}

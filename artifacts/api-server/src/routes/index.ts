@@ -44,6 +44,7 @@ import codegenRouter from "./codegen";
 import errorsRouter from "./errors";
 import browserRouter from "./browser";
 import deployRouter from "./deploy";
+import zipRouter from "./zip";
 
 const router: IRouter = Router();
 
@@ -88,6 +89,7 @@ router.use(requireAuth, artifactsRouter);
 router.use(requireAuth, codegenRouter);
 router.use(requireAuth, browserRouter);
 router.use(requireAuth, deployRouter);
+router.use(requireAuth, zipRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
