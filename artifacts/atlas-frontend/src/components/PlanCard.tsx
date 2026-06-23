@@ -247,7 +247,7 @@ export function PlanCard({
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {step.file.split("/").pop()}
+                        {step.file?.split("/").pop() ?? step.file}
                       </span>
                     )}
                     {step.moscow && (

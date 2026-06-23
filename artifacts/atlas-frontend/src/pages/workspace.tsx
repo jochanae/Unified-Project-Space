@@ -5337,7 +5337,7 @@ export default function Workspace() {
           body: JSON.stringify({
             repo: linkedRepo.fullName, branch, path: fe.path, content: fe.content,
             message: fileEdits.length === 1
-              ? `Atlas: update ${fe.path.split("/").pop()}`
+              ? `Atlas: update ${fe.path?.split("/").pop() ?? "file"}`
               : `Atlas: update ${fileEdits.length} files (${i + 1}/${fileEdits.length})`,
           }),
         });
@@ -7562,7 +7562,7 @@ export default function Workspace() {
                 if (sessionId) {
                   const editsInFlight = messages
                     .filter((m) => m.role === "assistant" && m.fileEdits && m.fileEdits.length > 0)
-                    .slice(-1)[0]?.fileEdits?.map((e) => e.path.split("/").pop()).join(", ") ?? "the proposed changes";
+                    .slice(-1)[0]?.fileEdits?.map((e) => e.path?.split("/").pop() ?? e.path).join(", ") ?? "the proposed changes";
                   doSend(
                     `FILE_EDIT_DECLINED: User reviewed but did not push ${editsInFlight}. Awaiting further instruction.`,
                     sessionId,
