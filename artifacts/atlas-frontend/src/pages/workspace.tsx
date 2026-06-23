@@ -3426,6 +3426,7 @@ export default function Workspace() {
     messagesRef,
     historyMsgCountRef,
     priorLoadedRef: priorLoaded,
+    priorLoadedState,
     sessionId,
     setSessionId,
     ensureSessionId,
@@ -6743,7 +6744,7 @@ export default function Workspace() {
                 <AtlasThinkingBlock thinkingState={thinkingState} />
               ),
               historyMsgCountRef,
-              priorLoaded: priorLoaded.current,
+              priorLoaded: priorLoadedState,
               isHomeHandoff,
               homeHandoffMeta,
               isBrandNewProject,

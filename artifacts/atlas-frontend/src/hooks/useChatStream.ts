@@ -97,6 +97,7 @@ export interface UseChatStreamReturn {
   messagesRef: MutableRefObject<ChatMessage[]>;
   historyMsgCountRef: MutableRefObject<number>;
   priorLoadedRef: MutableRefObject<boolean>;
+  priorLoadedState: boolean;
   sessionId: number | null;
   setSessionId: Dispatch<SetStateAction<number | null>>;
   ensureSessionId: () => Promise<number>;
@@ -202,6 +203,7 @@ export function useChatStream(
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
   const priorLoadedRef = useRef(false);
+  const [priorLoadedState, setPriorLoadedState] = useState(false);
   const historyMsgCountRef = useRef<number>(0);
 
   useEffect(() => {
@@ -230,6 +232,7 @@ export function useChatStream(
   useEffect(() => {
     setMessages([]);
     priorLoadedRef.current = false;
+    setPriorLoadedState(false);
     historyMsgCountRef.current = 0;
     setSessionId(null);
     creatingSessionRef.current = null;
@@ -245,13 +248,14 @@ export function useChatStream(
     query: { enabled: !!sessionId, queryKey: ["messages", sessionId] },
   });
   useEffect(() => {
-    if (!priorMessages || priorMessages.length === 0 || priorLoadedRef.current) return;
+    if (!priorMessages || priorLoadedRef.current) return;
+    priorLoadedRef.current = true;
+    setPriorLoadedState(true);
+    if (priorMessages.length === 0) return;
     if (messagesRef.current.length > 0) {
-      priorLoadedRef.current = true;
       historyMsgCountRef.current = messagesRef.current.length;
       return;
     }
-    priorLoadedRef.current = true;
     historyMsgCountRef.current = priorMessages.length;
     setMessages(priorMessages.map(mapPriorMessage));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -925,6 +929,7 @@ export function useChatStream(
     messagesRef,
     historyMsgCountRef,
     priorLoadedRef,
+    priorLoadedState,
     sessionId,
     setSessionId,
     ensureSessionId,
