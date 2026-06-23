@@ -4,6 +4,7 @@ import http from "http";
 import { mkdirSync, existsSync, readFileSync, rmSync } from "fs";
 import path from "path";
 import { logger } from "../lib/logger";
+import { projectWorkspaceDir } from "../lib/projectWorkspace";
 
 // ── Build-check work dir (separate from live devserver) ───────────────────
 const BUILD_CHECK_DIR = "/tmp/atlas-build-check";
@@ -122,6 +123,52 @@ const state: {
 };
 
 const WORK_DIR = "/tmp/atlas-devserver";
+
+// ── Per-workspace devserver state (one per projectId) ──────────────────────
+interface WsDevState {
+  status: DevStatus;
+  port: number | null;
+  proc: ChildProcess | null;
+  logs: string[];
+  errorMsg: string | null;
+}
+
+const wsStates = new Map<number, WsDevState>();
+
+function getWsState(projectId: number): WsDevState {
+  if (!wsStates.has(projectId)) {
+    wsStates.set(projectId, { status: "idle", port: null, proc: null, logs: [], errorMsg: null });
+  }
+  return wsStates.get(projectId)!;
+}
+
+function addWsLog(st: WsDevState, line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  st.logs.push(trimmed);
+  if (st.logs.length > 300) st.logs.shift();
+}
+
+// Find a free port in the workspace devserver range (5200-5299)
+async function allocateFreePort(): Promise<number> {
+  const usedPorts = new Set(
+    [...wsStates.values()].map(s => s.port).filter((p): p is number => p !== null)
+  );
+  for (let p = 5200; p < 5300; p++) {
+    if (usedPorts.has(p)) continue;
+    const isFree = await new Promise<boolean>((resolve) => {
+      const req = http.request(
+        { hostname: "localhost", port: p, path: "/", method: "HEAD", timeout: 400 },
+        () => resolve(false),
+      );
+      req.on("error", () => resolve(true));
+      req.on("timeout", () => { req.destroy(); resolve(false); });
+      req.end();
+    });
+    if (isFree) return p;
+  }
+  throw new Error("No free ports available in range 5200–5299");
+}
 
 function addLog(line: string) {
   const trimmed = line.trim();
@@ -448,36 +495,26 @@ router.post("/devserver/stop", (_req, res): void => {
 const PROXY_BASE = "/api/devserver/proxy";
 
 // Rewrite absolute-path asset references so they route through this proxy
-function rewriteHtml(html: string): string {
-  // Inject a <base> tag so relative URLs also resolve through the proxy
-  let out = html.replace(/(<head[^>]*>)/i, `$1<base href="${PROXY_BASE}/">`);
-  // Rewrite absolute src / href / action / srcset that start with / (not //)
-  out = out.replace(/((?:src|href|action|srcset)=["'])\/(?!\/)/g, `$1${PROXY_BASE}/`);
-  // Rewrite url() in inline styles
-  out = out.replace(/url\((['"]?)\/(?!\/)/g, `url($1${PROXY_BASE}/`);
+function rewriteHtml(html: string, base = PROXY_BASE): string {
+  let out = html.replace(/(<head[^>]*>)/i, `$1<base href="${base}/">`);
+  out = out.replace(/((?:src|href|action|srcset)=["'])\/(?!\/)/g, `$1${base}/`);
+  out = out.replace(/url\((['"]?)\/(?!\/)/g, `url($1${base}/`);
   return out;
 }
 
-function rewriteCss(css: string): string {
-  return css.replace(/url\((['"]?)\/(?!\/)/g, `url($1${PROXY_BASE}/`);
+function rewriteCss(css: string, base = PROXY_BASE): string {
+  return css.replace(/url\((['"]?)\/(?!\/)/g, `url($1${base}/`);
 }
 
-router.use("/devserver/proxy", (req, res): void => {
-  if (!state.port) {
-    res.status(503).json({ error: "Dev server not running" });
-    return;
-  }
-
+// Generic proxy handler — forwards req to targetPort, rewrites HTML/CSS paths
+function proxyToPort(targetPort: number, proxyBase: string, req: import("express").Request, res: import("express").Response): void {
   const targetPath = req.url || "/";
   const options: http.RequestOptions = {
     hostname: "localhost",
-    port: state.port,
+    port: targetPort,
     path: targetPath,
     method: req.method,
-    headers: {
-      ...req.headers,
-      host: `localhost:${state.port}`,
-    },
+    headers: { ...req.headers, host: `localhost:${targetPort}` },
   };
 
   const proxyReq = http.request(options, (proxyRes) => {
@@ -497,9 +534,7 @@ router.use("/devserver/proxy", (req, res): void => {
         let loc = v;
         loc = loc.replace(/^https?:\/\/localhost:\d+/, "");
         loc = loc.replace(/^https?:\/\/127\.0\.0\.1:\d+/, "");
-        if (loc.startsWith("/") && !loc.startsWith(PROXY_BASE)) {
-          loc = `${PROXY_BASE}${loc}`;
-        }
+        if (loc.startsWith("/") && !loc.startsWith(proxyBase)) loc = `${proxyBase}${loc}`;
         headers[k] = loc;
         continue;
       }
@@ -511,7 +546,7 @@ router.use("/devserver/proxy", (req, res): void => {
       proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
       proxyRes.on("end", () => {
         const raw = Buffer.concat(chunks).toString("utf8");
-        const rewritten = isHtml ? rewriteHtml(raw) : rewriteCss(raw);
+        const rewritten = isHtml ? rewriteHtml(raw, proxyBase) : rewriteCss(raw, proxyBase);
         res.writeHead(proxyRes.statusCode ?? 200, headers);
         res.end(rewritten, "utf8");
       });
@@ -522,11 +557,163 @@ router.use("/devserver/proxy", (req, res): void => {
   });
 
   req.pipe(proxyReq, { end: true });
-
   proxyReq.on("error", (e) => {
-    logger.warn({ err: e }, "Dev server proxy error");
+    logger.warn({ err: e }, "Proxy error");
     if (!res.headersSent) res.status(502).json({ error: "Proxy error" });
   });
+}
+
+// GitHub-repo devserver proxy (existing)
+router.use("/devserver/proxy", (req, res): void => {
+  if (!state.port) { res.status(503).json({ error: "Dev server not running" }); return; }
+  proxyToPort(state.port, PROXY_BASE, req, res);
+});
+
+// ── Workspace devserver routes ─────────────────────────────────────────────
+
+router.post("/devserver/workspace/:projectId/start", (req, res): void => {
+  const projectId = Number(req.params["projectId"]);
+  if (!projectId) { res.status(400).json({ error: "Invalid projectId" }); return; }
+
+  const wsDir = projectWorkspaceDir(projectId);
+  const pkgPath = path.join(wsDir, "package.json");
+  if (!existsSync(pkgPath)) {
+    res.status(400).json({ error: `No package.json in workspace ${projectId} (${wsDir})` });
+    return;
+  }
+
+  const st = getWsState(projectId);
+  if (st.proc) { try { st.proc.kill("SIGTERM"); } catch {} st.proc = null; }
+  st.status = "installing";
+  st.port = null;
+  st.logs = [`Starting workspace ${projectId}…`];
+  st.errorMsg = null;
+
+  res.json({ status: st.status });
+
+  (async () => {
+    try {
+      // Install only if node_modules absent
+      if (!existsSync(path.join(wsDir, "node_modules"))) {
+        const mgr = detectPackageManager(wsDir);
+        addWsLog(st, `Installing with ${mgr}…`);
+        const installArgs = mgr === "pnpm"
+          ? ["install", "--no-frozen-lockfile", "--ignore-workspace"]
+          : mgr === "yarn"
+            ? ["install", "--frozen-lockfile=false"]
+            : ["install", "--legacy-peer-deps"];
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(mgr, installArgs, {
+            cwd: wsDir, shell: true,
+            env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+          });
+          proc.stdout?.on("data", (d: Buffer) => addWsLog(st, d.toString()));
+          proc.stderr?.on("data", (d: Buffer) => addWsLog(st, d.toString()));
+          proc.on("exit", (code) => { if (code === 0) resolve(); else reject(new Error(`install exited ${code}`)); });
+          proc.on("error", reject);
+        });
+      }
+
+      st.status = "starting";
+      const port = await allocateFreePort();
+      const { cmd, args } = detectDevCommand(wsDir);
+      addWsLog(st, `Starting: ${cmd} ${args.join(" ")} on port ${port}…`);
+
+      const proc = spawn(cmd, args, {
+        cwd: wsDir, shell: true,
+        env: {
+          ...process.env,
+          FORCE_COLOR: "0", NO_COLOR: "1",
+          PORT: String(port), HOST: "0.0.0.0", VITE_PORT: String(port),
+        },
+      });
+      st.proc = proc;
+
+      // Port-announce timeout → probe
+      const portTimer = setTimeout(async () => {
+        if (st.status !== "starting") return;
+        addWsLog(st, "Port not announced — probing…");
+        const found = await pollForPort([port, 5173, 3000, 4000].filter(p => p !== OWN_PORT));
+        if (found && st.status === "starting") {
+          st.port = found; st.status = "running";
+          addWsLog(st, `✓ Dev server on port ${found} (probe)`);
+          logger.info({ port: found, projectId }, "Workspace dev server found via probe");
+        } else if (st.status === "starting") {
+          setTimeout(async () => {
+            if (st.status !== "starting") return;
+            const found2 = await pollForPort([port, 5173, 3000].filter(p => p !== OWN_PORT));
+            if (found2) {
+              st.port = found2; st.status = "running";
+              addWsLog(st, `✓ Dev server on port ${found2}`);
+            } else {
+              st.status = "error";
+              st.errorMsg = "Dev server started but no port was reachable after 75 s. Check that the app's package.json has a 'dev' script.";
+              addWsLog(st, "✗ No running port found after timeout");
+            }
+          }, 30_000);
+        }
+      }, 45_000);
+
+      const onData = (d: Buffer) => {
+        const line = d.toString();
+        addWsLog(st, line);
+        if (st.status !== "running") {
+          const detected = detectPort(line) ?? (line.includes(String(port)) && /listen|ready|running|local/i.test(line) ? port : null);
+          if (detected) {
+            clearTimeout(portTimer);
+            st.port = detected; st.status = "running";
+            addWsLog(st, `✓ Running on port ${detected}`);
+            logger.info({ port: detected, projectId }, "Workspace dev server running");
+          }
+        }
+      };
+
+      proc.stdout?.on("data", onData);
+      proc.stderr?.on("data", onData);
+      proc.on("exit", (code) => {
+        clearTimeout(portTimer);
+        if (st.status !== "idle") {
+          if (code !== 0) {
+            st.status = "error";
+            st.errorMsg = `Dev server exited (code ${code}). Check the logs above for details.`;
+            addWsLog(st, `✗ Exited with code ${code}`);
+          } else {
+            st.status = "idle";
+          }
+        }
+        st.proc = null;
+      });
+
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      st.status = "error";
+      st.errorMsg = msg;
+      addWsLog(st, `Error: ${msg}`);
+      logger.error({ err, projectId }, "Workspace dev server start failed");
+    }
+  })();
+});
+
+router.get("/devserver/workspace/:projectId/status", (req, res): void => {
+  const projectId = Number(req.params["projectId"]);
+  const st = getWsState(projectId);
+  res.json({ status: st.status, port: st.port, logs: st.logs.slice(-50), errorMsg: st.errorMsg });
+});
+
+router.post("/devserver/workspace/:projectId/stop", (req, res): void => {
+  const projectId = Number(req.params["projectId"]);
+  const st = wsStates.get(projectId);
+  if (st?.proc) { try { st.proc.kill("SIGTERM"); } catch {} st.proc = null; }
+  if (st) { st.status = "idle"; st.port = null; st.logs = []; st.errorMsg = null; }
+  res.json({ status: "idle" });
+});
+
+router.use("/devserver/workspace/:projectId/proxy", (req, res): void => {
+  const projectId = Number(req.params["projectId"]);
+  const st = wsStates.get(projectId);
+  if (!st?.port) { res.status(503).json({ error: "Dev server not running" }); return; }
+  const wsProxyBase = `/api/devserver/workspace/${projectId}/proxy`;
+  proxyToPort(st.port, wsProxyBase, req, res);
 });
 
 export default router;

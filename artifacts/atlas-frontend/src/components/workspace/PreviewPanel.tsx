@@ -196,6 +196,78 @@ export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refres
   };
   const devError = dsErrorMsg;
 
+  // ── Workspace devserver state (local workspace projects, no GitHub required) ──
+  type WsDsStatus = "idle" | "installing" | "starting" | "running" | "error";
+  const [wsDsStatus, setWsDsStatus] = useState<WsDsStatus>("idle");
+  const [wsDsPort, setWsDsPort] = useState<number | null>(null);
+  const [wsDsLogs, setWsDsLogs] = useState<string[]>([]);
+  const [wsDsErrorMsg, setWsDsErrorMsg] = useState<string | null>(null);
+  const [wsDsStarting, setWsDsStarting] = useState(false);
+  const wsDsLogsEndRef = useRef<HTMLDivElement>(null);
+
+  // Poll workspace devserver status whenever a sessionId is present
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/devserver/workspace/${projectId}/status`, { credentials: "include" });
+        if (!r.ok || cancelled) return;
+        const d = await r.json() as { status: WsDsStatus; port: number | null; logs: string[]; errorMsg: string | null };
+        if (cancelled) return;
+        setWsDsStatus(d.status);
+        setWsDsPort(d.port);
+        setWsDsLogs(d.logs);
+        setWsDsErrorMsg(d.errorMsg);
+        // Auto-switch to local tab when workspace dev server comes up
+        if (d.status === "running") setPreviewMode("local");
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 2000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [projectId, sessionId]);
+
+  // Auto-scroll workspace logs
+  useEffect(() => {
+    wsDsLogsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [wsDsLogs]);
+
+  const WS_DS_LABELS: Record<WsDsStatus, string> = {
+    idle: "Idle", installing: "Installing…", starting: "Starting…", running: "Running", error: "Error",
+  };
+  const WS_DS_PROGRESS: Record<WsDsStatus, number> = {
+    idle: 0, installing: 40, starting: 75, running: 100, error: 0,
+  };
+
+  const handleWsDsStart = async () => {
+    setWsDsStarting(true);
+    setWsDsLogs([]);
+    setWsDsErrorMsg(null);
+    try {
+      const r = await fetch(`/api/devserver/workspace/${projectId}/start`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const d = await r.json() as { status?: string; error?: string };
+      if (!r.ok) throw new Error(d.error ?? "Failed to start");
+      setWsDsStatus((d.status ?? "installing") as WsDsStatus);
+    } catch (e) {
+      setWsDsErrorMsg(e instanceof Error ? e.message : "Start failed");
+      setWsDsStatus("error");
+    } finally {
+      setWsDsStarting(false);
+    }
+  };
+
+  const handleWsDsStop = async () => {
+    await fetch(`/api/devserver/workspace/${projectId}/stop`, { method: "POST", credentials: "include" });
+    setWsDsStatus("idle");
+    setWsDsPort(null);
+    setWsDsLogs([]);
+    setWsDsErrorMsg(null);
+  };
+
   // Sync external refresh trigger (from push success) into local reloadKey
   const prevRefreshTrigger = useRef(refreshTrigger ?? 0);
   useEffect(() => {
@@ -924,25 +996,120 @@ ${t}
       {/* ── Local Dev mode ── */}
       {previewMode === "local" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {!linkedRepo ? (
+
+          {/* Case 1: No workspace, no linked repo → prompt */}
+          {!linkedRepo && !sessionId && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" opacity={0.12}>
                 <rect x="2" y="2" width="20" height="8" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" />
                 <rect x="2" y="14" width="20" height="8" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" />
               </svg>
               <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
-                Link a GitHub repo in the{" "}
-                <button
-                  type="button"
-                  onClick={() => onSwitchToFiles?.()}
-                  style={{ background: "none", border: "none", padding: 0, color: "var(--atlas-gold)", opacity: 0.9, fontWeight: 600, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, font: "inherit" }}
-                >
-                  Files
-                </button>{" "}
-                tab to spin up a local dev server.
+                Start a build session or link a GitHub repo to run a live dev server.
               </div>
             </div>
-          ) : (
+          )}
+
+          {/* Case 2: Workspace project (sessionId set, no linked repo) → workspace devserver */}
+          {sessionId && !linkedRepo && (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {/* Top bar */}
+              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "5px 10px", borderBottom: "1px solid var(--atlas-border)", background: "var(--atlas-surface)" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: wsDsStatus === "running" ? "rgba(52,211,153,0.8)" : wsDsStatus === "error" ? "rgba(248,113,113,0.8)" : "var(--atlas-gold)", letterSpacing: "0.05em" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: wsDsStatus === "running" ? "rgba(52,211,153,0.8)" : wsDsStatus === "error" ? "rgba(248,113,113,0.8)" : "var(--atlas-gold)", display: "inline-block", boxShadow: `0 0 6px ${wsDsStatus === "running" ? "rgba(52,211,153,0.5)" : wsDsStatus === "error" ? "rgba(248,113,113,0.5)" : "rgba(201,162,76,0.5)"}` }} />
+                  Local Dev · {WS_DS_LABELS[wsDsStatus]}
+                </span>
+                <div style={{ flex: 1 }} />
+                {wsDsStatus === "running" && wsDsPort && (
+                  <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.55, letterSpacing: "0.04em" }}>
+                    :{wsDsPort}
+                  </span>
+                )}
+              </div>
+
+              {/* Progress bar while booting */}
+              {wsDsStatus !== "idle" && wsDsStatus !== "running" && wsDsStatus !== "error" && (
+                <div style={{ flexShrink: 0, height: 2, background: "var(--atlas-border)", width: "100%" }}>
+                  <div style={{ height: "100%", width: `${WS_DS_PROGRESS[wsDsStatus]}%`, background: "var(--atlas-gold)", transition: "width 400ms ease" }} />
+                </div>
+              )}
+
+              {/* Controls */}
+              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)" }}>
+                {wsDsStatus === "idle" || wsDsStatus === "error" ? (
+                  <button
+                    onClick={handleWsDsStart}
+                    disabled={wsDsStarting}
+                    style={{ padding: "5px 12px", borderRadius: 5, background: wsDsStarting ? "var(--atlas-glass-bg)" : "var(--atlas-ember)", border: "none", color: wsDsStarting ? "var(--atlas-muted)" : "var(--atlas-fg)", fontSize: 10, ...sMono, letterSpacing: "0.08em", cursor: wsDsStarting ? "not-allowed" : "pointer", transition: "all 140ms ease" }}
+                  >
+                    {wsDsStarting ? "Starting…" : "Run Project"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleWsDsStop}
+                    style={{ padding: "5px 12px", borderRadius: 5, background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", color: "rgba(248,113,113,0.85)", fontSize: 10, ...sMono, letterSpacing: "0.08em", cursor: "pointer", transition: "all 140ms ease" }}
+                  >
+                    Stop
+                  </button>
+                )}
+              </div>
+
+              {/* Error banner */}
+              {wsDsErrorMsg && (
+                <div style={{ flexShrink: 0, padding: "6px 10px", background: "rgba(248,113,113,0.08)", borderBottom: "1px solid rgba(248,113,113,0.18)", color: "rgba(248,113,113,0.85)", fontSize: 10, ...sMono, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                  {wsDsErrorMsg}
+                </div>
+              )}
+
+              {/* Live iframe when running — takes priority */}
+              {wsDsStatus === "running" && wsDsPort && (
+                <iframe
+                  key={`ws-${projectId}-${wsDsPort}`}
+                  src={`/api/devserver/workspace/${projectId}/proxy/`}
+                  title="Local Dev Preview"
+                  style={{ flex: 1, border: "none", width: "100%", display: "block", background: "var(--atlas-bg)" }}
+                />
+              )}
+
+              {/* While booting: show Atlas Generated preview as placeholder + logs below */}
+              {wsDsStatus !== "running" && (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  {/* Atlas Generated fallback while boot happens */}
+                  {manifestPreviewHtml && wsDsStatus !== "idle" && (
+                    <div style={{ flex: "0 0 55%", overflow: "hidden", borderBottom: "1px solid var(--atlas-border)", position: "relative" }}>
+                      <div style={{ position: "absolute", top: 6, left: 8, fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.08em", zIndex: 1 }}>
+                        ATLAS GENERATED · live server starting…
+                      </div>
+                      <iframe
+                        srcDoc={manifestPreviewHtml}
+                        title="Atlas Generated (fallback)"
+                        sandbox="allow-scripts allow-same-origin"
+                        style={{ width: "100%", height: "100%", border: "none", display: "block", opacity: 0.7 }}
+                      />
+                    </div>
+                  )}
+                  {/* Boot logs */}
+                  <div style={{ flex: 1, overflow: "auto", padding: "8px 10px", background: "rgba(0,0,0,0.22)" }}>
+                    {wsDsLogs.length === 0 ? (
+                      <div style={{ fontSize: 10, ...sMono, color: "var(--atlas-muted)", opacity: 0.3, textAlign: "center", marginTop: "20%" }}>
+                        {wsDsStatus === "idle" ? "Press Run Project to start the dev server." : "Waiting for output…"}
+                      </div>
+                    ) : (
+                      wsDsLogs.map((line, i) => (
+                        <div key={i} style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", lineHeight: 1.6, opacity: 0.75, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                          {line}
+                        </div>
+                      ))
+                    )}
+                    <div ref={wsDsLogsEndRef} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Case 3: GitHub-linked repo → existing devserver flow */}
+          {linkedRepo && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
               {/* Top bar */}
               <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "5px 10px", borderBottom: "1px solid var(--atlas-border)", background: "var(--atlas-surface)" }}>
