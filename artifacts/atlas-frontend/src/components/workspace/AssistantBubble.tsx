@@ -107,6 +107,7 @@ function InlineDiffCard({
   linkedRepo,
   projectId,
   trustMode,
+  autoApplied,
   onReviewDiff,
   onPushSuccess,
   onEditDeclined,
@@ -117,6 +118,7 @@ function InlineDiffCard({
   linkedRepo: LinkedRepo | null;
   projectId: number;
   trustMode: "review" | "auto";
+  autoApplied?: boolean;
   onReviewDiff: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
   onEditDeclined?: () => void;
@@ -278,10 +280,14 @@ function InlineDiffCard({
 
   const modalEdits = fileEdits.length > 0 ? fileEdits : patchedEdits;
 
-  if (trustMode === "auto") {
+  if (trustMode === "auto" || autoApplied) {
+    const names = fileEdits.map((e) => e.path?.split("/").pop() ?? e.path).filter(Boolean);
+    const label = autoApplied
+      ? `✓ Auto-applied — ${names.join(", ")}`
+      : "Applied automatically";
     return (
-      <div style={{ marginTop: 12, fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.65 }}>
-        Applied automatically
+      <div style={{ marginTop: 12, fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.55 }}>
+        {label}
       </div>
     );
   }
@@ -1890,6 +1896,7 @@ export function AssistantBubble({
             linkedRepo={linkedRepo}
             projectId={projectId}
             trustMode={trustMode}
+            autoApplied={!!message.autoPushed}
             onReviewDiff={onReviewDiff}
             onPushSuccess={onPushSuccess}
             onEditDeclined={onEditDeclined}
