@@ -523,7 +523,7 @@ export function ExecutionJournal({
 
 function parseLedgerContent(raw: string): {
   label: string;
-  detail: string;
+  badge: string;
   files: string[];
 } {
   // Strip known prefixes
@@ -532,28 +532,36 @@ function parseLedgerContent(raw: string): {
     .replace(/^\[LOCAL_APPLY_SUCCESS\]\s*/i, "")
     .trim();
 
-  // Extract file paths — comma-separated or newline-separated
-  const lines = body.split(/[\n,]/).map((l) => l.trim()).filter(Boolean);
-  const files: string[] = [];
-  const others: string[] = [];
+  const label = raw.startsWith("[FILE_COMMITTED]") ? "Committed" : "Applied";
 
-  for (const l of lines) {
-    // Looks like a file path if it has a slash or a common extension
-    if (/\//.test(l) || /\.\w{2,6}$/.test(l)) {
-      files.push(l);
-    } else {
-      others.push(l);
-    }
+  // Extract a short count badge from patterns like "11 files written to local workspace"
+  const countMatch = body.match(/(\d+)\s+files?\s+(?:written|applied|committed|updated)/i);
+  const badge = countMatch ? `${countMatch[1]} files` : "";
+
+  // Collect file paths: lines/segments that look like actual paths
+  // A valid path segment: has a slash OR has a file extension AND is short AND no sentence words
+  const segments = body.split(/[\n,]/).map((l) => l.trim()).filter(Boolean);
+  const files: string[] = [];
+
+  for (const seg of segments) {
+    // Skip if too long (sentence/paragraph)
+    if (seg.length > 120) continue;
+    // Skip if ends with colon (label lines like "11 files written to local workspace:")
+    if (seg.endsWith(":")) continue;
+    // Skip if it has multiple spaces (prose sentence)
+    if ((seg.match(/\s+/g) ?? []).length > 3) continue;
+    // Skip if no slash and no file extension (not a path)
+    const hasSlash = /\//.test(seg);
+    const hasExt = /\.[a-zA-Z]{2,6}$/.test(seg);
+    if (!hasSlash && !hasExt) continue;
+    files.push(seg);
   }
 
-  const label = raw.startsWith("[FILE_COMMITTED]") ? "Committed" : "Applied";
-  const detail = others.join(" ").trim();
-
-  return { label, detail, files };
+  return { label, badge, files };
 }
 
 export function LedgerSurface({ content }: { content: string }) {
-  const { label, detail, files } = parseLedgerContent(content);
+  const { label, badge, files } = parseLedgerContent(content);
 
   return (
     <div
@@ -611,7 +619,7 @@ export function LedgerSurface({ content }: { content: string }) {
           >
             {label}
           </span>
-          {detail && (
+          {badge && (
             <span
               style={{
                 fontFamily: "var(--app-font-mono)",
@@ -620,7 +628,7 @@ export function LedgerSurface({ content }: { content: string }) {
                 lineHeight: 1,
               }}
             >
-              · {detail}
+              · {badge}
             </span>
           )}
         </div>
