@@ -625,8 +625,11 @@ function GithubTokenInput({
 
 // ── GitHubSettingsTab ─────────────────────────────────────────────────────────
 function GitHubSettingsTab({ projectId }: { projectId: number }) {
-  const { canWrite, canRead, isLoading, error, status, statusLabel } = useGitHub(projectId);
+  const { canWrite, canRead, isLoading, error, status, statusLabel, connect } = useGitHub(projectId);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [patInput, setPatInput] = useState("");
+  const [patSaving, setPatSaving] = useState(false);
+  const [patError, setPatError] = useState<string | null>(null);
   const mono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
 
   const isConnected = canRead || canWrite;
@@ -645,6 +648,16 @@ function GitHubSettingsTab({ projectId }: { projectId: number }) {
     window.location.reload();
   };
 
+  const handleSavePat = async () => {
+    if (!patInput.trim()) return;
+    setPatSaving(true);
+    setPatError(null);
+    const ok = await connect(patInput.trim());
+    setPatSaving(false);
+    if (ok) { setPatInput(""); }
+    else { setPatError("Token rejected — make sure it has repo scope."); }
+  };
+
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "18px 16px", display: "flex", flexDirection: "column", gap: 20 }} className="scrollbar-none">
       {/* Connection status */}
@@ -658,11 +671,6 @@ function GitHubSettingsTab({ projectId }: { projectId: number }) {
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: status === "connected" ? "rgba(74,222,128,0.9)" : "rgba(201,162,76,0.85)", flexShrink: 0 }} />
               <span style={{ ...mono, fontSize: 11.5, color: "var(--atlas-fg)", opacity: 0.85 }}>{statusLabel}</span>
             </div>
-            {status === "read-only" && (
-              <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.6, lineHeight: 1.6 }}>
-                Read-only — Atlas can read files but cannot push commits. Re-connect with write permissions to enable push.
-              </div>
-            )}
             {error && <div style={{ ...mono, fontSize: 10, color: "rgba(252,165,165,0.85)" }}>{error}</div>}
             <button type="button" onClick={() => { void handleDisconnect(); }} disabled={disconnecting} style={{ alignSelf: "flex-start", padding: "6px 14px", borderRadius: 6, background: "transparent", border: "1px solid rgba(239,68,68,0.3)", color: "rgba(252,165,165,0.8)", fontSize: 10, ...mono, cursor: disconnecting ? "not-allowed" : "pointer", letterSpacing: "0.06em", opacity: disconnecting ? 0.5 : 1 }}>
               {disconnecting ? "Disconnecting…" : "Disconnect"}
@@ -696,6 +704,52 @@ function GitHubSettingsTab({ projectId }: { projectId: number }) {
           ))}
         </div>
       </section>
+
+      {/* Write-access upgrade path — only when read-only via OAuth */}
+      {isConnected && !canWrite && (
+        <section>
+          <div style={{ ...mono, fontSize: 9, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.55, marginBottom: 10 }}>Enable Write Access</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.65, opacity: 0.7 }}>
+              Add a personal access token with <span style={{ ...mono, color: "var(--atlas-gold)", opacity: 0.9 }}>repo</span> scope to allow Atlas to push commits.
+            </div>
+            <input
+              type="password"
+              value={patInput}
+              onChange={e => { setPatInput(e.target.value); setPatError(null); }}
+              onKeyDown={e => { if (e.key === "Enter" && patInput.trim()) void handleSavePat(); }}
+              placeholder="ghp_…"
+              autoComplete="off"
+              style={{
+                width: "100%", padding: "9px 11px", borderRadius: 7,
+                background: "var(--atlas-surface)",
+                border: `1px solid ${patError ? "rgba(239,68,68,0.5)" : "var(--atlas-border)"}`,
+                color: "var(--atlas-fg)", fontSize: 11.5, ...mono,
+                outline: "none", boxSizing: "border-box", transition: "border-color 160ms",
+              }}
+              onFocus={e => (e.currentTarget.style.borderColor = patError ? "rgba(239,68,68,0.5)" : "rgba(201,162,76,0.4)")}
+              onBlur={e => (e.currentTarget.style.borderColor = patError ? "rgba(239,68,68,0.5)" : "var(--atlas-border)")}
+            />
+            {patError && <div style={{ ...mono, fontSize: 10, color: "rgba(252,165,165,0.85)", marginTop: -4 }}>{patError}</div>}
+            <button
+              type="button"
+              disabled={!patInput.trim() || patSaving}
+              onClick={() => void handleSavePat()}
+              style={{
+                alignSelf: "flex-start", padding: "7px 14px", borderRadius: 6,
+                background: patInput.trim() ? "rgba(201,162,76,0.14)" : "transparent",
+                border: `1px solid ${patInput.trim() ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
+                color: patInput.trim() ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                fontSize: 10, ...mono, letterSpacing: "0.08em", textTransform: "uppercase",
+                cursor: patInput.trim() && !patSaving ? "pointer" : "not-allowed",
+                opacity: patSaving ? 0.5 : 1,
+              }}
+            >
+              {patSaving ? "Saving…" : "Add token →"}
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -1288,6 +1342,72 @@ function SourceTab({
         </span>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px 24px", display: "flex", flexDirection: "column", gap: 20 }} className="scrollbar-none">
+
+        {/* ── Linked Repository ── */}
+        {linkedFullName && (() => {
+          const repoShort = linkedFullName.includes("/") ? linkedFullName.split("/")[1] : linkedFullName;
+          return (
+            <section>
+              <div style={{ ...mono, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.6, marginBottom: 10 }}>
+                Current Repository
+              </div>
+              <div style={{ background: "rgba(10,10,10,0.55)", backdropFilter: "blur(20px)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 12, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Repo name + status */}
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" opacity={0.6}><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z" fill="var(--atlas-fg)"/></svg>
+                  <span style={{ fontSize: 12.5, color: "var(--atlas-fg)", fontWeight: 500, fontFamily: "var(--app-font-mono)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={linkedFullName}>{repoShort}</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "1px 6px", borderRadius: 3, background: "rgba(52,211,153,0.07)", border: "0.5px solid rgba(52,211,153,0.2)", flexShrink: 0 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#34d399" }} />
+                    <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "#34d399" }}>linked</span>
+                  </span>
+                </div>
+                {/* Action row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => onSwitchToGitHub()}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: "1px solid var(--atlas-border)", background: "transparent", color: "var(--atlas-muted)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", cursor: "pointer" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+                    title="Browse files in Activity tab"
+                  >
+                    ↺ Hydrate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await fetch(`/api/projects/${projectId}/github-import`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ repo: linkedFullName }) });
+                        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                      } catch {}
+                    }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: "1px solid rgba(201,162,76,0.3)", background: "rgba(201,162,76,0.07)", color: "var(--atlas-gold)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", cursor: "pointer", fontWeight: 600 }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.55)"; e.currentTarget.style.background = "rgba(201,162,76,0.13)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.3)"; e.currentTarget.style.background = "rgba(201,162,76,0.07)"; }}
+                    title="Import decisions from repo into Ledger"
+                  >
+                    Deep Import
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updateProjectMut.isPending}
+                    onClick={() => {
+                      updateProjectMut.mutate(
+                        { id: projectId, data: { linkedRepo: null } },
+                        { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); onLinkedRepoChange(null); } }
+                      );
+                    }}
+                    style={{ display: "inline-flex", alignItems: "center", padding: "4px 8px", borderRadius: 5, border: "1px solid var(--atlas-border)", background: "transparent", color: "var(--atlas-muted)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", cursor: updateProjectMut.isPending ? "not-allowed" : "pointer", opacity: updateProjectMut.isPending ? 0.45 : 0.6, marginLeft: "auto" }}
+                    onMouseEnter={e => { if (!updateProjectMut.isPending) { e.currentTarget.style.opacity = "1"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)"; e.currentTarget.style.color = "rgba(252,165,165,0.8)"; } }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = updateProjectMut.isPending ? "0.45" : "0.6"; e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+                  >
+                    {updateProjectMut.isPending ? "unlinking…" : "Unlink"}
+                  </button>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
 
         {/* ── ZIP Import ── */}
         <section>

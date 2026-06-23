@@ -696,6 +696,7 @@ export function ChatComposer(props: ChatComposerProps) {
                   if (others.length > 0) setAttachedFiles(prev => [...prev, ...others].slice(0, 10));
                 }}
                 onSketch={props.onSketch}
+                parkedCount={parkedCount}
                 onMenuAction={(action) => onComposerMenuAction?.(action)}
               />
 
