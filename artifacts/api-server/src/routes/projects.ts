@@ -769,9 +769,9 @@ router.get("/projects/:id/greeting", async (req, res): Promise<void> => {
   if (isFreshBootstrap) {
     message = `Scaffold's live. I pushed a React + Vite + Tailwind base to \`${repoName}\` — \`src/App.tsx\`, \`vite.config.ts\`, \`tailwind.config.js\`, and 7 more files. Open the StackBlitz tab to see it.\n\nWhat are we building?`;
   } else if (repoName && hasShaping) {
-    message = `Back on \`${repoName}\`.\n\n${shapingLines.join("\n")}\n\nWhat are we working on?`;
+    message = `What are we working on today?`;
   } else if (repoName) {
-    message = `Back on \`${repoName}\`. What are we working on?`;
+    message = `What are we working on today?`;
   } else if (hasShaping) {
     message = `${project.name}.\n\n${shapingLines.join("\n")}\n\nWhat are we building today?`;
   } else if (!repoName && ageMs < 2 * 60 * 60 * 1000 && sessionCount <= 1) {
