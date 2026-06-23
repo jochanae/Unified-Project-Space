@@ -546,6 +546,150 @@ router.get("/fs/:projectId/git/log", async (req: Request, res: Response): Promis
   }
 });
 
+// POST /api/fs/:projectId/seed — write foundation files into an empty workspace
+// No-ops if the workspace already has content. Never overwrites existing files.
+router.post("/fs/:projectId/seed", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const projectId = parseProjectId(req.params.projectId);
+    if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+    if (!await assertProjectOwner(projectId, userId)) { res.status(404).json({ error: "Project not found" }); return; }
+
+    const workspaceDir = await ensureProjectWorkspaceDir(projectId);
+
+    // Only seed if empty
+    const existing = await fsPromises.readdir(workspaceDir);
+    if (existing.length > 0) {
+      res.json({ seeded: false, reason: "workspace not empty", files: [] });
+      return;
+    }
+
+    // Fetch project name + description for personalised content
+    const [project] = await db
+      .select({ name: projectsTable.name, description: projectsTable.description })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, projectId))
+      .limit(1);
+
+    const projectName = project?.name ?? "Untitled Project";
+    const projectDesc = project?.description ?? "";
+    const today = new Date().toISOString().slice(0, 10);
+
+    const files: Record<string, string> = {
+      "README.md": [
+        `# ${projectName}`,
+        "",
+        projectDesc ? `${projectDesc}\n` : "",
+        "## Project Files",
+        "",
+        "- `PROJECT.md` — Product intent, users, scope, and constraints",
+        "- `ATLAS.md` — What Atlas knows about this project",
+        "- `MANIFEST.md` — Committed direction and system identity",
+        "- `docs/decisions.md` — Decision record",
+        "- `docs/roadmap.md` — Roadmap",
+        "",
+      ].join("\n"),
+
+      "PROJECT.md": [
+        "# Project Intent",
+        "",
+        "## What this is",
+        projectDesc || projectName,
+        "",
+        "## Target users",
+        "<!-- Who uses this and why. -->",
+        "",
+        "## Scope",
+        "<!-- What is in scope. What is explicitly out of scope. -->",
+        "",
+        "## Constraints",
+        "<!-- Technical, time, resource, or design constraints. -->",
+        "",
+      ].join("\n"),
+
+      "ATLAS.md": [
+        "# Atlas Knowledge",
+        "",
+        "_What Atlas understands about this project and how to work on it._",
+        "",
+        "## Context",
+        `- Created: ${today}`,
+        `- Project: ${projectName}`,
+        "",
+        "## How Atlas should work here",
+        "- Prefer small, focused changes",
+        "- Record decisions in `docs/decisions.md`",
+        "- Keep `MANIFEST.md` updated as direction evolves",
+        "",
+        "## Known unknowns",
+        "_Things Atlas does not yet know about this project._",
+        "",
+      ].join("\n"),
+
+      "MANIFEST.md": [
+        "# Manifest",
+        "",
+        `_The committed direction for ${projectName}._`,
+        "",
+        "## Identity",
+        "<!-- What this project is and what it will become. -->",
+        "",
+        "## Committed scope",
+        "<!-- The core things this project must do. -->",
+        "",
+        "## Non-negotiables",
+        "<!-- Design, technical, or product constraints that cannot be compromised. -->",
+        "",
+        "## What this is not",
+        "<!-- Explicit exclusions from scope. -->",
+        "",
+      ].join("\n"),
+
+      "docs/decisions.md": [
+        "# Decision Record",
+        "",
+        "_Significant decisions made during this project._",
+        "",
+        "| Date | Decision | Rationale | Alternatives Considered |",
+        "|------|----------|-----------|------------------------|",
+        "",
+      ].join("\n"),
+
+      "docs/roadmap.md": [
+        "# Roadmap",
+        "",
+        "## Now",
+        "<!-- What is being built right now. -->",
+        "",
+        "## Next",
+        "<!-- What comes after. -->",
+        "",
+        "## Later",
+        "<!-- Future possibilities. -->",
+        "",
+        "## Parked",
+        "<!-- Ideas not being pursued yet. -->",
+        "",
+      ].join("\n"),
+    };
+
+    const seededFiles: string[] = [];
+    for (const [filePath, content] of Object.entries(files)) {
+      const absPath = resolveWorkspacePath(workspaceDir, filePath);
+      await fsPromises.mkdir(path.dirname(absPath), { recursive: true });
+      // Skip if file already exists (safety net)
+      try { await fsPromises.access(absPath); continue; } catch { /* does not exist — write it */ }
+      await fsPromises.writeFile(absPath, content, "utf-8");
+      seededFiles.push(filePath);
+    }
+
+    res.json({ seeded: true, files: seededFiles });
+  } catch (err) {
+    req.log?.error({ err }, "fs seed error");
+    res.status(500).json({ error: "Failed to seed workspace" });
+  }
+});
+
 // GET /api/fs/:projectId/hydration — workspace hydration status
 router.get("/fs/:projectId/hydration", async (req: Request, res: Response): Promise<void> => {
   try {

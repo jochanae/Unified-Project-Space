@@ -141,6 +141,32 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
   const [diffContent, setDiffContent] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
 
+  // Foundation seed state
+  const [isSeeding, setIsSeeding] = useState(false);
+  const seededRef = useRef(false);
+
+  // Auto-seed empty local-only workspace with foundation files
+  useEffect(() => {
+    if (seededRef.current) return;
+    if (treeLoading) return;
+    if (!tree) return;
+    if (tree.children.length > 0) return;
+    if (!hydrationInfo) return;           // wait for hydration check
+    if (hydrationInfo.linkedRepo) return; // linked repo — user should hydrate from GitHub instead
+    seededRef.current = true;
+    setIsSeeding(true);
+    apiFetch(`${BASE}/${projectId}/seed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then(() => {
+        qc.invalidateQueries({ queryKey: treeKey });
+      })
+      .catch(() => { /* seeding is best-effort; workspace still usable */ })
+      .finally(() => setIsSeeding(false));
+  }, [tree, treeLoading, hydrationInfo, projectId, qc, treeKey]);
+
   const isDirty = editContent !== savedContent;
 
   const openFileFn = useCallback(async (filePath: string) => {
@@ -660,8 +686,8 @@ export function WorkspaceFilesPanel({ projectId, onOpenTerminal }: Props) {
                 )}
               </div>
             ) : (
-              <div style={{ padding: "14px", fontSize: 12, color: "var(--atlas-muted)", opacity: 0.55, lineHeight: 1.5 }}>
-                Empty workspace.<br />Create a file to start.
+              <div style={{ padding: "14px", fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.65, lineHeight: 1.6 }}>
+                {isSeeding ? "Setting up workspace…" : "Empty workspace. Create a file to start."}
               </div>
             )
           )}
