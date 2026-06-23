@@ -88,10 +88,10 @@ type GithubTokenRequest = {
   authUser?: { id?: number } | null;
 };
 
-/** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to account/env token. */
+/** Resolve token: use the header value unless it's a frontend sentinel, then fall back to account/env token. */
 async function getToken(req: GithubTokenRequest): Promise<string | null> {
   const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
-  if (h && h !== "__server__") return h;
+  if (h && h !== "__server__" && h !== "__account__" && h !== "__oauth__") return h;
   const accountToken = await getAccountGithubToken(req.authUser?.id);
   return accountToken ?? process.env.GITHUB_TOKEN ?? null;
 }
