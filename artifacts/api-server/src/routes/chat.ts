@@ -747,12 +747,38 @@ When the user wants to go to a specific project workspace that already exists, e
 NAVIGATE_TO:{"route":"/project/<id>"}
 
 ## Handling explicit build/create requests
-When the user makes an explicit request to build, create, or make something new ("build X", "create X", "make X", "I want to build X"), you must:
-1. Call POST /api/projects/create-and-activate with { "name": "<concise project name>", "description": "<one sentence>" }
-2. The response returns { "id": <number>, "name": "...", ... }
-3. End your response with exactly: NAVIGATE_TO:{"route":"/project/<returned-id>"}
+When the user says "build X", "create X", "make X", or "I want to build X", follow this decision tree — do it every time before any API call:
 
-Never emit NAVIGATE_TO for a build request without first calling create-and-activate. The project must be fully ready before the user is routed there.
+### Readiness check — what you need to know before building:
+- What it is (type, domain, or purpose)
+- Who it's for or what problem it solves
+- Rough scope or platform (if relevant)
+
+### ENOUGH INFORMATION — all three are clear or inferable:
+→ Do not ask any questions.
+→ Call POST /api/projects/create-and-activate with:
+   { "name": "<concise project name>", "description": "<one sentence>", "buildIntent": "<the user's exact original request, verbatim>" }
+→ One sentence acknowledging what you're building, then end with:
+   NAVIGATE_TO:{"route":"/project/<returned-id>"}
+
+### SMALL AMBIGUITY — one thing is unclear or has two obvious options:
+→ Ask ONE specific, direct question. Do not create the project yet.
+→ After the user answers, treat it as ENOUGH INFORMATION and proceed above.
+→ Examples: "Mobile or web?" / "React Native or PWA?" / "Daily habits or custom schedule?"
+
+### LARGE AMBIGUITY — what it is, who it's for, or scope are genuinely unclear:
+→ Enter shaping mode. Ask one dimension at a time: problem → audience → scope. Max 3 questions.
+→ Do not create the project until shaping is complete.
+→ When you have enough, emit PROJECT_READY:{"projectName":"..."} and let the user confirm.
+
+### Example — ENOUGH INFORMATION:
+Request: "Build a simple habit tracker mobile app. Three screens: Dashboard, Habits, Progress. Keep it simple."
+→ You know: what (habit tracker), platform (mobile), scope (3 named screens, simple). Build it immediately.
+
+### Hard rules:
+- Never emit NAVIGATE_TO without first calling create-and-activate.
+- Never call create-and-activate until you've confirmed ENOUGH INFORMATION.
+- Always pass the user's exact original request as "buildIntent" — the workspace depends on it to know what to build.
 
 When she commits a decision, says "lock that in" — call POST /api/entries with a committed decision.
 When she says "park that" — call POST /api/entries with a parked item.
@@ -2191,7 +2217,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Load project memory + repo info + node state from DB, plus user memory when authenticated.
   // Also check for Vercel connection so we know whether to defer BROWSER_VISIT until after deploy.
-  const [projectRows, userRows, vercelRows] = await Promise.all([
+  const [projectRows, userRows, vercelRows, sessionRows] = await Promise.all([
     isFoundationMode
       ? Promise.resolve([] as Array<{ memory: string | null; linkedRepo: string | null; githubToken: string | null; nodeState: Record<string, unknown> | null; name: string; previewUrl: string | null; description: string | null }>)
       : db
@@ -2212,10 +2238,20 @@ router.post("/chat", async (req, res): Promise<void> => {
           .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "vercel")))
           .limit(1)
       : Promise.resolve([] as Array<{ id: number }>),
+    !isFoundationMode && sessionId
+      ? db
+          .select({ buildIntent: sessionsTable.buildIntent, messageCount: sessionsTable.messageCount })
+          .from(sessionsTable)
+          .where(eq(sessionsTable.id, sessionId))
+          .limit(1)
+          .catch(() => [] as Array<{ buildIntent: string | null; messageCount: number }>)
+      : Promise.resolve([] as Array<{ buildIntent: string | null; messageCount: number }>),
   ]);
   const [project] = projectRows;
   const [user] = userRows;
   const hasVercelConnection = vercelRows.length > 0;
+  const sessionBuildIntent = sessionRows[0]?.buildIntent ?? null;
+  const sessionMessageCount = sessionRows[0]?.messageCount ?? 1;
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it
@@ -2579,9 +2615,38 @@ HARD RULE: Never answer from the context of a different project unless the user 
   if (recentRepoActivityContext) {
     systemPrompt += `\n\n${recentRepoActivityContext}\n\nWhen referencing recent commits in your response, interpret them narratively — group by area of impact, synthesize what's changing (e.g. "Three commits hit the auth flow this week, one fixed a session timeout, another added a retry"), don't enumerate SHA hashes. Speak like a collaborator who understands what the code changes actually mean.`;
   }
-  systemPrompt += `\n\n--- SESSION CONTINUITY ---
+  // Build handoff — fires exactly once: when the session has a buildIntent and no messages have been exchanged yet.
+  // messageCount === 0 means the session was just created by create-and-activate and this is the first message.
+  if (!isFoundationMode && sessionBuildIntent && sessionMessageCount === 0) {
+    systemPrompt += `\n\n--- BUILD HANDOFF ---
+This workspace was just created from an explicit build request. The user asked for:
+
+"${sessionBuildIntent}"
+
+This is an execution moment — the user has committed to building this and is waiting for you to start.
+
+Your first response must:
+1. One sentence: name what you're building and the approach (framework, structure, key decisions). No questions, no recap.
+2. Immediately produce FILE_EDIT blocks for the complete initial scaffold.
+
+What "complete initial scaffold" means:
+- All the screens/pages/routes the user named
+- Working navigation between them
+- Realistic placeholder content (not lorem ipsum — actual labels, buttons, structure that reflects the domain)
+- Any config files needed to run it (package.json, tsconfig, etc. if this is a new project)
+
+Do NOT ask clarifying questions.
+Do NOT explain what you're about to do.
+Do NOT wait for confirmation.
+Make the sensible default for any unspecified choice (framework, styling, etc.) and state it in one line as you begin.
+
+Just build it.
+--- END BUILD HANDOFF ---`;
+  } else {
+    systemPrompt += `\n\n--- SESSION CONTINUITY ---
 If this is the first assistant message in this session (no prior assistant messages exist in the session history), open naturally — like picking up a real conversation, not filing a status report. DO NOT use the format "Still here. [recap]. What's next:". Instead, read the memory and repo activity and respond the way a sharp collaborator would after being away: reference what actually matters, skip what doesn't, and lead with something useful or ask the right question. One to two sentences max. Never clinical. Never a checklist. Match the energy of someone who was already thinking about this project before the conversation started.
 --- END SESSION CONTINUITY ---`;
+  }
   if (recentErrorContext) {
     systemPrompt += `\n\n--- RECENT PRODUCTION ERRORS ---\n${recentErrorContext}\n--- END RECENT PRODUCTION ERRORS ---`;
   }

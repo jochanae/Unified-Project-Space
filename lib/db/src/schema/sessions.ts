@@ -16,6 +16,7 @@ export const sessionsTable = pgTable("sessions", {
   totalOutputTokens: integer("total_output_tokens").default(0),
   totalCostUsd: numeric("total_cost_usd").default("0"),
   totalExecutionMs: integer("total_execution_ms").default(0),
+  buildIntent: text("build_intent"),
   runStatus: text("run_status"),
   runSummary: text("run_summary"),
   runActions: jsonb("run_actions"),

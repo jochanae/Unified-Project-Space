@@ -532,7 +532,7 @@ router.post("/projects/:id/activate", async (req, res): Promise<void> => {
 // immediately without any secondary activation step.
 router.post("/projects/create-and-activate", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
-  const { name, description } = req.body as { name?: unknown; description?: unknown };
+  const { name, description, buildIntent } = req.body as { name?: unknown; description?: unknown; buildIntent?: unknown };
 
   if (typeof name !== "string" || !name.trim()) {
     res.status(400).json({ error: "name is required" });
@@ -561,10 +561,11 @@ router.post("/projects/create-and-activate", async (req, res): Promise<void> => 
     // 2. Seed genome
     await db.insert(projectGenomeTable).values({ projectId });
 
-    // 3. Seed session
+    // 3. Seed session — carry the build intent so workspace Atlas knows what to build
+    const buildIntentStr = typeof buildIntent === "string" && buildIntent.trim() ? buildIntent.trim() : null;
     const [session] = await db
       .insert(sessionsTable)
-      .values({ projectId, title: "Session 1", status: "active" })
+      .values({ projectId, title: "Session 1", status: "active", buildIntent: buildIntentStr })
       .returning({ id: sessionsTable.id });
 
     // 4. Seed activation entry
