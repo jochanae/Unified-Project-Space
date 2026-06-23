@@ -2563,6 +2563,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       await Promise.all([
         db.update(projectsTable).set({ status: "committed" }).where(eq(projectsTable.id, project.id)),
         db.insert(projectGenomeTable).values({ projectId: project.id }),
+        ensureProjectWorkspaceDir(project.id),
       ]);
       const [newSession] = await db
         .insert(sessionsTable)

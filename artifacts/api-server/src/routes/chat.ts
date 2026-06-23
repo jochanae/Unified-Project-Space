@@ -2596,16 +2596,24 @@ HARD RULE: Never answer from the context of a different project unless the user 
     const localWsExists = localWsDir
       ? await fsPromises.stat(localWsDir).then(() => true).catch(() => false)
       : false;
-    const fileSource = hasGithub ? "github" : localWsExists ? "local" : "none";
-    const applyMode = hasGithub ? "push-to-github" : localWsExists ? "local-apply" : "none";
+
+    // During a BUILD_HANDOFF (fresh project from a build request, no messages yet), treat the
+    // local workspace as available even if the directory doesn't exist on disk yet.
+    // ensureProjectWorkspaceDir() is called lazily on the first FILE_EDIT write, so the
+    // directory will be created the moment Atlas emits its first block.
+    const isBuildHandoff = !!(sessionBuildIntent && sessionMessageCount === 0 && projectId);
+    const effectiveLocalWsAvailable = localWsExists || isBuildHandoff;
+
+    const fileSource = hasGithub ? "github" : effectiveLocalWsAvailable ? "local" : "none";
+    const applyMode = hasGithub ? "push-to-github" : effectiveLocalWsAvailable ? "local-apply" : "none";
     const fileSourceLines: string[] = [
       `repo linked: ${hasGithub}`,
-      `local workspace initialized: ${localWsExists}`,
+      `local workspace initialized: ${localWsExists || isBuildHandoff}`,
       `available file source: ${fileSource}`,
       `apply mode: ${applyMode}`,
     ];
     if (fileSource === "local") {
-      fileSourceLines.push("FILE_READ_REQUEST will be fulfilled from the local workspace. FILE_TREE_REQUEST can be used to refresh the file listing at any time. FILE_EDIT blocks apply directly — no GitHub needed.");
+      fileSourceLines.push("FILE_READ_REQUEST will be fulfilled from the local workspace. FILE_TREE_REQUEST can be used to refresh the file listing at any time. FILE_EDIT blocks apply directly — no GitHub needed. A linked GitHub repo is NOT required.");
     } else if (fileSource === "none") {
       fileSourceLines.push("No file source available. Do not emit FILE_READ_REQUEST, FILE_TREE_REQUEST, or FILE_EDIT — they cannot be fulfilled. If the user asks to edit files, tell them to link a GitHub repo or open the Files tab to initialize a local workspace.");
     }
