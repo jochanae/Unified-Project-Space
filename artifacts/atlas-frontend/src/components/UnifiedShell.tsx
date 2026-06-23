@@ -1976,19 +1976,13 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
         {/* ShellFooter intentionally not rendered — UnifiedContextDock owns the bottom nav.
             Two fixed footers at bottom:0 caused tap collisions. */}
       </div>
-      {/* Surface contract:
-          Home (surface="activity") → "Atlas · Activity"
-            Event-driven only. activeProjectId suppressed so Layer 2 never pins open.
-            Answers: "What did Atlas just notice?" Fades after 8 s idle.
-          Workspace (surface="memory") → "Atlas · Memory"
-            Persistent. Layer 1 (live activity) + Layer 2 (resume). Always available.
-            Answers: "What does Atlas currently know?" */}
-      <AtlasMemoryHUD
-        position={{ top: 64, right: 16 }}
-        conversationId={location === "/home" ? activeConversationId : undefined}
-        activeProjectId={location !== "/home" ? activeProjectId : null}
-        surface={location !== "/home" ? "memory" : "activity"}
-      />
+      {/* Atlas Knows — Global Insight only (home). Live awareness snapshot. */}
+      {location === "/home" && (
+        <AtlasMemoryHUD
+          position={{ top: 64, right: 16 }}
+          conversationId={activeConversationId}
+        />
+      )}
       <SpecifySheet />
     </ShellStateContext.Provider>
   );
