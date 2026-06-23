@@ -97,6 +97,7 @@ type FlowMapNode = {
 type CreateProjectToolInput = {
   name: string;
   summary: string;
+  buildIntent?: string | null;
 };
 
 const HOME_OPENING_FALLBACKS = [
@@ -456,6 +457,27 @@ MEMORY_T5: [passing note — 7 days]
 
 Up to 3 lines per response, only when genuinely significant.
 
+## Direct Build Requests
+When the user opens with an explicit build request that already contains enough information, skip shaping entirely and call create_project immediately.
+
+**Enough information means:** what it is + rough scope (e.g. screens named, domain clear, platform mentioned). All three do not need to be explicitly stated — use common sense.
+
+**Examples that are ENOUGH INFORMATION — call create_project immediately:**
+- "Build a simple habit tracker mobile app. Three screens: Dashboard, Habits, Progress."
+- "Build a dashboard that shows my sales metrics — revenue, churn, MRR."
+- "Create a landing page for my SaaS tool."
+- "Build a todo app with React."
+
+**When calling create_project for a direct build request:**
+- Set name to a concise project name inferred from the request
+- Set summary to one sentence describing what it is
+- Set buildIntent to the user's exact original message, verbatim — do not paraphrase
+
+**Small ambiguity (one thing unclear):** Ask ONE specific question first. Do not call create_project yet.
+- "Mobile or web?" / "React Native or PWA?" / "Public or authenticated?"
+
+**Large ambiguity (what/who/scope genuinely unclear):** Enter the shaping framework. Max 3 questions.
+
 ## Conversation State Signal
 At the END of EVERY response, emit your current read of the conversation's intent on its own line:
 CONV_STATE:{"state":"THINK"}    — user is exploring, analyzing, mapping, or asking for a breakdown
@@ -467,12 +489,13 @@ This governs system behavior (CommitPill visibility, auto-creation gates). It is
 
 const CREATE_PROJECT_TOOL: Anthropic.Tool = {
   name: "create_project",
-  description: "Create a new project workspace. Call this when the shaping framework is satisfied — PROBLEM, AUDIENCE, GAP, VISION, and HARD PART are sufficiently understood (or at most 5 questions have been asked). Do not ask for confirmation before calling. Use what's been discussed to fill in the name and summary.",
+  description: "Create a new project workspace. Call this when the shaping framework is satisfied — PROBLEM, AUDIENCE, GAP, VISION, and HARD PART are sufficiently understood (or at most 5 questions have been asked). Also call this immediately for direct build requests when the intent is clear enough (see Direct Build Requests section). Do not ask for confirmation before calling. Use what's been discussed to fill in the name and summary.",
   input_schema: {
     type: "object",
     properties: {
       name: { type: "string", description: "Short project name" },
       summary: { type: "string", description: "1-2 sentence summary of what this project is" },
+      buildIntent: { type: "string", description: "The user's exact original build request verbatim — only set this for direct build requests (not after a shaping conversation). The workspace uses this to start building immediately." },
     },
     required: ["name", "summary"],
   },
@@ -569,7 +592,10 @@ function parseCreateProjectToolInput(input: unknown): CreateProjectToolInput | n
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const summary = typeof input.summary === "string" ? input.summary.trim() : "";
   if (!name || !summary) return null;
-  return { name, summary };
+  const buildIntent = typeof input.buildIntent === "string" && input.buildIntent.trim()
+    ? input.buildIntent.trim()
+    : null;
+  return { name, summary, buildIntent };
 }
 
 function mergeNullableNumbers(a: number | null | undefined, b: number | null | undefined): number | null {
@@ -2530,6 +2556,37 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         entityType: "project",
         memory: buildInitialProjectMemory(parsedInput.summary),
       });
+
+      // Activate immediately: set status="committed" and seed genome + session + entry.
+      // This prevents the workspace from showing "Not yet a workspace" on arrival.
+      const effectiveBuildIntent = parsedInput.buildIntent ?? null;
+      await Promise.all([
+        db.update(projectsTable).set({ status: "committed" }).where(eq(projectsTable.id, project.id)),
+        db.insert(projectGenomeTable).values({ projectId: project.id }),
+      ]);
+      const [newSession] = await db
+        .insert(sessionsTable)
+        .values({
+          projectId: project.id,
+          title: "Session 1",
+          status: "active",
+          buildIntent: effectiveBuildIntent,
+        })
+        .returning({ id: sessionsTable.id });
+      if (newSession?.id) {
+        await db.insert(entriesTable).values({
+          projectId: project.id,
+          sessionId: newSession.id,
+          title: "Project created.",
+          summary: effectiveBuildIntent
+            ? `Workspace initialized from build request: "${effectiveBuildIntent.slice(0, 120)}"`
+            : "Workspace initialized.",
+          status: "committed",
+          severity: "committed",
+          mode: "decide",
+        });
+      }
+
       const projectCreated = {
         id: project.id,
         name: project.name,
@@ -2711,6 +2768,10 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     "move this into a project", "turn this into a project",
     "move this to a workspace", "create it",
     "please create", "build this project",
+    // Direct build-intent phrases (e.g. "build a habit tracker", "build me a dashboard")
+    "build a ", "build an ", "build me", "build the ",
+    "create a ", "create an ", "create me",
+    "make a ", "make an ", "make me",
   ];
   const messageLC = message.toLowerCase();
   const isExplicitCreate = EXPLICIT_CREATE_SIGNALS.some(s => messageLC.includes(s));
