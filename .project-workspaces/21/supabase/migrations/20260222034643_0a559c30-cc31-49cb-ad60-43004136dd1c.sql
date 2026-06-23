@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ALTER COLUMN companion_name SET DEFAULT '';

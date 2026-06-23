@@ -1,0 +1,1 @@
+ALTER TABLE beta_serial_numbers ADD COLUMN IF NOT EXISTS notified_at timestamptz NULL;

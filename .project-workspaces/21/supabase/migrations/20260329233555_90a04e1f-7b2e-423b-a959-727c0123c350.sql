@@ -1,0 +1,1 @@
+ALTER TABLE public.companion_media ADD COLUMN IF NOT EXISTS sticker_target text NOT NULL DEFAULT 'companion';

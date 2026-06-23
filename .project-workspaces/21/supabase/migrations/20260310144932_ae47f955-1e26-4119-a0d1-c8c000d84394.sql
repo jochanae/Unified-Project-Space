@@ -1,0 +1,1 @@
+UPDATE profiles SET user_name = preferred_name WHERE preferred_name IS NOT NULL AND preferred_name != '' AND user_name = preferred_companion_name AND preferred_companion_name IS NOT NULL;

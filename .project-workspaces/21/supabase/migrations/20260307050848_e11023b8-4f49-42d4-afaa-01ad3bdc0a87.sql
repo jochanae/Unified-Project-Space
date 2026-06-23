@@ -1,0 +1,1 @@
+ALTER TABLE public.memories ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'standard';

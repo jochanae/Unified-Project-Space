@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN circadian_ceremonies boolean NOT NULL DEFAULT true;

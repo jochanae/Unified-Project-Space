@@ -1,0 +1,1 @@
+UPDATE public.connections SET image_style = 'photorealistic' WHERE image_style IS NULL;

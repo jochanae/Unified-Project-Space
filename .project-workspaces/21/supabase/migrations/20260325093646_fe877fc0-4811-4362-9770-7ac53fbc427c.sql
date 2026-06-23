@@ -1,0 +1,1 @@
+ALTER TABLE public.virtual_gifts ADD COLUMN mature_only boolean NOT NULL DEFAULT false;

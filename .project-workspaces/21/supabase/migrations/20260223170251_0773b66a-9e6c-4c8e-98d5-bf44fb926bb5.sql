@@ -1,0 +1,1 @@
+ALTER TABLE public.custom_circles ADD COLUMN companion_enabled boolean NOT NULL DEFAULT true;

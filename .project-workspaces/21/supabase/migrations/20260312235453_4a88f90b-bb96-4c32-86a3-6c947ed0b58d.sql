@@ -1,0 +1,1 @@
+ALTER TABLE public.companion_plans ADD COLUMN IF NOT EXISTS missed_at timestamp with time zone DEFAULT NULL;

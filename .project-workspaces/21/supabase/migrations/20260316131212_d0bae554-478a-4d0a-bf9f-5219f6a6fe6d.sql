@@ -1,0 +1,1 @@
+ALTER TABLE public.companion_plans ADD COLUMN IF NOT EXISTS missed_checkin_sent boolean NOT NULL DEFAULT false;

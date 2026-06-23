@@ -1,0 +1,1 @@
+ALTER TABLE public.connections ADD COLUMN IF NOT EXISTS connection_mode text NOT NULL DEFAULT 'friend';

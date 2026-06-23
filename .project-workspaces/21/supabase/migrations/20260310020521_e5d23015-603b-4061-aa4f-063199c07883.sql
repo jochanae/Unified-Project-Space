@@ -1,0 +1,1 @@
+ALTER TABLE public.sms_profiles ADD CONSTRAINT sms_profiles_user_id_key UNIQUE (user_id);

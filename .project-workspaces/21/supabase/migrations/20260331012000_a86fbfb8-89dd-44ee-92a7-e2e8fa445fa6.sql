@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN home_anchor text NOT NULL DEFAULT 'dashboard';

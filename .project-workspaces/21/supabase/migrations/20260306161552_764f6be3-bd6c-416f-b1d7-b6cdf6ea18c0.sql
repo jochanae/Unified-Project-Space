@@ -1,0 +1,1 @@
+ALTER TABLE public.connections ADD COLUMN IF NOT EXISTS backstory text;
