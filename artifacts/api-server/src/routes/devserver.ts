@@ -524,20 +524,7 @@ function rewriteCss(css: string, base = PROXY_BASE): string {
   return css.replace(/url\((['"]?)\/(?!\/)/g, `url($1${base}/`);
 }
 
-// Rewrite root-relative paths inside Vite-generated JS/TS modules.
-// Vite dev mode embeds absolute import paths like:
-//   import App from "/src/App.tsx"
-//   import("/@vite/client")
-// When the module is served via a proxy subpath these resolve against the
-// domain root instead of the proxy, causing a blank page. We rewrite
-// every "/"  or  '/'  (not "//") to include the proxy base prefix so the
-// browser fetches them through the correct proxy path.
-function rewriteJs(js: string, base: string): string {
-  // Replace string-literal root-relative paths (skip protocol-relative //)
-  return js.replace(/(["'])\/(?!\/)/g, `$1${base}/`);
-}
-
-// Generic proxy handler — forwards req to targetPort, rewrites HTML/CSS/JS paths
+// Generic proxy handler — forwards req to targetPort, rewrites HTML/CSS paths
 function proxyToPort(targetPort: number, proxyBase: string, req: import("express").Request, res: import("express").Response): void {
   const targetPath = req.url || "/";
   const options: http.RequestOptions = {
@@ -552,12 +539,7 @@ function proxyToPort(targetPort: number, proxyBase: string, req: import("express
     const contentType = (proxyRes.headers["content-type"] ?? "").toLowerCase();
     const isHtml = contentType.includes("text/html");
     const isCss = contentType.includes("text/css");
-    const isJs = contentType.includes("javascript") || contentType.includes("application/json") === false && (
-      targetPath.endsWith(".js") || targetPath.endsWith(".ts") || targetPath.endsWith(".tsx") || targetPath.endsWith(".jsx") ||
-      targetPath.startsWith("/@vite/") || targetPath.startsWith("/@id/") || targetPath.startsWith("/@fs/") ||
-      targetPath.startsWith("/src/") || targetPath.startsWith("/node_modules/")
-    );
-    const needsRewrite = isHtml || isCss || isJs;
+    const needsRewrite = isHtml || isCss;
 
     const headers: Record<string, string | string[] | undefined> = {};
     for (const [k, v] of Object.entries(proxyRes.headers)) {
@@ -582,11 +564,7 @@ function proxyToPort(targetPort: number, proxyBase: string, req: import("express
       proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
       proxyRes.on("end", () => {
         const raw = Buffer.concat(chunks).toString("utf8");
-        const rewritten = isHtml
-          ? rewriteHtml(raw, proxyBase)
-          : isCss
-            ? rewriteCss(raw, proxyBase)
-            : rewriteJs(raw, proxyBase);
+        const rewritten = isHtml ? rewriteHtml(raw, proxyBase) : rewriteCss(raw, proxyBase);
         res.writeHead(proxyRes.statusCode ?? 200, headers);
         res.end(rewritten, "utf8");
       });
