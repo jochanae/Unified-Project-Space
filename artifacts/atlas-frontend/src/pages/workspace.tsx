@@ -1671,6 +1671,8 @@ function RightPanel({
   sandboxCode,
   onSandboxConsumed,
   previewRefreshTrigger,
+  rebuildTrigger,
+  onWsRunningChange,
   sessionId,
   manifestDecision,
   manifestPreviewHtml,
@@ -1732,6 +1734,8 @@ function RightPanel({
   sandboxCode?: string | null;
   onSandboxConsumed?: () => void;
   previewRefreshTrigger?: number;
+  rebuildTrigger?: number;
+  onWsRunningChange?: (running: boolean) => void;
   sessionId?: number;
   manifestDecision?: ManifestDecision | null;
   manifestPreviewHtml?: string | null;
@@ -2218,7 +2222,7 @@ function RightPanel({
           <ImageGenerator compact />
         </div>
       )}
-      {tab === "preview" && <PreviewPanel projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} sessionId={sessionId} onSwitchToFiles={() => setTab("files")} manifestDecision={manifestDecision} manifestPreviewHtml={manifestPreviewHtml} />}
+      {tab === "preview" && <PreviewPanel projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} rebuildTrigger={rebuildTrigger} onWsRunningChange={onWsRunningChange} sessionId={sessionId} onSwitchToFiles={() => setTab("files")} manifestDecision={manifestDecision} manifestPreviewHtml={manifestPreviewHtml} />}
       {tab === "manifest" && (
         <ManifestPanel
           projectId={projectId}
@@ -4776,6 +4780,9 @@ export default function Workspace() {
   const [trustMode, setTrustMode] = useState<"review" | "auto">("review");
   const [autoRunCmd] = useState<string>("");
   const [previewRefreshTrigger, setPreviewRefreshTrigger] = useState(0);
+  const [rebuildTrigger, setRebuildTrigger] = useState(0);
+  const wsWasRunningRef = useRef(false);
+  const onWsRunningChange = useCallback((running: boolean) => { wsWasRunningRef.current = running; }, []);
 
   const importSource = (() => {
     try { return new URLSearchParams(window.location.search).get("source") ?? null; } catch { return null; }
@@ -6512,6 +6519,10 @@ export default function Workspace() {
           undefined,
           { displayAs: "autoVerify" },
         );
+        // If the workspace was already running, trigger an auto-rebuild with the new files
+        if (wsWasRunningRef.current) {
+          setRebuildTrigger(t => t + 1);
+        }
       } else {
         // GitHub push — existing commit flow
         const repoName = linkedRepo.fullName;
@@ -7349,6 +7360,8 @@ export default function Workspace() {
             sandboxCode={sandboxCode}
             onSandboxConsumed={() => setSandboxCode(null)}
             previewRefreshTrigger={previewRefreshTrigger}
+            rebuildTrigger={rebuildTrigger}
+            onWsRunningChange={onWsRunningChange}
             sessionId={sessionId ?? undefined}
             manifestDecision={manifestDecision}
             manifestPreviewHtml={manifestPreviewHtml}
@@ -7975,6 +7988,8 @@ export default function Workspace() {
                 sandboxCode={sandboxCode}
                 onSandboxConsumed={() => setSandboxCode(null)}
                 previewRefreshTrigger={previewRefreshTrigger}
+                rebuildTrigger={rebuildTrigger}
+                onWsRunningChange={onWsRunningChange}
                 sessionId={sessionId ?? undefined}
                 manifestDecision={manifestDecision}
                 manifestPreviewHtml={manifestPreviewHtml}

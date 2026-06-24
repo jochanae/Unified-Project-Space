@@ -15,11 +15,13 @@ export type ManifestDecision = {
   deploymentRequired: boolean;
 };
 
-export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refreshTrigger, sessionId, onSwitchToFiles, manifestDecision, manifestPreviewHtml }: {
+export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refreshTrigger, rebuildTrigger, onWsRunningChange, sessionId, onSwitchToFiles, manifestDecision, manifestPreviewHtml }: {
   projectId: number;
   sandboxCode?: string | null;
   onSandboxConsumed?: () => void;
   refreshTrigger?: number;
+  rebuildTrigger?: number;
+  onWsRunningChange?: (running: boolean) => void;
   sessionId?: number;
   onSwitchToFiles?: () => void;
   manifestDecision?: ManifestDecision | null;
@@ -248,6 +250,26 @@ export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refres
   useEffect(() => {
     wsDsLogsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [wsDsLogs]);
+
+  // Notify parent when workspace running state changes (so it can gate auto-rebuild)
+  useEffect(() => {
+    onWsRunningChange?.(wsDsStatus === "running");
+  }, [wsDsStatus, onWsRunningChange]);
+
+  // Auto-rebuild when parent signals new files have been written (rebuildTrigger increments)
+  const prevRebuildTrigger = useRef(rebuildTrigger ?? 0);
+  useEffect(() => {
+    const cur = rebuildTrigger ?? 0;
+    if (cur > prevRebuildTrigger.current) {
+      prevRebuildTrigger.current = cur;
+      // Only auto-rebuild if the workspace has been built at least once
+      if (wsDsStatus === "running" || wsDsStatus === "error" || wsDsPort !== null) {
+        void handleWsDsStart();
+      }
+    }
+  // handleWsDsStart intentionally omitted — it's stable and including it would loop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rebuildTrigger]);
 
   // Capture browser JS errors from the proxied iframe via postMessage
   useEffect(() => {
@@ -1076,12 +1098,22 @@ ${t}
                     {wsDsStarting ? "Starting…" : "Run Project"}
                   </button>
                 ) : (
-                  <button
-                    onClick={handleWsDsStop}
-                    style={{ padding: "5px 12px", borderRadius: 5, background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", color: "rgba(248,113,113,0.85)", fontSize: 10, ...sMono, letterSpacing: "0.08em", cursor: "pointer", transition: "all 140ms ease" }}
-                  >
-                    Stop
-                  </button>
+                  <>
+                    <button
+                      onClick={handleWsDsStart}
+                      disabled={wsDsStarting}
+                      title="Rebuild with latest files"
+                      style={{ padding: "5px 12px", borderRadius: 5, background: wsDsStarting ? "var(--atlas-glass-bg)" : "rgba(201,162,76,0.12)", border: "1px solid rgba(201,162,76,0.28)", color: wsDsStarting ? "var(--atlas-muted)" : "var(--atlas-gold)", fontSize: 10, ...sMono, letterSpacing: "0.08em", cursor: wsDsStarting ? "not-allowed" : "pointer", transition: "all 140ms ease" }}
+                    >
+                      {wsDsStarting ? "Building…" : "⟳ Rebuild"}
+                    </button>
+                    <button
+                      onClick={handleWsDsStop}
+                      style={{ padding: "5px 12px", borderRadius: 5, background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", color: "rgba(248,113,113,0.85)", fontSize: 10, ...sMono, letterSpacing: "0.08em", cursor: "pointer", transition: "all 140ms ease" }}
+                    >
+                      Stop
+                    </button>
+                  </>
                 )}
               </div>
 
