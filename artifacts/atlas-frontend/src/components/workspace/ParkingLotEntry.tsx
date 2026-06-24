@@ -5,12 +5,21 @@ import { useQueryClient } from "@tanstack/react-query";
 import { timeAgo } from "@/lib/formatters";
 import { haptic } from "@/lib/long-press-tip";
 
+const PROMOTE_TYPES = [
+  { label: "Decision", value: "Decision" },
+  { label: "Goal", value: "Goal" },
+  { label: "Build", value: "Feature" },
+  { label: "Risk", value: "Risk" },
+  { label: "Question", value: "Question" },
+];
+
 export function ParkingLotEntry({ entry, projectName }: { entry: Entry; projectName?: string }) {
   const queryClient = useQueryClient();
   const updateEntry = useUpdateEntry();
   const [done, setDone] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showPromote, setShowPromote] = useState(false);
 
   const [, navigate] = useLocation();
   const deleteEntry = useDeleteEntry();
@@ -20,13 +29,10 @@ export function ParkingLotEntry({ entry, projectName }: { entry: Entry; projectN
     navigate(`/project/${entry.projectId}`);
   };
 
-  const handleSpecify = () => {
-    window.dispatchEvent(new CustomEvent("axiom:open-specify", { detail: { change: entry.title, projectName: projectName ?? "" } }));
-  };
-
-  const handleConvertToDecision = () => {
+  const handlePromote = (_type: string) => {
     if (done) return;
     haptic.short();
+    setShowPromote(false);
     updateEntry.mutate(
       { id: entry.id, data: { status: "committed", severity: "committed" } },
       { onSuccess: () => { setDone(true); queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(entry.projectId, {}) }); } }
@@ -43,6 +49,7 @@ export function ParkingLotEntry({ entry, projectName }: { entry: Entry; projectN
 
   const modeLabel = entry.mode ? entry.mode.toUpperCase() : "NOTE";
   const typeLabel = entry.verb ? entry.verb.toUpperCase() : "INSIGHT";
+  const entryTypeBadge = (entry.mode ?? "NOTE").toUpperCase();
   const summary = entry.summary || "";
   const sentences = summary.split(/(?<=[.!?])\s+/);
   const shortDef = sentences.slice(0, 2).join(" ") || summary;
@@ -76,9 +83,9 @@ export function ParkingLotEntry({ entry, projectName }: { entry: Entry; projectN
         >
           {entry.title}
         </Link>
-        {/* NOTE badge */}
+        {/* Type badge */}
         <span style={{ fontSize: "var(--ts-xs)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", background: "rgba(var(--atlas-muted-rgb),0.12)", color: "rgba(var(--atlas-muted-rgb),0.6)", padding: "2px 7px", borderRadius: 4, flexShrink: 0, textTransform: "uppercase" as const }}>
-          NOTE
+          {entryTypeBadge}
         </span>
       </div>
 
@@ -204,22 +211,37 @@ export function ParkingLotEntry({ entry, projectName }: { entry: Entry; projectN
           </div>
 
           {/* Actions */}
-          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 5 }}>
+          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 5, alignItems: "center" }}>
             <button onClick={handleResume}
               style={{ padding: "5px 10px", borderRadius: 6, fontSize: "var(--ts-micro)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "transparent", border: "1px solid rgba(var(--atlas-muted-rgb),0.22)", color: "var(--atlas-muted)", cursor: "pointer", transition: "all 150ms ease" }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(var(--atlas-muted-rgb),0.5)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(var(--atlas-muted-rgb),0.22)"; }}
             >Resume</button>
-            <button onClick={handleSpecify}
-              style={{ padding: "5px 10px", borderRadius: 6, fontSize: "var(--ts-micro)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "transparent", border: "1px solid rgba(var(--atlas-muted-rgb),0.22)", color: "var(--atlas-muted)", cursor: "pointer", transition: "all 150ms ease" }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(var(--atlas-muted-rgb),0.5)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(var(--atlas-muted-rgb),0.22)"; }}
-            >Specify</button>
-            <button onClick={handleConvertToDecision} disabled={done || updateEntry.isPending}
-              style={{ padding: "5px 10px", borderRadius: 6, fontSize: "var(--ts-micro)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)", color: "var(--atlas-gold)", cursor: done ? "default" : "pointer", transition: "all 150ms ease" }}
-              onMouseEnter={(e) => { if (!done) e.currentTarget.style.background = "rgba(201,162,76,0.15)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
-            >→ Decision</button>
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setShowPromote(v => !v)}
+                disabled={done || updateEntry.isPending}
+                style={{ padding: "5px 10px", borderRadius: 6, fontSize: "var(--ts-micro)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)", color: "var(--atlas-gold)", cursor: done ? "default" : "pointer", transition: "all 150ms ease", display: "flex", alignItems: "center", gap: 4 }}
+                onMouseEnter={(e) => { if (!done) e.currentTarget.style.background = "rgba(201,162,76,0.15)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
+              >
+                Promote…
+                <svg width="8" height="8" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: showPromote ? "rotate(180deg)" : "none", transition: "transform 140ms ease" }}>
+                  <path d="M1 1l4 4 4-4" />
+                </svg>
+              </button>
+              {showPromote && (
+                <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, background: "var(--atlas-surface-alt)", border: "1px solid color-mix(in oklab, var(--atlas-gold) 22%, transparent)", borderRadius: 8, padding: 4, zIndex: 50, boxShadow: "0 4px 20px rgba(0,0,0,0.35)", minWidth: 130 }}>
+                  {PROMOTE_TYPES.map(pt => (
+                    <button key={pt.value} onClick={() => handlePromote(pt.value)}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 12px", background: "transparent", border: "none", color: "var(--atlas-fg)", fontSize: "var(--ts-micro)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", cursor: "pointer", borderRadius: 5, textTransform: "uppercase" as const }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.1)"; e.currentTarget.style.color = "var(--atlas-gold)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
+                    >→ {pt.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={handleDelete} disabled={done || deleteEntry.isPending}
               style={{ padding: "5px 10px", borderRadius: 6, fontSize: "var(--ts-micro)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "transparent", border: "1px solid rgba(239,68,68,0.18)", color: "rgba(239,68,68,0.55)", cursor: done ? "default" : "pointer", transition: "all 150ms ease" }}
               onMouseEnter={(e) => { if (!done) e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; }}

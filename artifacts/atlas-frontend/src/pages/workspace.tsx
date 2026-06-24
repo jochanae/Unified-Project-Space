@@ -8406,13 +8406,14 @@ export default function Workspace() {
                 </div>
               </details>
             )}
+            <div style={{ padding: "6px 12px 2px", fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.14em", textTransform: "uppercase", opacity: 0.7 }}>Project</div>
             {(allProjects ?? []).filter((p: any) => p.id !== id && p.status !== "archived").length > 0 && (() => {
 
               const others = (allProjects ?? []).filter((p: any) => p.id !== id && p.status !== "archived");
               return (
                 <>
                   <button
-                    onClick={() => setSwitchToExpanded(x => !x)}
+                    onClick={() => { setShowProjectMenu(false); setShowDrawer(true); }}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
                       width: "calc(100% - 12px)", margin: "6px",
@@ -8469,7 +8470,6 @@ export default function Workspace() {
             })()}
             <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setShowProjectMenu(false); window.dispatchEvent(new CustomEvent("axiom:rename-project")); }} />
             <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" onClick={() => { setShowProjectMenu(false); setShowProjectSettings(true); }} />
-            <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation(`/parking?project=${id}`); setShowProjectMenu(false); }} />
             <MenuBtn
               icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="9" height="9" rx="1.5" /><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" /></svg>}
               label={cloningProject ? "Cloning…" : "Clone project"}
@@ -8491,9 +8491,10 @@ export default function Workspace() {
                 } finally { setCloningProject(false); }
               }}
             />
-            <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
+            <div style={{ padding: "6px 12px 2px", fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.14em", textTransform: "uppercase", opacity: 0.7 }}>Workspace</div>
             <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
             <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="14" height="10" rx="1.5" /><path d="M1 6h14" /><circle cx="3.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} /><circle cx="5.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} /></svg>} label="Dashboard" onClick={() => { setLocation("/dashboard"); setShowProjectMenu(false); }} />
+            <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation(`/parking`); setShowProjectMenu(false); }} />
             <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
             <div style={{ padding: "6px 12px 2px", fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.14em", textTransform: "uppercase", opacity: 0.7 }}>Conversation</div>
             {threadSearchDraft === null ? (

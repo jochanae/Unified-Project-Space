@@ -398,7 +398,7 @@ function _ActiveRunsInner({ projects, setLocation }: Props & { setLocation: (to:
             fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)",
             letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7,
           }}>
-            Active Runs
+            Atlas Composer
           </h3>
           {activeRuns.length > 0 && (
             <span style={{
