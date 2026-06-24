@@ -577,11 +577,35 @@ function rewriteJs(js: string, base: string): string {
 function proxyToPort(targetPort: number, proxyBase: string, req: import("express").Request, res: import("express").Response): void {
   const targetPath = req.url || "/";
 
-  // Stub out /@vite/client — HMR WebSocket cannot work through the proxy.
-  // Returning an empty module silences the "WebSocket URL undefined" error entirely.
+  // Stub /@vite/client — HMR WebSocket can't work through the proxy, but CSS modules
+  // import updateStyle/removeStyle from this module to inject their content into the page.
+  // We must export those so CSS actually loads; everything else is a no-op.
   if (targetPath === "/@vite/client" || targetPath.startsWith("/@vite/client?")) {
     res.setHeader("Content-Type", "application/javascript");
-    res.end("// @vite/client stubbed — HMR disabled in proxy mode");
+    res.end(`
+// @vite/client proxy stub — no WebSocket, but CSS injection still works
+export function createHotContext(_id) {
+  return {
+    accept() {}, dispose() {}, decline() {}, invalidate() {},
+    on() {}, off() {}, send() {}, prune() {},
+  };
+}
+export function updateStyle(id, css) {
+  const safeId = 'vite-css-' + id.replace(/[^a-z0-9]/gi, '-');
+  let el = document.getElementById(safeId);
+  if (!el) {
+    el = document.createElement('style');
+    el.id = safeId;
+    document.head.appendChild(el);
+  }
+  el.textContent = css;
+}
+export function removeStyle(id) {
+  const el = document.getElementById('vite-css-' + id.replace(/[^a-z0-9]/gi, '-'));
+  if (el) el.parentNode && el.parentNode.removeChild(el);
+}
+export const injectQuery = (url) => url;
+`);
     return;
   }
 
