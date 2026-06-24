@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PortfolioHealthDashboard } from "./PortfolioHealthDashboard";
+import { CognitiveMomentumCard } from "./home/CognitiveMomentumCard";
 import { useProjectState } from "../hooks/useProjectState";
 import { QuickEditRow, type QuickEditProjectOption } from "./home/QuickEditRow";
 import { ActiveRuns } from "./home/ActiveRuns";
@@ -466,29 +467,7 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
 
       {/* COGNITIVE MOMENTUM */}
       <RevealOnScroll delayMs={120} className="bfd-col-right">
-        <div className="atlas-discovery-card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-              Cognitive Momentum
-            </h3>
-            {onOpenParking && (
-              <button type="button" onClick={onOpenParking} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
-                Open parking →
-              </button>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 28, fontWeight: 200, color: "var(--atlas-gold)", lineHeight: 1, fontFamily: "var(--app-font-sans)" }}>
-              {actualParked}
-            </span>
-            <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.65 }}>
-              items parked
-            </span>
-          </div>
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--atlas-muted)", opacity: 0.6, fontStyle: "italic", lineHeight: 1.5 }}>
-            Ideas waiting for their moment.
-          </p>
-        </div>
+        <CognitiveMomentumCard onOpenParking={onOpenParking} />
       </RevealOnScroll>
     </div>
   );

@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { API_BASE } from "@/lib/api";
 
 const GOLD = "var(--atlas-gold)";
 const MUTED = "var(--atlas-muted)";
@@ -8,21 +7,9 @@ const MONO = "var(--app-font-mono)";
 const BORDER = "var(--atlas-border)";
 const GREEN = "#4ade80";
 const AMBER = "#f59e0b";
+const RED = "#f87171";
 
 type AtlasState = "Discovering" | "Pressure Testing" | "Structuring" | "Building" | "Operating";
-
-type ProjectHealthSummary = {
-  projectId: number;
-  projectName: string;
-  updatedAt: string;
-  stage: string;
-  atlasState: AtlasState;
-  momentum: "Low" | "Medium" | "High";
-  clarity: number;
-  confidence: "Low" | "Medium" | "High";
-  risk: string | null;
-  nextAction: string;
-};
 
 const STATE_COLOR: Record<AtlasState, string> = {
   "Discovering":      "rgba(99,212,221,0.8)",
@@ -38,6 +25,12 @@ function momentumColor(m: string): string {
   return "rgba(255,255,255,0.3)";
 }
 
+function clarityColor(n: number): string {
+  if (n >= 70) return GREEN;
+  if (n >= 35) return AMBER;
+  return "rgba(255,255,255,0.35)";
+}
+
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -49,6 +42,37 @@ function formatRelative(iso: string): string {
   if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+type IntelEntry = {
+  id: number;
+  title: string;
+  summary: string | null;
+  status: string | null;
+  createdAt: string;
+};
+
+type ProjectIntelligence = {
+  projectId: number;
+  projectName: string | null;
+  projectStatus: string | null;
+  dna: { stage: string; confidenceScore: number; lastExtractedAt: string | null };
+  health: {
+    clarity: number;
+    momentum: "Low" | "Medium" | "High";
+    confidence: "Low" | "Medium" | "High";
+    atlasState: AtlasState;
+    risk: string | null;
+    nextAction: string;
+    evidence: { conversationsLast7Days: number; openBlockers: number };
+  };
+  readiness: { overall: number; label: string };
+  entries: {
+    decisions: IntelEntry[];
+    blockers: (IntelEntry & { severity: string | null })[];
+    goals: IntelEntry[];
+  };
+  computedAt: string;
+};
 
 function SkeletonCard() {
   return (
@@ -76,11 +100,13 @@ function ProjectHealthCard({
   p,
   onOpen,
 }: {
-  p: ProjectHealthSummary;
+  p: ProjectIntelligence;
   onOpen: (id: number) => void;
 }) {
-  const stateColor = STATE_COLOR[p.atlasState] ?? GOLD;
-  const mColor = momentumColor(p.momentum);
+  const stateColor = STATE_COLOR[p.health.atlasState] ?? GOLD;
+  const mColor = momentumColor(p.health.momentum);
+  const blockerCount = p.entries.blockers.length;
+  const decisionCount = p.entries.decisions.length;
 
   return (
     <button
@@ -103,76 +129,92 @@ function ProjectHealthCard({
         e.currentTarget.style.background = "rgba(255,255,255,0.012)";
       }}
     >
-      {/* Row 1: name + age */}
+      {/* Row 1: name + readiness % */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <span style={{
           fontSize: 13, fontWeight: 600, color: FG, lineHeight: 1.3,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           fontFamily: "var(--app-font-sans)",
         }}>
-          {p.projectName}
+          {p.projectName ?? "Untitled"}
         </span>
         <span style={{
-          fontSize: 9.5, fontFamily: MONO, color: MUTED, opacity: 0.4,
+          fontSize: 10.5, fontFamily: MONO, fontWeight: 600,
+          color: p.readiness.overall >= 70 ? GREEN : p.readiness.overall >= 35 ? AMBER : "rgba(255,255,255,0.3)",
           flexShrink: 0, letterSpacing: "0.04em",
         }}>
-          {formatRelative(p.updatedAt)}
+          {p.readiness.overall}%
         </span>
       </div>
 
-      {/* Row 2: Atlas State + Momentum + Clarity */}
+      {/* Row 2: state + momentum + clarity */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {/* State chip */}
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <div style={{
             width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-            background: stateColor,
-            boxShadow: `0 0 5px ${stateColor}`,
+            background: stateColor, boxShadow: `0 0 5px ${stateColor}`,
           }} />
-          <span style={{
-            fontFamily: MONO, fontSize: 9, letterSpacing: "0.07em",
-            color: stateColor, fontWeight: 600,
-          }}>
-            {p.atlasState}
+          <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.07em", color: stateColor, fontWeight: 600 }}>
+            {p.health.atlasState}
           </span>
         </div>
 
-        {/* Divider */}
         <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
 
-        {/* Momentum */}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase", color: MUTED, opacity: 0.4 }}>
             Momentum
           </span>
           <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, color: mColor, letterSpacing: "0.04em" }}>
-            {p.momentum}
+            {p.health.momentum}
           </span>
         </div>
 
-        {/* Clarity */}
-        {p.clarity > 0 && (
+        {p.health.clarity > 0 && (
           <>
             <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase", color: MUTED, opacity: 0.4 }}>
                 Clarity
               </span>
-              <span style={{
-                fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: "0.04em",
-                color: p.clarity >= 70 ? GREEN : p.clarity >= 35 ? AMBER : "rgba(255,255,255,0.35)",
-              }}>
-                {p.clarity}%
+              <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: "0.04em", color: clarityColor(p.health.clarity) }}>
+                {p.health.clarity}%
+              </span>
+            </div>
+          </>
+        )}
+
+        {blockerCount > 0 && (
+          <>
+            <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ width: 5, height: 5, borderRadius: "50%", background: RED, flexShrink: 0 }} />
+              <span style={{ fontFamily: MONO, fontSize: 9, color: RED, fontWeight: 600, letterSpacing: "0.04em" }}>
+                {blockerCount} blocker{blockerCount !== 1 ? "s" : ""}
               </span>
             </div>
           </>
         )}
       </div>
 
-      {/* Row 3: Next action */}
+      {/* Row 3: sub-signals */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {decisionCount > 0 && (
+          <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.45, letterSpacing: "0.04em" }}>
+            {decisionCount} decision{decisionCount !== 1 ? "s" : ""}
+          </span>
+        )}
+        {p.health.evidence.conversationsLast7Days > 0 && (
+          <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.45, letterSpacing: "0.04em" }}>
+            {p.health.evidence.conversationsLast7Days} msg{p.health.evidence.conversationsLast7Days !== 1 ? "s" : ""} this week
+          </span>
+        )}
+      </div>
+
+      {/* Row 4: next action */}
       <div style={{
         display: "flex", alignItems: "flex-start", gap: 6,
-        paddingTop: 2,
+        paddingTop: 4,
         borderTop: "1px solid rgba(255,255,255,0.04)",
       }}>
         <span style={{
@@ -186,7 +228,7 @@ function ProjectHealthCard({
           overflow: "hidden", display: "-webkit-box",
           WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
         }}>
-          {p.nextAction}
+          {p.health.nextAction}
         </span>
       </div>
     </button>
@@ -198,16 +240,16 @@ export function PortfolioHealthDashboard({
 }: {
   onOpenProject: (id: number) => void;
 }) {
-  const [projects, setProjects] = useState<ProjectHealthSummary[] | null>(null);
+  const [projects, setProjects] = useState<ProjectIntelligence[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/portfolio/health`, { credentials: "include" });
+      const res = await fetch("/api/portfolio/intelligence", { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}`);
-      const data = await res.json() as ProjectHealthSummary[];
+      const data = await res.json() as ProjectIntelligence[];
       setProjects(data);
-    } catch (e) {
+    } catch {
       setError("Could not load portfolio health");
     }
   }, []);
@@ -219,11 +261,10 @@ export function PortfolioHealthDashboard({
       <style>{`
         @keyframes phd-pulse {
           0%, 100% { opacity: 0.5; }
-          50% { opacity: 0.9; }
+          50%       { opacity: 0.9; }
         }
       `}</style>
 
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <h3 style={{
           margin: 0, fontSize: 9.5, fontWeight: 600,
@@ -233,37 +274,30 @@ export function PortfolioHealthDashboard({
           Portfolio Health
         </h3>
         {projects && projects.length > 0 && (
-          <span style={{
-            fontFamily: MONO, fontSize: 8.5, color: MUTED, opacity: 0.4,
-            letterSpacing: "0.08em",
-          }}>
+          <span style={{ fontFamily: MONO, fontSize: 8.5, color: MUTED, opacity: 0.4, letterSpacing: "0.08em" }}>
             {projects.length} project{projects.length !== 1 ? "s" : ""}
           </span>
         )}
       </div>
 
-      {/* Loading */}
       {projects === null && !error && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <p style={{ margin: 0, fontSize: 11, color: MUTED, opacity: 0.5, fontStyle: "italic" }}>
           {error}
         </p>
       )}
 
-      {/* Empty */}
       {projects && projects.length === 0 && (
         <p style={{ margin: 0, fontSize: 12, color: MUTED, opacity: 0.5, lineHeight: 1.6 }}>
           No projects yet. Start a conversation to create your first one.
         </p>
       )}
 
-      {/* Cards */}
       {projects && projects.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {projects.map(p => (
