@@ -9,5 +9,6 @@
 - [Atlas Builder Actions](atlas-builder-actions.md) — FILE_EDIT/LINE_PATCH/DiffViewer/GitHubPushModal already live; requires linked GitHub repo; FILE_DELETE/MOVE still missing
 - [Axiom Memory Architecture Roadmap](axiom-memory-architecture-roadmap.md) — V2–V5 sequencing: V2=synthesize+triggers, V3=text search, V4=vectors, V5=RAG; do not skip phases
 - [Axiom Ownership Charter](axiom-ownership-charter.md) — frozen architecture map; every surface has one owner; execution sequence defined; full doc at .local/axiom-ownership-charter.md
-- [Surface Manifest](surface-manifest.md) — product bible; four-question contract per surface; homepage audit complete; full doc at .local/surface-manifest.md
+- [Surface Manifest](surface-manifest.md) — product bible; four-question contract per surface; Homepage/Global Insights/Workspace/Master Map/Axiom Flow all audited; full doc at .local/surface-manifest.md
+- [Atlas Constitution](atlas-constitution.md) — soul document; Atlas DNA, borrowing framework, three buckets, quality charter, what not to do; full doc at .local/atlas-constitution.md
 - [_workspace api-client-react sync pattern](workspace-api-client-sync.md) — codegen writes to lib/; frontend tsconfig resolves @workspace/api-client-react to _workspace/ first; append new types/hooks to both
