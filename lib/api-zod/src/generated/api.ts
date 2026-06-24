@@ -152,6 +152,259 @@ export const GetProjectReadinessResponse = zod.object({
 
 
 /**
+ * The single source of truth for project state. Master Map, Axiom Flow header, HUD, Workspace ring, and Portfolio cards must all consume this endpoint instead of computing independent realities. Composes genome DNA fields, health signals (momentum, clarity, atlasState), readiness % with dimension breakdown, and typed entry lists (decisions, blockers, goals, ideas, features, risks).
+
+ * @summary Project Intelligence (unified source of truth)
+ */
+export const GetProjectIntelligenceParams = zod.object({
+  "id": zod.coerce.number().describe('The project ID.')
+})
+
+export const getProjectIntelligenceResponseDnaConfidenceScoreMin = 0;
+export const getProjectIntelligenceResponseDnaConfidenceScoreMax = 100;
+
+export const getProjectIntelligenceResponseHealthClarityMin = 0;
+export const getProjectIntelligenceResponseHealthClarityMax = 100;
+
+export const getProjectIntelligenceResponseReadinessOverallMin = 0;
+export const getProjectIntelligenceResponseReadinessOverallMax = 100;
+
+
+
+export const GetProjectIntelligenceResponse = zod.object({
+  "projectId": zod.number(),
+  "projectName": zod.string().nullish(),
+  "projectDescription": zod.string().nullish(),
+  "projectStatus": zod.string().nullish(),
+  "dna": zod.object({
+  "purpose": zod.string().nullish(),
+  "coreEmotion": zod.string().nullish(),
+  "audience": zod.string().nullish(),
+  "identity": zod.string().nullish(),
+  "wedge": zod.string().nullish(),
+  "differentiator": zod.string().nullish(),
+  "stage": zod.string(),
+  "constraints": zod.array(zod.string()),
+  "openQuestions": zod.array(zod.string()),
+  "confidenceScore": zod.number().min(getProjectIntelligenceResponseDnaConfidenceScoreMin).max(getProjectIntelligenceResponseDnaConfidenceScoreMax),
+  "lastExtractedAt": zod.coerce.date().nullish()
+}).describe('Genome DNA fields'),
+  "health": zod.object({
+  "clarity": zod.number().min(getProjectIntelligenceResponseHealthClarityMin).max(getProjectIntelligenceResponseHealthClarityMax),
+  "confidence": zod.enum(['Low', 'Medium', 'High']),
+  "momentum": zod.enum(['Low', 'Medium', 'High']),
+  "atlasState": zod.enum(['Discovering', 'Pressure Testing', 'Structuring', 'Building', 'Operating']),
+  "risk": zod.string().nullish(),
+  "nextAction": zod.string(),
+  "evidence": zod.object({
+  "conversationsLast7Days": zod.number().optional(),
+  "openBlockers": zod.number().optional(),
+  "openConstraints": zod.number().optional(),
+  "openQuestions": zod.number().optional(),
+  "confidenceScore": zod.number().optional()
+}).optional()
+}).describe('Computed health signals — never stored, always fresh'),
+  "readiness": zod.object({
+  "overall": zod.number().min(getProjectIntelligenceResponseReadinessOverallMin).max(getProjectIntelligenceResponseReadinessOverallMax),
+  "label": zod.string(),
+  "projectKind": zod.enum(['app', 'strategy', 'general']),
+  "warnings": zod.array(zod.string())
+}).describe('Canonical readiness score — the workspace ring and portfolio cards read from here'),
+  "entries": zod.object({
+  "decisions": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "blockers": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "goals": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "ideas": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "features": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "openQuestionEntries": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+}).describe('Typed entry lists — Master Map, Ledger, and HUD read from here'),
+  "computedAt": zod.coerce.date()
+}).describe('The single source of truth for a project. All surfaces — Master Map, Axiom Flow header, HUD, Workspace ring, and Portfolio cards — consume this object instead of computing independent realities. Composes genome DNA, health signals, readiness %, and typed entry lists.\n')
+
+
+/**
+ * Batch version of /projects/:id/intelligence for all user projects. Portfolio cards and the Global Insights surface consume this instead of /portfolio/health so they share the same readiness formula and health signals as the per-project views.
+
+ * @summary Portfolio Intelligence (batch)
+ */
+export const getPortfolioIntelligenceResponseDnaConfidenceScoreMin = 0;
+export const getPortfolioIntelligenceResponseDnaConfidenceScoreMax = 100;
+
+export const getPortfolioIntelligenceResponseHealthClarityMin = 0;
+export const getPortfolioIntelligenceResponseHealthClarityMax = 100;
+
+export const getPortfolioIntelligenceResponseReadinessOverallMin = 0;
+export const getPortfolioIntelligenceResponseReadinessOverallMax = 100;
+
+
+
+export const GetPortfolioIntelligenceResponseItem = zod.object({
+  "projectId": zod.number(),
+  "projectName": zod.string().nullish(),
+  "projectDescription": zod.string().nullish(),
+  "projectStatus": zod.string().nullish(),
+  "dna": zod.object({
+  "purpose": zod.string().nullish(),
+  "coreEmotion": zod.string().nullish(),
+  "audience": zod.string().nullish(),
+  "identity": zod.string().nullish(),
+  "wedge": zod.string().nullish(),
+  "differentiator": zod.string().nullish(),
+  "stage": zod.string(),
+  "constraints": zod.array(zod.string()),
+  "openQuestions": zod.array(zod.string()),
+  "confidenceScore": zod.number().min(getPortfolioIntelligenceResponseDnaConfidenceScoreMin).max(getPortfolioIntelligenceResponseDnaConfidenceScoreMax),
+  "lastExtractedAt": zod.coerce.date().nullish()
+}).describe('Genome DNA fields'),
+  "health": zod.object({
+  "clarity": zod.number().min(getPortfolioIntelligenceResponseHealthClarityMin).max(getPortfolioIntelligenceResponseHealthClarityMax),
+  "confidence": zod.enum(['Low', 'Medium', 'High']),
+  "momentum": zod.enum(['Low', 'Medium', 'High']),
+  "atlasState": zod.enum(['Discovering', 'Pressure Testing', 'Structuring', 'Building', 'Operating']),
+  "risk": zod.string().nullish(),
+  "nextAction": zod.string(),
+  "evidence": zod.object({
+  "conversationsLast7Days": zod.number().optional(),
+  "openBlockers": zod.number().optional(),
+  "openConstraints": zod.number().optional(),
+  "openQuestions": zod.number().optional(),
+  "confidenceScore": zod.number().optional()
+}).optional()
+}).describe('Computed health signals — never stored, always fresh'),
+  "readiness": zod.object({
+  "overall": zod.number().min(getPortfolioIntelligenceResponseReadinessOverallMin).max(getPortfolioIntelligenceResponseReadinessOverallMax),
+  "label": zod.string(),
+  "projectKind": zod.enum(['app', 'strategy', 'general']),
+  "warnings": zod.array(zod.string())
+}).describe('Canonical readiness score — the workspace ring and portfolio cards read from here'),
+  "entries": zod.object({
+  "decisions": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "blockers": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "goals": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "ideas": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "features": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "openQuestionEntries": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "type": zod.string().nullish(),
+  "severity": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+}).describe('Typed entry lists — Master Map, Ledger, and HUD read from here'),
+  "computedAt": zod.coerce.date()
+}).describe('The single source of truth for a project. All surfaces — Master Map, Axiom Flow header, HUD, Workspace ring, and Portfolio cards — consume this object instead of computing independent realities. Composes genome DNA, health signals, readiness %, and typed entry lists.\n')
+export const GetPortfolioIntelligenceResponse = zod.array(GetPortfolioIntelligenceResponseItem)
+
+
+/**
  * Atlas reads the portfolio and generates a structured brief with four curated sections: what moved, what emerged, what is waiting on the user, and the single suggested next move.
 The response is cached per user for five minutes so repeated fast opens do not trigger re-generation. Pass `?bust=1` to bypass the cache and force a fresh read.
 

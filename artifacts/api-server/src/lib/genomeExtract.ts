@@ -11,7 +11,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const extractionCooldowns = new Map<number, number>();
 // In-flight guard: tracks projects with an active extraction in progress
 const extractionInFlight = new Set<number>();
-const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+const COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
 const MIN_MESSAGES = 5;
 
 export function isOnCooldown(projectId: number): boolean {

@@ -39,6 +39,7 @@ import previewRouter from "./preview";
 import manifestRouter from "./manifest";
 import genomeRouter from "./genome";
 import readinessRouter from "./readiness";
+import intelligenceRouter from "./intelligence";
 import fsRouter from "./fs";
 import artifactsRouter from "./artifacts";
 import codegenRouter from "./codegen";
@@ -115,6 +116,7 @@ router.use(requireAuth, previewRouter);
 router.use(requireAuth, manifestRouter);
 router.use(requireAuth, genomeRouter);
 router.use(requireAuth, readinessRouter);
+router.use(requireAuth, intelligenceRouter);
 
 // Project file system — local workspace read/write
 router.use(requireAuth, fsRouter);

@@ -9,6 +9,147 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface IntelligenceEntryItem {
+  id: number;
+  title: string;
+  summary?: string | null;
+  status: string;
+  type?: string | null;
+  severity?: string | null;
+  createdAt: string;
+}
+
+/**
+ * Genome DNA fields
+ */
+export type ProjectIntelligenceDna = {
+  purpose?: string | null;
+  coreEmotion?: string | null;
+  audience?: string | null;
+  identity?: string | null;
+  wedge?: string | null;
+  differentiator?: string | null;
+  stage: string;
+  constraints: string[];
+  openQuestions: string[];
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  confidenceScore: number;
+  lastExtractedAt?: string | null;
+};
+
+export type ProjectIntelligenceHealthConfidence = typeof ProjectIntelligenceHealthConfidence[keyof typeof ProjectIntelligenceHealthConfidence];
+
+
+export const ProjectIntelligenceHealthConfidence = {
+  Low: 'Low',
+  Medium: 'Medium',
+  High: 'High',
+} as const;
+
+export type ProjectIntelligenceHealthMomentum = typeof ProjectIntelligenceHealthMomentum[keyof typeof ProjectIntelligenceHealthMomentum];
+
+
+export const ProjectIntelligenceHealthMomentum = {
+  Low: 'Low',
+  Medium: 'Medium',
+  High: 'High',
+} as const;
+
+export type ProjectIntelligenceHealthAtlasState = typeof ProjectIntelligenceHealthAtlasState[keyof typeof ProjectIntelligenceHealthAtlasState];
+
+
+export const ProjectIntelligenceHealthAtlasState = {
+  Discovering: 'Discovering',
+  Pressure_Testing: 'Pressure Testing',
+  Structuring: 'Structuring',
+  Building: 'Building',
+  Operating: 'Operating',
+} as const;
+
+export type ProjectIntelligenceHealthEvidence = {
+  conversationsLast7Days?: number;
+  openBlockers?: number;
+  openConstraints?: number;
+  openQuestions?: number;
+  confidenceScore?: number;
+};
+
+/**
+ * Computed health signals — never stored, always fresh
+ */
+export type ProjectIntelligenceHealth = {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  clarity: number;
+  confidence: ProjectIntelligenceHealthConfidence;
+  momentum: ProjectIntelligenceHealthMomentum;
+  atlasState: ProjectIntelligenceHealthAtlasState;
+  risk?: string | null;
+  nextAction: string;
+  evidence?: ProjectIntelligenceHealthEvidence;
+};
+
+export type ProjectIntelligenceReadinessProjectKind = typeof ProjectIntelligenceReadinessProjectKind[keyof typeof ProjectIntelligenceReadinessProjectKind];
+
+
+export const ProjectIntelligenceReadinessProjectKind = {
+  app: 'app',
+  strategy: 'strategy',
+  general: 'general',
+} as const;
+
+/**
+ * Canonical readiness score — the workspace ring and portfolio cards read from here
+ */
+export type ProjectIntelligenceReadiness = {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  overall: number;
+  label: string;
+  projectKind: ProjectIntelligenceReadinessProjectKind;
+  warnings: string[];
+};
+
+/**
+ * Typed entry lists — Master Map, Ledger, and HUD read from here
+ */
+export type ProjectIntelligenceEntries = {
+  decisions: IntelligenceEntryItem[];
+  blockers: IntelligenceEntryItem[];
+  goals: IntelligenceEntryItem[];
+  ideas: IntelligenceEntryItem[];
+  features: IntelligenceEntryItem[];
+  risks: IntelligenceEntryItem[];
+  openQuestionEntries: IntelligenceEntryItem[];
+};
+
+/**
+ * The single source of truth for a project. All surfaces — Master Map, Axiom Flow header, HUD, Workspace ring, and Portfolio cards — consume this object instead of computing independent realities. Composes genome DNA, health signals, readiness %, and typed entry lists.
+
+ */
+export interface ProjectIntelligence {
+  projectId: number;
+  projectName?: string | null;
+  projectDescription?: string | null;
+  projectStatus?: string | null;
+  /** Genome DNA fields */
+  dna: ProjectIntelligenceDna;
+  /** Computed health signals — never stored, always fresh */
+  health: ProjectIntelligenceHealth;
+  /** Canonical readiness score — the workspace ring and portfolio cards read from here */
+  readiness: ProjectIntelligenceReadiness;
+  /** Typed entry lists — Master Map, Ledger, and HUD read from here */
+  entries: ProjectIntelligenceEntries;
+  computedAt: string;
+}
+
 /**
  * Signal density gradient. "absent" — no value. "thin" — value exists but lacks extractable structure. "sufficient" — Manifest can reason over this anchor with confidence. "locked" — user has confirmed this anchor is stable and should not be re-extracted.
 

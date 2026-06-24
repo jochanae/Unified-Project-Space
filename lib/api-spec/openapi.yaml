@@ -99,6 +99,62 @@ paths:
         "404":
           description: Project not found
 
+  /projects/{id}/intelligence:
+    get:
+      operationId: getProjectIntelligence
+      tags: [nexus]
+      summary: Project Intelligence (unified source of truth)
+      description: >
+        The single source of truth for project state. Master Map, Axiom Flow header,
+        HUD, Workspace ring, and Portfolio cards must all consume this endpoint instead
+        of computing independent realities. Composes genome DNA fields, health signals
+        (momentum, clarity, atlasState), readiness % with dimension breakdown, and
+        typed entry lists (decisions, blockers, goals, ideas, features, risks).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: The project ID.
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Project intelligence successfully computed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectIntelligence"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+
+  /portfolio/intelligence:
+    get:
+      operationId: getPortfolioIntelligence
+      tags: [nexus]
+      summary: Portfolio Intelligence (batch)
+      description: >
+        Batch version of /projects/:id/intelligence for all user projects.
+        Portfolio cards and the Global Insights surface consume this instead of
+        /portfolio/health so they share the same readiness formula and health signals
+        as the per-project views.
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Portfolio intelligence successfully computed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectIntelligence"
+        "401":
+          description: Not authenticated
+
   /nexus/resume:
     get:
       operationId: getPortfolioResume
@@ -149,6 +205,211 @@ components:
           type: string
       required:
         - status
+
+    IntelligenceEntryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        status:
+          type: string
+        type:
+          type: string
+          nullable: true
+        severity:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - status
+        - createdAt
+
+    ProjectIntelligence:
+      type: object
+      description: >
+        The single source of truth for a project. All surfaces — Master Map,
+        Axiom Flow header, HUD, Workspace ring, and Portfolio cards — consume
+        this object instead of computing independent realities. Composes genome
+        DNA, health signals, readiness %, and typed entry lists.
+      properties:
+        projectId:
+          type: integer
+        projectName:
+          type: string
+          nullable: true
+        projectDescription:
+          type: string
+          nullable: true
+        projectStatus:
+          type: string
+          nullable: true
+        dna:
+          type: object
+          description: Genome DNA fields
+          properties:
+            purpose:
+              type: string
+              nullable: true
+            coreEmotion:
+              type: string
+              nullable: true
+            audience:
+              type: string
+              nullable: true
+            identity:
+              type: string
+              nullable: true
+            wedge:
+              type: string
+              nullable: true
+            differentiator:
+              type: string
+              nullable: true
+            stage:
+              type: string
+            constraints:
+              type: array
+              items:
+                type: string
+            openQuestions:
+              type: array
+              items:
+                type: string
+            confidenceScore:
+              type: integer
+              minimum: 0
+              maximum: 100
+            lastExtractedAt:
+              type: string
+              format: date-time
+              nullable: true
+          required:
+            - stage
+            - constraints
+            - openQuestions
+            - confidenceScore
+        health:
+          type: object
+          description: Computed health signals — never stored, always fresh
+          properties:
+            clarity:
+              type: integer
+              minimum: 0
+              maximum: 100
+            confidence:
+              type: string
+              enum: [Low, Medium, High]
+            momentum:
+              type: string
+              enum: [Low, Medium, High]
+            atlasState:
+              type: string
+              enum: [Discovering, Pressure Testing, Structuring, Building, Operating]
+            risk:
+              type: string
+              nullable: true
+            nextAction:
+              type: string
+            evidence:
+              type: object
+              properties:
+                conversationsLast7Days:
+                  type: integer
+                openBlockers:
+                  type: integer
+                openConstraints:
+                  type: integer
+                openQuestions:
+                  type: integer
+                confidenceScore:
+                  type: integer
+          required:
+            - clarity
+            - confidence
+            - momentum
+            - atlasState
+            - nextAction
+        readiness:
+          type: object
+          description: Canonical readiness score — the workspace ring and portfolio cards read from here
+          properties:
+            overall:
+              type: integer
+              minimum: 0
+              maximum: 100
+            label:
+              type: string
+            projectKind:
+              type: string
+              enum: [app, strategy, general]
+            warnings:
+              type: array
+              items:
+                type: string
+          required:
+            - overall
+            - label
+            - projectKind
+            - warnings
+        entries:
+          type: object
+          description: Typed entry lists — Master Map, Ledger, and HUD read from here
+          properties:
+            decisions:
+              type: array
+              items:
+                $ref: "#/components/schemas/IntelligenceEntryItem"
+            blockers:
+              type: array
+              items:
+                $ref: "#/components/schemas/IntelligenceEntryItem"
+            goals:
+              type: array
+              items:
+                $ref: "#/components/schemas/IntelligenceEntryItem"
+            ideas:
+              type: array
+              items:
+                $ref: "#/components/schemas/IntelligenceEntryItem"
+            features:
+              type: array
+              items:
+                $ref: "#/components/schemas/IntelligenceEntryItem"
+            risks:
+              type: array
+              items:
+                $ref: "#/components/schemas/IntelligenceEntryItem"
+            openQuestionEntries:
+              type: array
+              items:
+                $ref: "#/components/schemas/IntelligenceEntryItem"
+          required:
+            - decisions
+            - blockers
+            - goals
+            - ideas
+            - features
+            - risks
+            - openQuestionEntries
+        computedAt:
+          type: string
+          format: date-time
+      required:
+        - projectId
+        - dna
+        - health
+        - readiness
+        - entries
+        - computedAt
 
     DnaAnchor:
       type: object

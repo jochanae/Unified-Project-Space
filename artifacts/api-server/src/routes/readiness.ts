@@ -124,7 +124,7 @@ export async function computeProjectReadiness(projectId: number): Promise<Projec
   if (buildApplicable) {
     const filesOk = Boolean(project.appSourceFileCount && project.appSourceFileCount > 0);
     const buildOk = project.appBuildSucceeded === true;
-    buildScore = (filesOk ? 40 : 0) + (buildOk ? 40 : 0);
+    buildScore = (filesOk ? 50 : 0) + (buildOk ? 50 : 0);
     if (filesOk && project.appBuildSucceeded === null) {
       warnings.push("Build status not yet tracked — re-run the workspace devserver");
     }

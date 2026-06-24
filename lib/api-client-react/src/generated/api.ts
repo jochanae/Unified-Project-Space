@@ -19,6 +19,7 @@ import type {
   GetPortfolioResumeParams,
   HealthStatus,
   PortfolioResume,
+  ProjectIntelligence,
   ProjectManifest,
   ProjectReadiness
 } from './api.schemas';
@@ -260,6 +261,164 @@ export function useGetProjectReadiness<TData = Awaited<ReturnType<typeof getProj
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetProjectReadinessQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetProjectIntelligenceUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/intelligence`
+}
+
+/**
+ * The single source of truth for project state. Master Map, Axiom Flow header, HUD, Workspace ring, and Portfolio cards must all consume this endpoint instead of computing independent realities. Composes genome DNA fields, health signals (momentum, clarity, atlasState), readiness % with dimension breakdown, and typed entry lists (decisions, blockers, goals, ideas, features, risks).
+
+ * @summary Project Intelligence (unified source of truth)
+ */
+export const getProjectIntelligence = async (id: number, options?: RequestInit): Promise<ProjectIntelligence> => {
+
+  return customFetch<ProjectIntelligence>(getGetProjectIntelligenceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectIntelligenceQueryKey = (id: number,) => {
+    return [
+    `/api/projects/${id}/intelligence`
+    ] as const;
+    }
+
+
+export const getGetProjectIntelligenceQueryOptions = <TData = Awaited<ReturnType<typeof getProjectIntelligence>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectIntelligenceQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectIntelligence>>> = ({ signal }) => getProjectIntelligence(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectIntelligence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectIntelligenceQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectIntelligence>>>
+export type GetProjectIntelligenceQueryError = ErrorType<void>
+
+
+/**
+ * @summary Project Intelligence (unified source of truth)
+ */
+
+export function useGetProjectIntelligence<TData = Awaited<ReturnType<typeof getProjectIntelligence>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectIntelligenceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPortfolioIntelligenceUrl = () => {
+
+
+
+
+  return `/api/portfolio/intelligence`
+}
+
+/**
+ * Batch version of /projects/:id/intelligence for all user projects. Portfolio cards and the Global Insights surface consume this instead of /portfolio/health so they share the same readiness formula and health signals as the per-project views.
+
+ * @summary Portfolio Intelligence (batch)
+ */
+export const getPortfolioIntelligence = async ( options?: RequestInit): Promise<ProjectIntelligence[]> => {
+
+  return customFetch<ProjectIntelligence[]>(getGetPortfolioIntelligenceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPortfolioIntelligenceQueryKey = () => {
+    return [
+    `/api/portfolio/intelligence`
+    ] as const;
+    }
+
+
+export const getGetPortfolioIntelligenceQueryOptions = <TData = Awaited<ReturnType<typeof getPortfolioIntelligence>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPortfolioIntelligenceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortfolioIntelligence>>> = ({ signal }) => getPortfolioIntelligence({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPortfolioIntelligence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPortfolioIntelligenceQueryResult = NonNullable<Awaited<ReturnType<typeof getPortfolioIntelligence>>>
+export type GetPortfolioIntelligenceQueryError = ErrorType<void>
+
+
+/**
+ * @summary Portfolio Intelligence (batch)
+ */
+
+export function useGetPortfolioIntelligence<TData = Awaited<ReturnType<typeof getPortfolioIntelligence>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPortfolioIntelligenceQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
