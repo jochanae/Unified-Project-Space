@@ -46,6 +46,12 @@ export default function Vault() {
   const [, setLocation] = useLocation();
   const { goBack } = useEntryReferrer();
 
+  // Snapshots now live in the Ledger panel inside each project workspace.
+  // Redirect to Projects so the user can open a project to view its Snapshots tab.
+  useEffect(() => {
+    setLocation("/projects");
+  }, [setLocation]);
+
   const [items, setItems] = useState<VaultSave[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
