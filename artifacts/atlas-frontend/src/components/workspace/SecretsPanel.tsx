@@ -231,9 +231,19 @@ export function SecretsPanel({ projectId, projectName }: SecretsPanelProps) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {loading ? (
-          <div style={{ color: "var(--atlas-muted)", fontSize: 11 }}>Loading secrets...</div>
+          <div style={{ color: "var(--atlas-muted)", fontSize: 11 }}>Loading...</div>
         ) : secrets.length === 0 ? (
-          <div style={{ color: "var(--atlas-muted)", fontSize: 11 }}>No secrets yet.</div>
+          <div style={{
+            border: "1px solid var(--atlas-border)", borderRadius: 10,
+            padding: "16px 14px", display: "flex", flexDirection: "column", gap: 5,
+          }}>
+            <div style={{ color: "var(--atlas-fg)", fontSize: 11, fontWeight: 600, opacity: 0.7 }}>
+              No environment variables configured yet.
+            </div>
+            <div style={{ color: "var(--atlas-muted)", fontSize: 11, lineHeight: 1.6, opacity: 0.6 }}>
+              Add API keys, connection strings, or other runtime values this project needs. They're stored encrypted and referenced by label.
+            </div>
+          </div>
         ) : (
           secrets.map((secret) => (
             <div

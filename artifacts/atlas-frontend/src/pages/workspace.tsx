@@ -1189,10 +1189,24 @@ function DatabaseTab({
         )}
 
         {section === "schema" && (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
-            <span style={{ ...muted, fontSize: 11, opacity: 0.45, textAlign: "center", lineHeight: 1.7 }}>
-              Schema inspector<br />coming soon
-            </span>
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
+            {dbUrl ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ border: "1px solid var(--atlas-border)", borderRadius: 10, padding: "16px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-fg)", opacity: 0.7 }}>Schema inspector</div>
+                  <div style={{ fontSize: 11, ...muted, lineHeight: 1.6, opacity: 0.6 }}>
+                    Table structure from the connected database will appear here. Schema inspection is coming in a future update.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ border: "1px solid var(--atlas-border)", borderRadius: 10, padding: "16px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-fg)", opacity: 0.7 }}>No database schema detected.</div>
+                <div style={{ fontSize: 11, ...muted, lineHeight: 1.6, opacity: 0.6 }}>
+                  This project currently uses local state only. Connect a database on the Connection tab and Atlas will surface the table structure here.
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
