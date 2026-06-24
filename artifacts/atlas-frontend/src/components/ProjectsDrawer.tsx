@@ -3,7 +3,7 @@ import { useParkedCount } from "@/hooks/useParkedCount";
 import { Project } from "@workspace/api-client-react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
-import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Hammer, Archive, LayoutDashboard, Globe, Wand2 } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, LayoutDashboard, Globe, Wand2 } from "lucide-react";
 import { CompactReadinessRing } from "./ReadinessRing";
 import { LifecycleGlyph } from "./LifecycleGlyph";
 
@@ -15,7 +15,7 @@ export type DrawerProject = {
   status?: "shaping" | "committed" | "archived";
 };
 
-type ProjectFilter = "all" | "committed" | "shaping";
+type ProjectFilter = "all" | "active" | "archived";
 
 
 type Props = {
@@ -54,14 +54,14 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
   if (!open) return null;
 
   const filtered = projects.filter((p) => {
-    if (filter === "all") return p.status !== "archived";
-    if (filter === "committed") return (p.status ?? "committed") === "committed";
-    if (filter === "shaping") return p.status === "shaping";
+    if (filter === "all") return true;
+    if (filter === "active") return p.status !== "archived";
+    if (filter === "archived") return p.status === "archived";
     return true;
   });
   const visible = filtered.slice(0, 6);
   const hasMore = filtered.length > visible.length;
-  const shapingCount = projects.filter((p) => p.status === "shaping").length;
+  const archivedCount = projects.filter((p) => p.status === "archived").length;
 
 
   return createPortal(
@@ -137,7 +137,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           `}</style>
           <button
             type="button"
-            onClick={() => navigate("/nexus")}
+            onClick={() => { navigate("/"); window.dispatchEvent(new CustomEvent("axiom:new-conversation", { detail: { context: "global-insights" } })); }}
             style={{
               display: "flex", alignItems: "center", gap: 10,
               width: "100%", padding: "10px 12px", marginBottom: 10,
@@ -215,9 +215,9 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
               {/* Filter chips: All | Committed | Shaping */}
               <div role="tablist" aria-label="Project filter" style={{ display: "flex", gap: 4, padding: "2px 6px 8px" }}>
                 {([
-                  { key: "all", label: "All", count: projects.filter(p => p.status !== "archived").length },
-                  { key: "committed", label: "Committed", count: projects.filter(p => (p.status ?? "committed") === "committed").length },
-                  { key: "shaping", label: "Shaping", count: shapingCount },
+                  { key: "all", label: "All", count: projects.length },
+                  { key: "active", label: "Active", count: projects.filter(p => p.status !== "archived").length },
+                  { key: "archived", label: "Archived", count: archivedCount },
                 ] as Array<{ key: ProjectFilter; label: string; count: number }>).map((chip) => {
                   const active = filter === chip.key;
                   return (
@@ -314,8 +314,6 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
             </div>
           )}
 
-          <div style={{ height: 1, background: "var(--atlas-gold-border)", margin: "8px 6px 10px" }} />
-
           {/* NAVIGATE section */}
           <SectionLabel>Navigate</SectionLabel>
 
@@ -342,14 +340,13 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           />
           
 
-          <div style={{ height: 1, background: "var(--atlas-gold-border)", margin: "8px 6px" }} />
-
-          <SectionLabel>Tools</SectionLabel>
           {onOpenSpecify && (
-            <NavRow icon={<Wand2 size={14} strokeWidth={1.6} />} label="Specify Change" onClick={() => { onOpenSpecify(); onClose(); }} />
+            <>
+              <div style={{ height: 1, background: "var(--atlas-gold-border)", margin: "8px 6px" }} />
+              <SectionLabel>Tools</SectionLabel>
+              <NavRow icon={<Wand2 size={14} strokeWidth={1.6} />} label="Specify Change" onClick={() => { onOpenSpecify(); onClose(); }} />
+            </>
           )}
-          <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={() => navigate("/workshop")} />
-          <NavRow icon={<Archive size={14} strokeWidth={1.6} />} label="The Vault" onClick={() => navigate("/vault")} />
         </div>
 
         {/* User footer */}

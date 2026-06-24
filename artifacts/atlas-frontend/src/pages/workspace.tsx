@@ -8430,8 +8430,8 @@ export default function Workspace() {
                         Switch project
                       </span>
                     </span>
-                    <svg width="11" height="11" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--atlas-gold)", transform: switchToExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 150ms ease" }}>
-                      <path d="M1 1l4 4 4-4" />
+                    <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ color: "var(--atlas-gold)", opacity: 0.5, flexShrink: 0 }}>
+                      <path d="M4.5 2l3 4-3 4" />
                     </svg>
                   </button>
                   {switchToExpanded && (

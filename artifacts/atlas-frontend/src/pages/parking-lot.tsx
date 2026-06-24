@@ -594,7 +594,7 @@ function ParkingLotButton({
         padding: "5px 10px", borderRadius: 5,
         background: tone === "gold" ? "rgba(201,162,76,0.1)" : "transparent",
         border: `1px solid ${tone === "gold" ? "rgba(201,162,76,0.3)" : tone === "danger" ? "rgba(239,68,68,0.25)" : "var(--atlas-border)"}`,
-        color: tone === "gold" ? "var(--atlas-bg)" : color,
+        color: tone === "gold" ? "var(--atlas-gold)" : color,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.45 : 1,
         fontFamily: "var(--app-font-mono)",

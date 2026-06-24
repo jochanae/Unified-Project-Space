@@ -88,10 +88,13 @@ function RingSvg({ score, size, radius, strokeWidth, pulse }: RingSvgProps) {
 export function CompactReadinessRing({ score }: { score: number }) {
   const SIZE = 24;
   const isZero = score === 0;
+  const tooltip = isZero
+    ? "Readiness unscored — open this project and answer the System Map questions to build your score"
+    : `Readiness ${score}% — blended score: 60% architecture clarity + 40% committed decisions`;
   return (
     <div
-      title={isZero ? "Readiness unscored" : `Readiness ${score}%`}
-      aria-label={isZero ? "Readiness unscored" : `Readiness ${score}%`}
+      title={tooltip}
+      aria-label={tooltip}
       style={{
         width: SIZE, height: SIZE, position: "relative", flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
