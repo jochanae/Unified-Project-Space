@@ -11,6 +11,9 @@ V2   → synthesizeProjectMemory() + three triggers + "Refresh Atlas Memory"
          (make the snapshot smarter)
 
 V3   → Query interface (text search over ledger/sessions/parking)
+         ✅ COMPLETE
+         GET /api/search?q=&projectId= — ILIKE across entries/sessions/nexus/thoughts
+         SearchModal.tsx — Cmd+K command palette, grouped results, keyword highlight
          (make the data findable without code)
 
 V4   → Vector embeddings + semantic retrieval

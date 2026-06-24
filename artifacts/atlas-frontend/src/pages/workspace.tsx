@@ -37,6 +37,7 @@ import { PreviewPanel, type ManifestDecision } from "../components/workspace/Pre
 import { LedgerPanel } from "../components/workspace/LedgerPanel";
 import { FilesPanel } from "../components/workspace/FilesPanel";
 import { WorkspaceFilesPanel } from "../components/workspace/WorkspaceFilesPanel";
+import { SearchModal } from "../components/workspace/SearchModal";
 import { FlowPanel, extractPersistedFlowNodes } from "../components/workspace/FlowPanel";
 import { MapTab } from "@/components/workspace/MapTab";
 import { ParkingLotEntry } from "@/components/workspace/ParkingLotEntry";
@@ -4751,6 +4752,17 @@ export default function Workspace() {
     };
   }, []);
   const [showVault, setShowVault] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setShowSearch((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const [showForgeExternal, setShowForgeExternal] = useState(false);
   const [forgePreloadContent, setForgePreloadContent] = useState<string | undefined>(undefined);
   const [externalForgeNodes, setExternalForgeNodes] = useState<ArchNode[]>([]);
@@ -8861,6 +8873,12 @@ export default function Workspace() {
           onClose={() => setShowVault(false)}
         />
       )}
+
+      <SearchModal
+        open={showSearch}
+        onClose={() => setShowSearch(false)}
+        projectId={id}
+      />
 
       </div>
     </div>

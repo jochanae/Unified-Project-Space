@@ -46,6 +46,7 @@ import errorsRouter from "./errors";
 import browserRouter from "./browser";
 import deployRouter from "./deploy";
 import zipRouter from "./zip";
+import searchRouter from "./search";
 
 const router: IRouter = Router();
 
@@ -73,6 +74,7 @@ router.use(requireAuth, chatRouter);
 router.use(requireAuth, githubRouter);
 router.use(requireAuth, imageRouter);
 router.use(requireAuth, thoughtsRouter);
+router.use(requireAuth, searchRouter);
 router.use(requireAuth, vaultRouter);
 router.use(requireAuth, secretsRouter);
 router.use(requireAuth, forgeRouter);
