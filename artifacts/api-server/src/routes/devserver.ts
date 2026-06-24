@@ -751,80 +751,37 @@ router.post("/devserver/workspace/:projectId/start", (req, res): void => {
         if (!result.ok) throw new Error(`Dependency install failed: ${mgr} exited with code 1. If the app needs env vars (DATABASE_URL, API keys), add them in the LOCAL tab env section and relaunch.\nLast output: ${result.output.slice(-800)}`);
       }
 
+      // Build the project and serve via the static /api/preview/workspace/:id/ route.
+      // This avoids the Vite dev-mode proxy complexity entirely.
       st.status = "starting";
-      const port = await allocateFreePort();
-      const wsProxyBaseForVite = `/api/devserver/workspace/${projectId}/proxy/`;
-      const { cmd, args } = detectDevCommand(wsDir, wsProxyBaseForVite);
-      addWsLog(st, `Starting: ${cmd} ${args.join(" ")} on port ${port}…`);
-
-      const proc = spawn(cmd, args, {
-        cwd: wsDir, shell: true,
-        env: {
-          ...process.env,
-          FORCE_COLOR: "0", NO_COLOR: "1",
-          PORT: String(port), HOST: "0.0.0.0", VITE_PORT: String(port),
-        },
+      addWsLog(st, "Building project…");
+      const mgr2 = detectPackageManager(wsDir);
+      const buildArgs = ["run", "build"];
+      const buildResult = await new Promise<{ ok: boolean; output: string }>((resolve) => {
+        const chunks: string[] = [];
+        const proc = spawn(mgr2, buildArgs, {
+          cwd: wsDir, shell: true,
+          env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+        });
+        st.proc = proc;
+        const onData = (d: Buffer) => { const s = d.toString(); chunks.push(s); addWsLog(st, s); };
+        proc.stdout?.on("data", onData);
+        proc.stderr?.on("data", onData);
+        proc.on("exit", (code) => resolve({ ok: code === 0, output: chunks.join("") }));
+        proc.on("error", (e) => resolve({ ok: false, output: e.message }));
       });
-      st.proc = proc;
+      st.proc = null;
 
-      // Port-announce timeout → probe
-      const portTimer = setTimeout(async () => {
-        if (st.status !== "starting") return;
-        addWsLog(st, "Port not announced — probing…");
-        const found = await pollForPort([port, 5173, 3000, 4000].filter(p => p !== OWN_PORT));
-        if (found && st.status === "starting") {
-          st.port = found; st.status = "running";
-          wsSaveState(projectId, found, proc.pid);
-          addWsLog(st, `✓ Dev server on port ${found} (probe)`);
-          logger.info({ port: found, projectId }, "Workspace dev server found via probe");
-        } else if (st.status === "starting") {
-          setTimeout(async () => {
-            if (st.status !== "starting") return;
-            const found2 = await pollForPort([port, 5173, 3000].filter(p => p !== OWN_PORT));
-            if (found2) {
-              st.port = found2; st.status = "running";
-              wsSaveState(projectId, found2, proc.pid);
-              addWsLog(st, `✓ Dev server on port ${found2}`);
-            } else {
-              st.status = "error";
-              st.errorMsg = "Dev server started but no port was reachable after 75 s. Check that the app's package.json has a 'dev' script.";
-              addWsLog(st, "✗ No running port found after timeout");
-            }
-          }, 30_000);
-        }
-      }, 45_000);
+      if (!buildResult.ok) {
+        throw new Error(`Build failed.\nLast output:\n${buildResult.output.slice(-800)}`);
+      }
 
-      const onData = (d: Buffer) => {
-        const line = d.toString();
-        addWsLog(st, line);
-        if (st.status !== "running") {
-          const detected = detectPort(line) ?? (line.includes(String(port)) && /listen|ready|running|local/i.test(line) ? port : null);
-          if (detected) {
-            clearTimeout(portTimer);
-            st.port = detected; st.status = "running";
-            wsSaveState(projectId, detected, proc.pid);
-            addWsLog(st, `✓ Running on port ${detected}`);
-            logger.info({ port: detected, projectId }, "Workspace dev server running");
-          }
-        }
-      };
-
-      proc.stdout?.on("data", onData);
-      proc.stderr?.on("data", onData);
-      proc.on("exit", (code) => {
-        clearTimeout(portTimer);
-        wsDeleteState(projectId);
-        if (st.status !== "idle") {
-          if (code !== 0) {
-            st.status = "error";
-            st.errorMsg = `Dev server exited (code ${code}). Check the logs above for details.`;
-            addWsLog(st, `✗ Exited with code ${code}`);
-          } else {
-            st.status = "idle";
-          }
-        }
-        st.proc = null;
-      });
+      // Sentinel port: non-null so the frontend shows the iframe, but the iframe
+      // points to /api/preview/workspace/:id/ (served by this same API server).
+      st.port = 1;
+      st.status = "running";
+      wsSaveState(projectId, 1, undefined);
+      addWsLog(st, "✓ Build complete — preview ready");
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";

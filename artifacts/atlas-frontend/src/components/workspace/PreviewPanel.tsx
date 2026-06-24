@@ -1097,7 +1097,7 @@ ${t}
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                   <iframe
                     key={`ws-${projectId}-${wsDsPort}`}
-                    src={`/api/devserver/workspace/${projectId}/proxy/`}
+                    src={`/api/preview/workspace/${projectId}/`}
                     title="Local Dev Preview"
                     style={{ flex: 1, border: "none", width: "100%", display: "block", background: "var(--atlas-bg)" }}
                   />
