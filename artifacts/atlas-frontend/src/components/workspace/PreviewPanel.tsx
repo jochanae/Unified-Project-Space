@@ -421,12 +421,18 @@ ${t}
   const sandboxStorageKey = `atlas-sandbox-${projectId}`;
   useEffect(() => {
     if (!sandboxCode) return;
-    setPreviewMode("sandbox");
     setSandboxInput(sandboxCode);
     setSandboxRendered(buildSrcdoc(sandboxCode));
     setSandboxExpanded(false);
     try { localStorage.setItem(sandboxStorageKey, sandboxCode); } catch {}
     onSandboxConsumed?.();
+    // Only auto-switch to Draft when there's no real project running.
+    // If Local Dev is active (or becoming active), keep the user there —
+    // Draft is for HTML sketches and visual artifacts, not the built app.
+    const hasRealProject = wsDsStatus === "running" || wsDsStatus === "starting" || wsDsStatus === "installing" || liveUrl;
+    if (!hasRealProject) {
+      setPreviewMode("sandbox");
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sandboxCode]);
 
@@ -673,9 +679,18 @@ ${t}
               textTransform: "uppercase", cursor: "pointer",
               opacity: previewMode === m ? 1 : 0.45,
               transition: "all 140ms ease",
+              position: "relative",
             }}
           >
-            {m === "url" ? "Live URL" : m === "sandbox" ? "Sandbox" : m === "stackblitz" ? "StackBlitz" : "Local Dev"}
+            {m === "url" ? "Live URL" : m === "sandbox" ? "Draft" : m === "stackblitz" ? "StackBlitz" : "Local Dev"}
+            {/* Dot indicator on Draft tab when it has content but isn't active */}
+            {m === "sandbox" && sandboxRendered && previewMode !== "sandbox" && (
+              <span style={{
+                position: "absolute", top: 5, right: "calc(50% - 14px)",
+                width: 4, height: 4, borderRadius: "50%",
+                background: "rgba(201,162,76,0.7)", pointerEvents: "none",
+              }} />
+            )}
           </button>
         ))}
       </div>

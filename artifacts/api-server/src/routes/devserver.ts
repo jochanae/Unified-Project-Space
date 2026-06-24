@@ -36,6 +36,81 @@ function parseErrors(output: string): string[] {
   return [...new Set(errors)].slice(0, 20);
 }
 
+// Extensions tried when resolving a bare relative import path (no extension given).
+const RESOLVE_EXTENSIONS = [
+  "", ".jsx", ".tsx", ".js", ".ts",
+  "/index.jsx", "/index.tsx", "/index.js", "/index.ts",
+];
+
+// Directories we always skip when walking source files.
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", ".next", ".cache", "coverage", ".vite"]);
+
+/**
+ * Walk all JS/JSX/TS/TSX source files in wsDir and check every relative
+ * `import … from './…'` statement.  Returns a list of human-readable error
+ * strings for any import that cannot be resolved to an existing file.
+ *
+ * This runs before `npm run build` so Atlas gets actionable errors immediately
+ * rather than after a slow full compile.
+ */
+function auditMissingImports(wsDir: string): string[] {
+  const missing: string[] = [];
+  const SOURCE_RE = /\.(jsx?|tsx?)$/;
+  const IMPORT_RE = /(?:^|\n)\s*import\s[^'"]*['"](\.[^'"]+)['"]/g;
+  const DYN_IMPORT_RE = /\bimport\(\s*['"](\.[^'"]+)['"]\s*\)/g;
+
+  function walkFiles(dir: string): string[] {
+    const files: string[] = [];
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) files.push(...walkFiles(full));
+        else if (SOURCE_RE.test(entry.name)) files.push(full);
+      }
+    } catch {}
+    return files;
+  }
+
+  function tryResolve(fromDir: string, importPath: string): boolean {
+    const base = path.resolve(fromDir, importPath);
+    // If path already has an extension that matches a source file, check directly
+    if (SOURCE_RE.test(importPath)) {
+      return existsSync(base);
+    }
+    // Try all candidate extensions
+    return RESOLVE_EXTENSIONS.some((ext) => existsSync(base + ext));
+  }
+
+  const files = walkFiles(wsDir);
+  const seenErrors = new Set<string>();
+
+  for (const file of files) {
+    let src: string;
+    try { src = readFileSync(file, "utf8"); } catch { continue; }
+
+    const fromDir = path.dirname(file);
+    const relFile = path.relative(wsDir, file);
+
+    const allMatches = [
+      ...[...src.matchAll(IMPORT_RE)].map((m) => m[1]),
+      ...[...src.matchAll(DYN_IMPORT_RE)].map((m) => m[1]),
+    ];
+
+    for (const importPath of allMatches) {
+      if (!importPath.startsWith(".")) continue; // skip bare module specifiers
+      if (tryResolve(fromDir, importPath)) continue;
+
+      const key = `${relFile}:${importPath}`;
+      if (seenErrors.has(key)) continue;
+      seenErrors.add(key);
+      missing.push(`Could not resolve "${importPath}" from "${relFile}"`);
+    }
+  }
+
+  return missing;
+}
+
 /**
  * Run `npm run build` directly inside an already-populated workspace directory.
  * No cloning or installing — the workspace already has source files and
@@ -75,6 +150,18 @@ export async function runWorkspaceBuildCheck(wsDir: string): Promise<BuildCheckR
       return { clean: false, errors: ["No package.json in workspace"], duration: Date.now() - t0 };
     }
 
+    // ── Phase 1: static import audit (fast, no build needed) ──────────────────
+    // Catch missing files before spending time on a full compile.
+    const missingImports = auditMissingImports(wsDir);
+    if (missingImports.length > 0) {
+      return {
+        clean: false,
+        errors: missingImports.map((e) => `[MISSING FILE] ${e}`),
+        duration: Date.now() - t0,
+      };
+    }
+
+    // ── Phase 2: full build ────────────────────────────────────────────────────
     // Install deps if missing (first run)
     if (!existsSync(path.join(wsDir, "node_modules"))) {
       const mgr = detectPackageManager(wsDir);
