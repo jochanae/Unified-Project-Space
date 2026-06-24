@@ -2646,7 +2646,10 @@ What "complete initial scaffold" means:
 - Realistic placeholder content (not lorem ipsum — actual labels, buttons, structure that reflects the domain)
 - ALL config files needed to run it. For a Vite+React project this is non-negotiable:
   • package.json (with @vitejs/plugin-react in devDependencies)
-  • vite.config.js — REQUIRED. Must include the react() plugin and server: { host: '0.0.0.0', allowedHosts: true }. Without this file Vite will not transform JSX and the app will show a blank white page.
+  • vite.config.js — REQUIRED. Must include the react() plugin and exactly this server config:
+      server: { host: '0.0.0.0', allowedHosts: true, hmr: false }
+    host and allowedHosts allow the proxy to reach Vite. hmr:false disables WebSocket live-reload
+    which cannot work through the proxy and causes a console error without it.
   • postcss.config.js — REQUIRED if Tailwind CSS is used (tailwindcss + autoprefixer plugins).
   • tailwind.config.js — REQUIRED if Tailwind CSS is used.
   • index.html with <div id="root"> and a <script type="module" src="/src/main.jsx"> tag.
