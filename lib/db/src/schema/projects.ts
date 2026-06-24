@@ -1,7 +1,10 @@
-import { pgTable, text, serial, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
+
+export const PROJECT_TYPES = ["general", "app", "service"] as const;
+export type ProjectType = (typeof PROJECT_TYPES)[number];
 
 export const projectsTable = pgTable("projects", {
   id: serial("id").primaryKey(),
@@ -24,6 +27,9 @@ export const projectsTable = pgTable("projects", {
   lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  projectType: text("project_type").notNull().default("general"),
+  appSourceFileCount: integer("app_source_file_count"),
+  appBuildSucceeded: boolean("app_build_succeeded"),
 });
 
 export const insertProjectSchema = createInsertSchema(projectsTable).omit({ id: true, createdAt: true, updatedAt: true, userId: true });

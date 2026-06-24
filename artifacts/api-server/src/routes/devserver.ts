@@ -5,6 +5,8 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync, unlinkSync,
 import path from "path";
 import { logger } from "../lib/logger";
 import { projectWorkspaceDir } from "../lib/projectWorkspace";
+import { db, projectsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 // ── Build-check work dir (separate from live devserver) ───────────────────
 const BUILD_CHECK_DIR = "/tmp/atlas-build-check";
@@ -773,15 +775,40 @@ router.post("/devserver/workspace/:projectId/start", (req, res): void => {
       st.proc = null;
 
       if (!buildResult.ok) {
+        // Record build failure — project is still typed as "app" (files exist)
+        db.update(projectsTable)
+          .set({ projectType: "app", appBuildSucceeded: false })
+          .where(eq(projectsTable.id, projectId))
+          .catch((e) => logger.warn({ err: e, projectId }, "Failed to update appBuildSucceeded=false"));
         throw new Error(`Build failed.\nLast output:\n${buildResult.output.slice(-800)}`);
       }
+
+      // Count source files written to the workspace (exclude hidden dirs, node_modules, dist)
+      const SKIP = new Set(["node_modules", ".git", "dist", ".next", "build", "out", ".cache", "coverage"]);
+      function countWsFiles(dir: string): number {
+        let n = 0;
+        try {
+          for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            if (entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
+            n += entry.isDirectory() ? countWsFiles(path.join(dir, entry.name)) : 1;
+          }
+        } catch {}
+        return n;
+      }
+      const fileCount = countWsFiles(wsDir);
+
+      // Persist project type and build result to DB
+      db.update(projectsTable)
+        .set({ projectType: "app", appSourceFileCount: fileCount, appBuildSucceeded: true })
+        .where(eq(projectsTable.id, projectId))
+        .catch((e) => logger.warn({ err: e, projectId }, "Failed to update app build state"));
 
       // Sentinel port: non-null so the frontend shows the iframe, but the iframe
       // points to /api/preview/workspace/:id/ (served by this same API server).
       st.port = 1;
       st.status = "running";
       wsSaveState(projectId, 1, undefined);
-      addWsLog(st, "✓ Build complete — preview ready");
+      addWsLog(st, `✓ Build complete — ${fileCount} source files · preview ready`);
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";

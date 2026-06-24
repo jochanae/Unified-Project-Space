@@ -682,11 +682,25 @@ function ShellReadinessChip({ projectId }: { projectId: number | null }) {
   const longPressFiredRef = useRef(false);
 
   if (projectId == null) return null;
-  const proj = ps.project as { latestSnapshotScore?: number | null; nodeState?: ProjectNodeState | null; name?: string } | null;
+  const proj = ps.project as {
+    latestSnapshotScore?: number | null;
+    nodeState?: ProjectNodeState | null;
+    name?: string;
+    projectType?: string | null;
+    appSourceFileCount?: number | null;
+    appBuildSucceeded?: boolean | null;
+  } | null;
   const ns = (proj?.nodeState ?? {}) as Record<string, unknown>;
   const decisionsCount = ps.decisions?.length ?? 0;
 
-  // Split scores by category for mode switching.
+  const isAppProject = proj?.projectType === "app";
+
+  // App signals
+  const appFilesOk = Boolean(proj?.appSourceFileCount && proj.appSourceFileCount > 0);
+  const appBuildOk = proj?.appBuildSucceeded === true;
+  const appScore = Math.round(([appFilesOk, appBuildOk, appBuildOk, appFilesOk].filter(Boolean).length / 4) * 100);
+
+  // General (service/general) signals
   const ARCH_IDS = new Set(["auth", "db", "api", "state", "ui", "logic"]);
   let archTotal = 0, archResolved = 0, decTotal = 0, decResolved = 0;
   Object.entries(ns).forEach(([nid, raw]) => {
@@ -697,7 +711,7 @@ function ShellReadinessChip({ projectId }: { projectId: number | null }) {
   const archScore = archTotal === 0 ? 0 : Math.round((archResolved / archTotal) * 100);
   const decisionsScore = decTotal === 0 ? 0 : Math.round((decResolved / decTotal) * 100);
   const blendedScore = proj?.latestSnapshotScore ?? (computeBlendedScore(archScore, decisionsScore) || computeScoreFromNodeState(proj?.nodeState ?? null));
-  const score = mode === "arch" ? archScore : mode === "decisions" ? decisionsScore : blendedScore;
+  const score = isAppProject ? appScore : (mode === "arch" ? archScore : mode === "decisions" ? decisionsScore : blendedScore);
   const meta = MODE_META[mode];
 
   const cycleMode = () => {
@@ -1194,11 +1208,27 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
     name?: string;
     linkedRepo?: string | null;
     previewUrl?: string | null;
+    projectType?: string | null;
+    appSourceFileCount?: number | null;
+    appBuildSucceeded?: boolean | null;
   } | null;
   const ns = (proj?.nodeState ?? {}) as Record<string, unknown>;
   const decisionsCount = ps.decisions?.length ?? 0;
   const active = !!ps.activeSession;
 
+  const isAppProject = proj?.projectType === "app";
+
+  // ── App readiness signals ─────────────────────────────────────────────────
+  const appFilesOk = Boolean(proj?.appSourceFileCount && proj.appSourceFileCount > 0);
+  const appBuildOk = proj?.appBuildSucceeded === true;
+  const appPreviewOk = appBuildOk;
+  const appExportOk = appFilesOk;
+  // Score = average of 4 distinct signals
+  const appCompletion = Math.round(
+    ([appFilesOk, appBuildOk, appPreviewOk, appExportOk].filter(Boolean).length / 4) * 100
+  );
+
+  // ── General readiness signals ─────────────────────────────────────────────
   const ARCH_IDS = new Set(["auth", "db", "api", "state", "ui", "logic"]);
   let archTotal = 0, archResolved = 0, decTotal = 0, decResolved = 0;
   Object.entries(ns).forEach(([nid, raw]) => {
@@ -1214,9 +1244,13 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
   const previewLinked = Boolean(proj?.previewUrl);
   const repoPct = repoLinked ? 100 : 0;
   const urlPct = previewLinked ? 100 : 0;
-  const completion = Math.round((archScore + decisionsScore + repoPct + urlPct) / 4);
+  const generalCompletion = Math.round((archScore + decisionsScore + repoPct + urlPct) / 4);
 
-  const displayScore = mode === "arch" ? archScore : mode === "decisions" ? decisionsScore : blendedScore;
+  const completion = isAppProject ? appCompletion : generalCompletion;
+
+  const displayScore = isAppProject
+    ? appCompletion
+    : mode === "arch" ? archScore : mode === "decisions" ? decisionsScore : blendedScore;
   const meta = MODE_META[mode];
 
   const setNextMode = (m: ReadinessMode) => {
@@ -1374,30 +1408,67 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
           </div>
 
           <div style={{ borderTop: "1px solid rgba(var(--atlas-muted-rgb),0.12)" }}>
-            <CompletionRow
-              label="Architecture"
-              sub={`${archResolved}/${archTotal || 6} resolved`}
-              pct={archScore}
-              onClick={() => go("/master-map")}
-            />
-            <CompletionRow
-              label="Decisions"
-              sub={`${decResolved}/${decTotal} resolved · ${decisionsCount} committed`}
-              pct={decisionsScore}
-              onClick={() => go("/ledger")}
-            />
-            <CompletionRow
-              label="Repo"
-              sub={repoLinked ? "Linked" : "Not linked"}
-              pct={repoPct}
-              onClick={() => go("/workspace")}
-            />
-            <CompletionRow
-              label="Live URL"
-              sub={previewLinked ? "Set" : "Not set"}
-              pct={urlPct}
-              onClick={() => go("/workspace")}
-            />
+            {isAppProject ? (
+              <>
+                <CompletionRow
+                  label="Source Files"
+                  sub={appFilesOk ? `${proj?.appSourceFileCount ?? 0} files written` : "No files yet"}
+                  pct={appFilesOk ? 100 : 0}
+                  onClick={() => go("/workspace")}
+                />
+                <CompletionRow
+                  label="Build"
+                  sub={appBuildOk ? "Build succeeded" : proj?.appBuildSucceeded === false ? "Build failed" : "Not built yet"}
+                  pct={appBuildOk ? 100 : 0}
+                  onClick={() => go("/workspace")}
+                />
+                <CompletionRow
+                  label="Preview"
+                  sub={appPreviewOk ? "Preview ready" : "Build first to preview"}
+                  pct={appPreviewOk ? 100 : 0}
+                  onClick={() => go("/workspace")}
+                />
+                <CompletionRow
+                  label="Export"
+                  sub={appExportOk ? "Download available" : "No files to export yet"}
+                  pct={appExportOk ? 100 : 0}
+                  onClick={() => go("/workspace")}
+                />
+                {repoLinked && (
+                  <CompletionRow label="Repo" sub="Linked" pct={100} onClick={() => go("/workspace")} />
+                )}
+                {previewLinked && (
+                  <CompletionRow label="Live URL" sub="Set" pct={100} onClick={() => go("/workspace")} />
+                )}
+              </>
+            ) : (
+              <>
+                <CompletionRow
+                  label="Architecture"
+                  sub={`${archResolved}/${archTotal || 6} resolved`}
+                  pct={archScore}
+                  onClick={() => go("/master-map")}
+                />
+                <CompletionRow
+                  label="Decisions"
+                  sub={`${decResolved}/${decTotal} resolved · ${decisionsCount} committed`}
+                  pct={decisionsScore}
+                  onClick={() => go("/ledger")}
+                />
+                <CompletionRow
+                  label="Repo"
+                  sub={repoLinked ? "Linked" : "Not linked"}
+                  pct={repoPct}
+                  onClick={() => go("/workspace")}
+                />
+                <CompletionRow
+                  label="Live URL"
+                  sub={previewLinked ? "Set" : "Not set"}
+                  pct={urlPct}
+                  onClick={() => go("/workspace")}
+                />
+              </>
+            )}
           </div>
 
           <button
