@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { eq, and, sql, desc, getTableColumns } from "drizzle-orm";
 import { db, entriesTable, projectsTable } from "@workspace/db";
+import { upsertEmbedding } from "../lib/embeddings";
 import {
   CreateEntryBody,
   CreateEntryParams,
@@ -314,6 +315,15 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
   } as typeof entriesTable.$inferInsert).returning();
   await touchProjectActivity(params.data.projectId);
   res.status(201).json(serializeEntry(entry));
+
+  // Fire-and-forget: index embedding for semantic search (V4)
+  void upsertEmbedding({
+    entityType: "entry",
+    entityId: entry.id,
+    userId,
+    projectId: params.data.projectId,
+    content: [entry.title, entry.summary, entry.details].filter(Boolean).join("\n"),
+  }).catch(() => { /* silent */ });
 
   // Fire-and-forget enrichment for parked entries
   if (entry.status === "parked") {

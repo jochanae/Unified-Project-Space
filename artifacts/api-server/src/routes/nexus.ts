@@ -7,6 +7,7 @@ import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable, scheduledChecksTable, checkResultsTable, projectGenomeTable, readinessSnapshotsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, gte, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
+import { vectorSearch, buildRagBlock } from "../lib/embeddings";
 import { getGithubTokenForUser, bootstrapGitHubRepo } from "../lib/githubBootstrap";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
@@ -1662,6 +1663,22 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     }
   })();
 
+  // V5 RAG: fetch semantically relevant context for focused project
+  let ragContext: string | null = null;
+  if (body.focusProjectId && body.message?.trim() && process.env.OPENAI_API_KEY) {
+    try {
+      const hits = await vectorSearch(body.message, {
+        userId,
+        projectId: body.focusProjectId,
+        limit: 6,
+        minScore: 0.38,
+      });
+      ragContext = buildRagBlock(hits);
+    } catch {
+      // silent — RAG is best-effort
+    }
+  }
+
   // Build system prompt
   let systemPrompt = ideaMode
       ? `${NEXUS_SYSTEM_PROMPT}\n\n${IDEA_MODE_POSTURE}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: true\n--- END SESSION CONTEXT ---`
@@ -1879,6 +1896,7 @@ Or ask ONE narrow question that assumes they already know what they're building 
 
       if (focusEntries) systemPrompt += `\nCommitted decisions:\n${focusEntries}`;
       if (focusMemory) systemPrompt += `\nProject memory:\n${focusMemory}`;
+      if (ragContext) systemPrompt += `\n\n--- SEMANTICALLY RELEVANT CONTEXT (retrieved for this message) ---\n${ragContext}\nThese items share meaning with the user's current message. Reference them if genuinely relevant — do not force or enumerate them.\n--- END RELEVANT CONTEXT ---`;
       if (focusRecentCommits) {
         systemPrompt += `\nRecent commits (interpret narratively — group by area of impact, synthesize what's changing, don't enumerate SHAs):\n${focusRecentCommits}`;
       }

@@ -1,12 +1,13 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { or, ilike, eq, and, desc, sql } from "drizzle-orm";
 import { db, entriesTable, sessionsTable, nexusMessagesTable, thoughtsTable } from "@workspace/db";
+import { vectorSearch } from "../lib/embeddings";
 
 const router: IRouter = Router();
 
 // GET /api/search?q=<text>&projectId=<n>
-// Full-text ILIKE search across ledger entries, sessions, nexus (user msgs), and parking lot.
-// projectId scopes entries/sessions/nexus; thoughts are scoped by userId (parking lot is user-level).
+// Blends ILIKE (keyword) results with vector (semantic) results.
+// Vector search is best-effort — falls back to ILIKE-only when embeddings are unavailable.
 router.get("/search", async (req: Request, res: Response): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -19,9 +20,20 @@ router.get("/search", async (req: Request, res: Response): Promise<void> => {
   const pattern = `%${q}%`;
   const LIMIT = 8;
 
-  try {
-    const [entries, sessions, nexus, thoughts] = await Promise.all([
-      // ── Ledger entries ─────────────────────────────────────────────────────
+  type ResultRow = {
+    source: "entry" | "session" | "nexus" | "thought";
+    id: number;
+    title: string;
+    snippet: string;
+    projectId: number | null;
+    sessionId: number | null;
+    createdAt: string;
+    score?: number;
+  };
+
+  const [ilikeResults, vectorHits] = await Promise.all([
+    // ── ILIKE keyword search ──────────────────────────────────────────────────
+    Promise.all([
       projectId
         ? db
             .select({
@@ -47,7 +59,6 @@ router.get("/search", async (req: Request, res: Response): Promise<void> => {
             .limit(LIMIT)
         : Promise.resolve([]),
 
-      // ── Sessions ────────────────────────────────────────────────────────────
       projectId
         ? db
             .select({
@@ -72,7 +83,6 @@ router.get("/search", async (req: Request, res: Response): Promise<void> => {
             .limit(LIMIT)
         : Promise.resolve([]),
 
-      // ── Nexus conversation (user messages only) ─────────────────────────────
       projectId
         ? db
             .select({
@@ -95,7 +105,6 @@ router.get("/search", async (req: Request, res: Response): Promise<void> => {
             .limit(LIMIT)
         : Promise.resolve([]),
 
-      // ── Parking lot (thoughts — user-level, not per-project) ───────────────
       db
         .select({
           id: thoughtsTable.id,
@@ -114,20 +123,68 @@ router.get("/search", async (req: Request, res: Response): Promise<void> => {
         )
         .orderBy(desc(thoughtsTable.createdAt))
         .limit(LIMIT),
-    ]);
+    ]),
 
-    const results = [
-      ...entries.map((r) => ({ source: "entry" as const, ...r, createdAt: r.createdAt.toISOString() })),
-      ...sessions.map((r) => ({ source: "session" as const, ...r, createdAt: r.createdAt.toISOString() })),
-      ...nexus.map((r) => ({ source: "nexus" as const, ...r, createdAt: r.createdAt.toISOString() })),
-      ...thoughts.map((r) => ({ source: "thought" as const, ...r, createdAt: r.createdAt.toISOString() })),
-    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // ── Vector semantic search ────────────────────────────────────────────────
+    vectorSearch(q, { userId, projectId, limit: 10, minScore: 0.38 }).catch(() => []),
+  ]);
 
-    res.json(results);
-  } catch (err) {
-    req.log?.error({ err }, "search error");
-    res.status(500).json({ error: "Search failed" });
+  const [entries, sessions, nexus, thoughts] = ilikeResults;
+
+  // Build a merged, deduplicated result set
+  const seen = new Set<string>();
+  const results: ResultRow[] = [];
+
+  const addResult = (row: ResultRow) => {
+    const key = `${row.source}:${row.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push(row);
+  };
+
+  // Add ILIKE results first (always present)
+  for (const r of entries)  addResult({ source: "entry",   ...r, createdAt: r.createdAt.toISOString() });
+  for (const r of sessions) addResult({ source: "session", ...r, createdAt: r.createdAt.toISOString() });
+  for (const r of nexus)    addResult({ source: "nexus",   ...r, createdAt: r.createdAt.toISOString() });
+  for (const r of thoughts) addResult({ source: "thought", ...r, createdAt: r.createdAt.toISOString() });
+
+  // Merge semantic results — they surface items ILIKE wouldn't find
+  for (const hit of vectorHits) {
+    const src =
+      hit.entityType === "entry" ? "entry" :
+      hit.entityType === "session" ? "session" :
+      hit.entityType === "thought" ? "thought" : null;
+    if (!src) continue;
+
+    const key = `${src}:${hit.entityId}`;
+    if (seen.has(key)) continue; // already in results from ILIKE
+    seen.add(key);
+
+    // Truncate content for snippet
+    const snippet = hit.content.length > 180 ? hit.content.slice(0, 180) + "…" : hit.content;
+    const title   = hit.content.length > 80  ? hit.content.slice(0, 80)  + "…" : hit.content;
+
+    results.push({
+      source: src as ResultRow["source"],
+      id: hit.entityId,
+      title,
+      snippet,
+      projectId: hit.projectId,
+      sessionId: null,
+      createdAt: new Date().toISOString(), // no createdAt from vector hit; sort neutral
+      score: hit.score,
+    });
   }
+
+  // Sort: semantic hits (score present) first by score desc, then by recency
+  results.sort((a, b) => {
+    if (a.score != null && b.score != null) return b.score - a.score;
+    if (a.score != null) return -1;
+    if (b.score != null) return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  res.json(results);
 });
 
 export default router;

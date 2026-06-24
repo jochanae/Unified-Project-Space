@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, desc, isNotNull } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
+import { upsertEmbedding } from "../lib/embeddings";
 import { z } from "zod";
 import { db, sessionsTable, chatMessagesTable, projectsTable, imageVersionsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
@@ -200,6 +201,15 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
   });
+
+  // Fire-and-forget: index embedding for semantic search (V4)
+  void upsertEmbedding({
+    entityType: "session",
+    entityId: session.id,
+    userId,
+    projectId: params.data.projectId,
+    content: [session.title, (session as any).buildIntent].filter(Boolean).join("\n"),
+  }).catch(() => { /* silent */ });
 });
 
 router.get("/sessions/:id", async (req, res): Promise<void> => {

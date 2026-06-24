@@ -17,9 +17,19 @@ V3   → Query interface (text search over ledger/sessions/parking)
          (make the data findable without code)
 
 V4   → Vector embeddings + semantic retrieval
+         ✅ COMPLETE
+         pgvector 0.8.0 installed; embeddings table (vector(1536), unique on entity_type+entity_id)
+         embeddings.ts: embedText/upsertEmbedding/vectorSearch/buildRagBlock using text-embedding-3-small
+         Fire-and-forget indexing hooked into entries/sessions/thoughts creation routes
+         search.ts: ILIKE + vector results merged, deduped, sorted by score then recency
+         NOTE: drizzle-kit push can't create the table non-interactively — table was created via raw SQL.
+               Future: run CREATE TABLE IF NOT EXISTS in boot migrations if schema drifts.
          (make the data findable by meaning)
 
 V5   → Full RAG loop (Atlas retrieves before answering)
+         ✅ COMPLETE
+         nexus.ts: vectorSearch called before systemPrompt is built (when focusProjectId set + OPENAI_API_KEY present)
+         top-6 hits (minScore 0.38) injected as SEMANTICALLY RELEVANT CONTEXT block after focusMemory
          (close the loop)
 ```
 
