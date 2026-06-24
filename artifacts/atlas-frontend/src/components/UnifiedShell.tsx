@@ -1253,6 +1253,22 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
     : mode === "arch" ? archScore : mode === "decisions" ? decisionsScore : blendedScore;
   const meta = MODE_META[mode];
 
+  // Tier-1 state label for app projects — reflects what has actually been proven
+  const appTierLabel = !appFilesOk
+    ? "Not Started"
+    : proj?.appBuildSucceeded === false
+      ? "Build Failed"
+      : appBuildOk
+        ? "Preview Ready"
+        : "Scaffolded";
+  const appTierDesc = !appFilesOk
+    ? "No files written yet"
+    : proj?.appBuildSucceeded === false
+      ? "Build error — check workspace logs"
+      : appBuildOk
+        ? "Build succeeded · preview live · export available"
+        : "Files written · export available · build next";
+
   const setNextMode = (m: ReadinessMode) => {
     setMode(m);
     try { localStorage.setItem(READINESS_MODE_KEY, m); } catch {}
@@ -1364,7 +1380,7 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
               fontFamily: "var(--app-font-mono)", fontSize: 18, fontWeight: 700, color: "var(--atlas-fg)", lineHeight: 1,
             }}>{completion}%</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--atlas-fg)", lineHeight: 1.2 }}>Project completion</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--atlas-fg)", lineHeight: 1.2 }}>{isAppProject ? appTierLabel : "Project completion"}</div>
               <div style={{ fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.2 }}>
                 {active ? "Session active" : "Idle"} · {decisionsCount} {decisionsCount === 1 ? "entry" : "entries"}
               </div>
@@ -1381,30 +1397,45 @@ function ShellCompletionChip({ projectId }: { projectId: number | null }) {
             >×</button>
           </div>
 
-          <div style={{ padding: "10px 14px 8px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", marginRight: 4 }}>View</span>
-            {(["blended", "arch", "decisions"] as ReadinessMode[]).map((m) => {
-              const isActive = mode === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setNextMode(m)}
-                  style={{
-                    padding: "3px 8px", borderRadius: 999, cursor: "pointer",
-                    border: "1px solid " + (isActive ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.18)"),
-                    background: isActive ? "rgba(var(--atlas-muted-rgb),0.10)" : "transparent",
-                    color: isActive ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                    fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
-                    letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1,
-                  }}
-                >{MODE_META[m].abbr}</button>
-              );
-            })}
-            <span style={{ marginLeft: "auto", fontFamily: "var(--app-font-mono)", fontSize: 11, fontWeight: 700, color: "var(--atlas-gold)" }}>{displayScore}%</span>
-          </div>
+          {isAppProject ? (
+            <div style={{ padding: "10px 14px 12px", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", marginRight: 2 }}>Type</span>
+              <span style={{
+                padding: "3px 8px", borderRadius: 999,
+                border: "1px solid var(--atlas-gold)",
+                background: "rgba(var(--atlas-muted-rgb),0.10)",
+                color: "var(--atlas-gold)",
+                fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
+                letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1,
+              }}>APP</span>
+              <span style={{ marginLeft: "auto", fontFamily: "var(--app-font-mono)", fontSize: 11, fontWeight: 700, color: "var(--atlas-gold)" }}>{completion}%</span>
+            </div>
+          ) : (
+            <div style={{ padding: "10px 14px 8px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", marginRight: 4 }}>View</span>
+              {(["blended", "arch", "decisions"] as ReadinessMode[]).map((m) => {
+                const isActive = mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setNextMode(m)}
+                    style={{
+                      padding: "3px 8px", borderRadius: 999, cursor: "pointer",
+                      border: "1px solid " + (isActive ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.18)"),
+                      background: isActive ? "rgba(var(--atlas-muted-rgb),0.10)" : "transparent",
+                      color: isActive ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
+                      letterSpacing: "0.12em", textTransform: "uppercase", lineHeight: 1,
+                    }}
+                  >{MODE_META[m].abbr}</button>
+                );
+              })}
+              <span style={{ marginLeft: "auto", fontFamily: "var(--app-font-mono)", fontSize: 11, fontWeight: 700, color: "var(--atlas-gold)" }}>{displayScore}%</span>
+            </div>
+          )}
           <div style={{ padding: "0 14px 10px", fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.35 }}>
-            {meta.label} — {meta.description}
+            {isAppProject ? appTierDesc : `${meta.label} — ${meta.description}`}
           </div>
 
           <div style={{ borderTop: "1px solid rgba(var(--atlas-muted-rgb),0.12)" }}>

@@ -3,7 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 
-export const PROJECT_TYPES = ["general", "app", "service"] as const;
+export const PROJECT_TYPES = ["general", "app", "service", "marketing"] as const;
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 
 export const projectsTable = pgTable("projects", {
