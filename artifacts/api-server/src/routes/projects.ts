@@ -948,19 +948,8 @@ router.post("/projects/:id/flow/hydrate", async (req, res): Promise<void> => {
   if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
 
   const realMessages = messages.filter(m => m.content && m.content.trim().length > 10);
-  if (realMessages.length < 3) {
-    res.status(422).json({
-      error: "Not enough conversation history to hydrate. Have a few conversations with Atlas about this project first.",
-    });
-    return;
-  }
 
-  // Most-recent last, capped for context window
-  const recent = [...realMessages].reverse().slice(-40);
-  const formattedConversation = recent
-    .map(m => `${m.role === "user" ? "You" : "Atlas"}: ${m.content.trim()}`)
-    .join("\n\n");
-
+  // Build genome context regardless of message count — used for both full and genome-only hydration
   const contextParts: string[] = [];
   if (genome?.purpose) contextParts.push(`Purpose: ${genome.purpose}`);
   if (genome?.stage) contextParts.push(`Stage: ${genome.stage}`);
@@ -970,15 +959,29 @@ router.post("/projects/:id/flow/hydrate", async (req, res): Promise<void> => {
   const openQuestions = (genome?.openQuestions as string[] | null) ?? [];
   if (constraints.length > 0) contextParts.push(`Constraints: ${constraints.join("; ")}`);
   if (openQuestions.length > 0) contextParts.push(`Open questions: ${openQuestions.join("; ")}`);
-  const projectContext = contextParts.length > 0 ? `\nProject context:\n${contextParts.join("\n")}` : "";
 
-  const prompt = `You are building a strategic flow map for a project named "${proj.name}".${projectContext}
+  const hasGenomeData = contextParts.length > 0;
 
-Here is the conversation history between the user and Atlas (their strategic thinking partner):
+  if (realMessages.length < 3 && !hasGenomeData) {
+    res.status(422).json({
+      error: "Not enough context to hydrate. Have a few conversations with Atlas about this project first.",
+    });
+    return;
+  }
 
-${formattedConversation}
+  const projectContext = hasGenomeData ? `\nProject context:\n${contextParts.join("\n")}` : "";
 
-Based on this conversation, generate a strategic flow map as a JSON object. Extract SPECIFIC goals, requirements, blockers, decisions, and priorities that were actually discussed — not generic placeholders.
+  // Most-recent last, capped for context window
+  const recent = [...realMessages].reverse().slice(-40);
+  const formattedConversation = recent
+    .map(m => `${m.role === "user" ? "You" : "Atlas"}: ${m.content.trim()}`)
+    .join("\n\n");
+
+  const conversationSection = realMessages.length >= 3
+    ? `\nHere is the conversation history between the user and Atlas (their strategic thinking partner):\n\n${formattedConversation}\n\nBased on this conversation, generate a strategic flow map as a JSON object. Extract SPECIFIC goals, requirements, blockers, decisions, and priorities that were actually discussed — not generic placeholders.`
+    : `\nNo conversation history is available yet. Generate a strategic flow map based on the project context above. Create SPECIFIC, plausible goals, requirements, and next steps tailored to the project's identity and purpose — not generic placeholders.`;
+
+  const prompt = `You are building a strategic flow map for a project named "${proj.name}".${projectContext}${conversationSection}
 
 Return ONLY a valid JSON object (no explanation, no markdown fences) with this structure:
 {

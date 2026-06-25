@@ -668,6 +668,7 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
               onBackToChat={onBackToChat}
               detectedBuilder={platform.toLowerCase()}
               onNodeFocus={(text) => setIntent(text)}
+              onSendToAtlas={(text) => { onSendIntent?.(text); setIntent(text); }}
               initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
               pendingNodes={pendingNodes}
               onPendingConsumed={() => setPendingNodes([])}

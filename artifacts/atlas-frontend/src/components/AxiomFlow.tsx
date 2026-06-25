@@ -581,6 +581,7 @@ interface AxiomFlowProps {
   pendingNodes?: ArchNode[];
   onPendingConsumed?: () => void;
   onUnansweredQuestionOpen?: (payload: { node: ArchNode; mirror: string }) => void;
+  onSendToAtlas?: (text: string) => void;
   onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void;
   handoverPending?: boolean;
   lastHandoverHash?: string | null;
@@ -611,6 +612,7 @@ export function AxiomFlow({
   pendingNodes,
   onPendingConsumed,
   onUnansweredQuestionOpen,
+  onSendToAtlas,
   onHandover,
   handoverPending,
   lastHandoverHash: _lastHandoverHash,
@@ -856,6 +858,7 @@ export function AxiomFlow({
 
     setNodes(nextNodes);
     setEdges(nextEdges);
+    setFlowEmpty(false);
 
     setTimeout(() => {
       pendingConsumedRef.current = false;
@@ -1556,12 +1559,17 @@ export function AxiomFlow({
             {projectId ? "Start with template instead" : "Generate Flow Map"}
           </button>
 
-          {onNodeFocus && !hydrateLoading && (
+          {(onNodeFocus || onSendToAtlas) && !hydrateLoading && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onNodeFocus(`Let's map ${projectLabel}. What does winning look like, and what are the must-haves to get there?`);
+                const msg = `Let's map ${projectLabel}. What does winning look like, and what are the must-haves to get there?`;
+                if (onSendToAtlas) {
+                  onSendToAtlas(msg);
+                } else {
+                  onNodeFocus?.(msg);
+                }
               }}
               onMouseDown={(e) => e.stopPropagation()}
               style={{

@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
+import { db, projectFlowCanvasTable, projectsTable } from "@workspace/db";
 import { NODE_GENERATION_SYSTEM_PROMPT } from "../lib/nodeContract";
 
 const router: IRouter = Router();
@@ -203,6 +205,34 @@ router.post("/forge", async (req, res) => {
       summary: String(data.summary).slice(0, 300),
       nodes: deduped,
     };
+
+    // Persist to the flow canvas table when projectId is provided.
+    // This ensures nodes survive a page refresh without relying on the
+    // client-side debounced save (which can race with navigation).
+    const projectId = parsed.data.projectId;
+    if (projectId) {
+      const userId = (req as any).authUser?.id as number | undefined;
+      if (userId) {
+        try {
+          const [proj] = await db
+            .select({ id: projectsTable.id })
+            .from(projectsTable)
+            .where(eq(projectsTable.id, projectId));
+          if (proj) {
+            await db
+              .insert(projectFlowCanvasTable)
+              .values({ projectId, nodes: deduped, edges: [] })
+              .onConflictDoUpdate({
+                target: projectFlowCanvasTable.projectId,
+                set: { nodes: deduped, edges: [], updatedAt: new Date() },
+              });
+            req.log.info({ projectId, nodeCount: deduped.length }, "Forge: persisted nodes to flow canvas");
+          }
+        } catch (persistErr) {
+          req.log.error({ persistErr }, "Forge: failed to persist flow canvas (non-fatal)");
+        }
+      }
+    }
 
     res.json(response);
   } catch (err: unknown) {
