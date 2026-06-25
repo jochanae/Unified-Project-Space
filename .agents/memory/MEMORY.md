@@ -15,3 +15,4 @@
 - [_workspace api-client-react sync pattern](workspace-api-client-sync.md) — codegen writes to lib/; frontend tsconfig resolves @workspace/api-client-react to _workspace/ first; append new types/hooks to both
 - [Axiom Flow Vision](axiom-flow-vision.md) — foundational philosophy; graph = Atlas's memory, not user-built canvas; measure every Flow task against this; full doc at .local/axiom-flow-vision.md
 - [Axiom Flow Lens Architecture](flow-lens-architecture.md) — three lenses are genuinely different perspectives, not layouts; Builder=engineering board, Storyteller=narrative chapters, Designer=AxiomFlow canvas
+- [Builder Lens Identity](builder-lens-identity.md) — Builder must stay clinical/schema-aesthetic; status-grouped flat lists erode its identity vs Storyteller

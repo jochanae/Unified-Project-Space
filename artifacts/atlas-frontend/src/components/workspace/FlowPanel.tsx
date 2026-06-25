@@ -696,118 +696,171 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
             />
           )}
           {lensView === "builder" && (
-            <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: "14px 16px 28px" }}>
+            <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: "16px 18px 32px", fontFamily: "var(--app-font-mono)" }}>
               {backToFlowChatButton}
-              {/* Builder framing */}
-              <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase" as const, color: "rgba(var(--atlas-gold-rgb),0.4)", marginBottom: 14 }}>
-                What needs to be built?
+              {/* Schema header */}
+              <div style={{ fontSize: 9, letterSpacing: "0.2em", color: "rgba(var(--atlas-gold-rgb),0.35)", marginBottom: 14 }}>
+                // SCHEMA · V0.1
               </div>
               {(() => {
-                const goal = nodes.find(n => n.type === "goal") ?? null;
-                const rest = nodes.filter(n => n.type !== "goal");
+                const goal     = nodes.find(n => n.type === "goal") ?? null;
+                const rest     = nodes.filter(n => n.type !== "goal");
                 if (!goal && rest.length === 0) {
                   return (
-                    <div style={{ display: "flex", height: "60%", alignItems: "center", justifyContent: "center", color: "rgba(var(--atlas-muted-rgb),0.45)", fontFamily: "var(--app-font-mono)", fontSize: 11, letterSpacing: "0.08em", textAlign: "center" as const, padding: "0 24px" }}>
-                      Nothing to build yet — define nodes with Atlas and they'll appear here.
+                    <div style={{ display: "flex", height: "60%", alignItems: "center", justifyContent: "center", color: "rgba(var(--atlas-muted-rgb),0.38)", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.08em", textAlign: "center" as const, padding: "0 24px", lineHeight: 1.7 }}>
+                      {"// no schema yet"}<br />{"// talk to Atlas to define requirements"}
                     </div>
                   );
                 }
-                const isResolved = (n: ArchNode) => !!(n.strategicAnswer && n.strategicAnswer.trim().length > 0);
-                const isWont = (n: ArchNode) => n.type === "wont" || (n.type === "priority" && (n.meta === "wont" || n.moscow === "wont"));
-                const blocked   = rest.filter(n => n.type === "blocker");
-                const wontItems = rest.filter(n => isWont(n));
-                const active    = rest.filter(n => !isWont(n) && n.type !== "blocker");
-                const done      = active.filter(n => isResolved(n));
-                const open      = active.filter(n => !isResolved(n));
-                const moscowRank = (n: ArchNode) => {
-                  const m = n.moscow ?? n.meta;
-                  if (m === "must" || n.type === "requirement") return 0;
-                  if (m === "should" || n.type === "decision")  return 1;
-                  if (m === "could")                            return 2;
-                  if (n.type === "sprint")                      return 2;
-                  return 3;
-                };
-                const openSorted = [...open].sort((a, b) => moscowRank(a) - moscowRank(b));
-                const total = active.length;
-                const pct   = total > 0 ? Math.round((done.length / total) * 100) : 0;
 
-                const typeTag = (n: ArchNode): string => {
-                  if (n.type === "blocker")     return "blocker";
-                  if (n.type === "decision")    return "decision";
-                  if (n.type === "sprint")      return "sprint";
-                  if (n.type === "requirement") return "req";
-                  if (n.type === "priority")    return "priority";
-                  if (n.type === "wont")        return "wont";
-                  return n.type;
-                };
-                const moscowTag = (n: ArchNode): string | null => {
+                const isResolved = (n: ArchNode) => !!(n.strategicAnswer && n.strategicAnswer.trim().length > 0);
+                const isWont     = (n: ArchNode) => n.type === "wont" || (n.type === "priority" && (n.meta === "wont" || n.moscow === "wont"));
+
+                const reqs      = rest.filter(n => n.type === "requirement");
+                const decisions = rest.filter(n => n.type === "decision");
+                const sprints   = rest.filter(n => n.type === "sprint");
+                const blockers  = rest.filter(n => n.type === "blocker");
+                const priorities = rest.filter(n => n.type === "priority" && !isWont(n));
+                const wontItems = rest.filter(n => isWont(n));
+
+                const allActive = rest.filter(n => !isWont(n) && n.type !== "blocker");
+                const resolved  = allActive.filter(n => isResolved(n));
+                const pct       = allActive.length > 0 ? Math.round((resolved.length / allActive.length) * 100) : 0;
+
+                const moscowSuffix = (n: ArchNode): string => {
                   const m = n.moscow ?? n.meta;
                   if (m === "must")   return "must";
                   if (m === "should") return "should";
                   if (m === "could")  return "could";
-                  return null;
+                  if (n.type === "requirement") return "must";
+                  return "";
                 };
 
-                const renderItem = (n: ArchNode, accentColor: string) => (
-                  <div key={n.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderRadius: 8, background: "rgba(var(--atlas-bg-rgb),0.6)", border: `1px solid ${accentColor}28`, marginBottom: 4 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, color: isWont(n) ? "rgba(var(--atlas-muted-rgb),0.4)" : "var(--atlas-fg)", lineHeight: 1.4, textDecoration: isWont(n) ? "line-through" : "none", marginBottom: n.strategicAnswer ? 3 : 0 }}>
-                        {n.label}
-                      </div>
-                      {n.strategicAnswer && (
-                        <div style={{ fontSize: 10.5, color: "rgba(var(--atlas-muted-rgb),0.65)", lineHeight: 1.45, fontStyle: "italic" }}>
-                          "{n.strategicAnswer.slice(0, 100)}{n.strategicAnswer.length > 100 ? "…" : ""}"
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-                      <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: accentColor, padding: "2px 5px", borderRadius: 4, border: `1px solid ${accentColor}40`, background: `${accentColor}12` }}>
-                        {typeTag(n)}
+                // Schema-style line: label padded with dots, then : suffix
+                const SchemaLine = ({ n, suffix, faded = false, struck = false }: { n: ArchNode; suffix: string; faded?: boolean; struck?: boolean }) => {
+                  const resolved = isResolved(n);
+                  const labelColor = struck
+                    ? "rgba(var(--atlas-muted-rgb),0.28)"
+                    : faded
+                    ? "rgba(var(--atlas-muted-rgb),0.42)"
+                    : resolved
+                    ? "rgba(var(--atlas-muted-rgb),0.55)"
+                    : "rgba(var(--atlas-fg-rgb,255,255,255),0.82)";
+                  return (
+                    <div key={n.id} style={{ display: "flex", alignItems: "baseline", gap: 0, padding: "3.5px 0", borderBottom: "1px solid rgba(var(--atlas-gold-rgb),0.04)" }}>
+                      <span style={{ fontSize: 10, color: resolved ? "rgba(95,180,140,0.7)" : "rgba(var(--atlas-muted-rgb),0.2)", marginRight: 6, flexShrink: 0, width: 10 }}>
+                        {resolved ? "✓" : "○"}
                       </span>
-                      {moscowTag(n) && (
-                        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(var(--atlas-muted-rgb),0.45)" }}>
-                          {moscowTag(n)}
-                        </span>
-                      )}
+                      <span style={{ fontSize: 11.5, color: labelColor, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: struck ? "line-through" : "none", letterSpacing: "0.01em" }}>
+                        {n.label}
+                      </span>
+                      <span style={{ fontSize: 9.5, color: "rgba(var(--atlas-muted-rgb),0.28)", flexShrink: 0, marginLeft: 8, letterSpacing: "0.04em" }}>
+                        {suffix}
+                      </span>
                     </div>
-                  </div>
-                );
+                  );
+                };
 
-                const sectionHead = (label: string, count: number, color: string) => (
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, marginTop: 18 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase" as const, color }}>{label}</span>
-                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "rgba(var(--atlas-muted-rgb),0.38)" }}>({count})</span>
+                const SectionBlock = ({ title, children, count }: { title: string; children: React.ReactNode; count: number }) => (
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={{ fontSize: 9, letterSpacing: "0.16em", color: "rgba(var(--atlas-gold-rgb),0.5)", marginBottom: 7, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>{title}</span>
+                      <span style={{ color: "rgba(var(--atlas-muted-rgb),0.25)", fontWeight: 400 }}>({count})</span>
+                    </div>
+                    <div style={{ paddingLeft: 0 }}>{children}</div>
                   </div>
                 );
 
                 return (
                   <>
+                    {/* Seed line */}
                     {goal && (
-                      <div style={{ marginBottom: 14 }}>
-                        <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 8.5, color: "rgba(var(--atlas-gold-rgb),0.42)", letterSpacing: "0.16em", textTransform: "uppercase" as const, marginBottom: 3 }}>Objective</div>
-                        <div style={{ fontSize: 15, fontWeight: 500, color: "var(--atlas-fg)", lineHeight: 1.4 }}>{goal.label}</div>
+                      <div style={{ padding: "8px 12px", border: "1px solid rgba(var(--atlas-gold-rgb),0.14)", borderRadius: 6, marginBottom: 16, background: "rgba(var(--atlas-gold-rgb),0.03)" }}>
+                        <span style={{ fontSize: 10.5, color: "rgba(var(--atlas-gold-rgb),0.55)", letterSpacing: "0.04em" }}>
+                          {"// seed: "}<span style={{ color: "rgba(var(--atlas-gold-rgb),0.82)" }}>{goal.label}</span>
+                        </span>
                       </div>
                     )}
-                    {total > 0 && (
-                      <div style={{ marginBottom: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "rgba(var(--atlas-muted-rgb),0.5)", letterSpacing: "0.1em" }}>PROGRESS</span>
-                          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "rgba(var(--atlas-gold-rgb),0.6)", letterSpacing: "0.06em" }}>{done.length}/{total} resolved</span>
+
+                    {/* Status dashboard */}
+                    {allActive.length > 0 && (
+                      <div style={{ marginBottom: 20, padding: "10px 12px", border: "1px solid rgba(var(--atlas-muted-rgb),0.08)", borderRadius: 6, background: "rgba(var(--atlas-bg-rgb),0.4)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                          <span style={{ fontSize: 8.5, letterSpacing: "0.18em", color: "rgba(var(--atlas-muted-rgb),0.4)" }}>PROJECT_STATUS</span>
+                          <span style={{ fontSize: 11, color: pct > 0 ? "rgba(var(--atlas-gold-rgb),0.75)" : "rgba(var(--atlas-muted-rgb),0.35)", letterSpacing: "0.04em" }}>{pct}%</span>
                         </div>
-                        <div style={{ height: 3, borderRadius: 2, background: "rgba(var(--atlas-gold-rgb),0.1)", overflow: "hidden" }}>
-                          <div style={{ height: "100%", borderRadius: 2, background: "rgba(var(--atlas-gold-rgb),0.55)", width: `${pct}%`, transition: "width 500ms ease" }} />
+                        <div style={{ height: 2, borderRadius: 1, background: "rgba(var(--atlas-muted-rgb),0.08)", overflow: "hidden", marginBottom: 10 }}>
+                          <div style={{ height: "100%", borderRadius: 1, background: "rgba(var(--atlas-gold-rgb),0.45)", width: `${pct}%`, transition: "width 600ms ease" }} />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+                          {reqs.length > 0 && (
+                            <div style={{ fontSize: 9.5, color: "rgba(var(--atlas-muted-rgb),0.45)", display: "flex", justifyContent: "space-between" }}>
+                              <span>requirements</span>
+                              <span style={{ color: "rgba(var(--atlas-muted-rgb),0.3)" }}>{reqs.filter(n => isResolved(n)).length}/{reqs.length}</span>
+                            </div>
+                          )}
+                          {decisions.length > 0 && (
+                            <div style={{ fontSize: 9.5, color: "rgba(var(--atlas-muted-rgb),0.45)", display: "flex", justifyContent: "space-between" }}>
+                              <span>open decisions</span>
+                              <span style={{ color: decisions.filter(n => !isResolved(n)).length > 0 ? "rgba(212,162,107,0.65)" : "rgba(var(--atlas-muted-rgb),0.3)" }}>
+                                {decisions.filter(n => !isResolved(n)).length}
+                              </span>
+                            </div>
+                          )}
+                          {sprints.length > 0 && (
+                            <div style={{ fontSize: 9.5, color: "rgba(var(--atlas-muted-rgb),0.45)", display: "flex", justifyContent: "space-between" }}>
+                              <span>active sprint</span>
+                              <span style={{ color: "rgba(var(--atlas-muted-rgb),0.3)", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sprints[0]?.label ?? "—"}</span>
+                            </div>
+                          )}
+                          {blockers.length > 0 && (
+                            <div style={{ fontSize: 9.5, color: "rgba(var(--atlas-muted-rgb),0.45)", display: "flex", justifyContent: "space-between" }}>
+                              <span>blockers</span>
+                              <span style={{ color: "rgba(239,120,80,0.65)" }}>{blockers.length}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
-                    {blocked.length > 0 && sectionHead("Blocked", blocked.length, "rgba(239,120,80,0.85)")}
-                    {blocked.map(n => renderItem(n, "rgba(239,120,80,0.85)"))}
-                    {openSorted.length > 0 && sectionHead("Open", openSorted.length, "rgba(var(--atlas-gold-rgb),0.7)")}
-                    {openSorted.map(n => renderItem(n, "rgba(var(--atlas-gold-rgb),0.7)"))}
-                    {done.length > 0 && sectionHead("Resolved", done.length, "rgba(95,180,140,0.85)")}
-                    {done.map(n => renderItem(n, "rgba(95,180,140,0.85)"))}
-                    {wontItems.length > 0 && sectionHead("Won't do", wontItems.length, "rgba(var(--atlas-muted-rgb),0.38)")}
-                    {wontItems.map(n => renderItem(n, "rgba(var(--atlas-muted-rgb),0.38)"))}
+
+                    {/* Type-grouped schema sections */}
+                    {reqs.length > 0 && (
+                      <SectionBlock title="requirements" count={reqs.length}>
+                        {reqs.map(n => <SchemaLine key={n.id} n={n} suffix={`: ${moscowSuffix(n) || "req"}`} />)}
+                      </SectionBlock>
+                    )}
+                    {decisions.length > 0 && (
+                      <SectionBlock title="decisions" count={decisions.length}>
+                        {decisions.map(n => <SchemaLine key={n.id} n={n} suffix={`: decision · ${isResolved(n) ? "resolved" : "open"}`} />)}
+                      </SectionBlock>
+                    )}
+                    {sprints.length > 0 && (
+                      <SectionBlock title="sprints" count={sprints.length}>
+                        {sprints.map(n => <SchemaLine key={n.id} n={n} suffix={`: ${moscowSuffix(n) || "sprint"}`} />)}
+                      </SectionBlock>
+                    )}
+                    {priorities.length > 0 && (
+                      <SectionBlock title="priorities" count={priorities.length}>
+                        {priorities.map(n => <SchemaLine key={n.id} n={n} suffix={`: ${moscowSuffix(n) || "priority"}`} />)}
+                      </SectionBlock>
+                    )}
+                    {blockers.length > 0 && (
+                      <SectionBlock title="blockers" count={blockers.length}>
+                        {blockers.map(n => <SchemaLine key={n.id} n={n} suffix=": blocker" faded />)}
+                      </SectionBlock>
+                    )}
+                    {wontItems.length > 0 && (
+                      <SectionBlock title="out_of_scope" count={wontItems.length}>
+                        {wontItems.map(n => <SchemaLine key={n.id} n={n} suffix=": won't" struck faded />)}
+                      </SectionBlock>
+                    )}
+
+                    {/* Footer join hint */}
+                    {goal && (
+                      <div style={{ marginTop: 8, fontSize: 9, color: "rgba(var(--atlas-muted-rgb),0.2)", letterSpacing: "0.1em" }}>
+                        {"↓ join on goal_id"}
+                      </div>
+                    )}
                   </>
                 );
               })()}
