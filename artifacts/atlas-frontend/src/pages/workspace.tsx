@@ -100,6 +100,7 @@ import { BlueprintsTab } from "@/components/BlueprintsTab";
 import { SecretsPanel } from "@/components/workspace/SecretsPanel";
 import { JobsPanel } from "@/components/workspace/JobsPanel";
 import { McpPanel } from "@/components/workspace/McpPanel";
+import { WriteTab } from "@/components/workspace/WriteTab";
 import { LaunchModal, type LaunchMode } from "@/components/workspace/LaunchModal";
 import {
   type PlanState,
@@ -265,7 +266,7 @@ type ManifestDecisionResponse = {
   componentName?: string;
 };
 
-type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "blueprints" | "connections" | "jobs" | "mcp" | "image" | "forge" | "artifacts" | "manifest";
+type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "blueprints" | "connections" | "jobs" | "mcp" | "image" | "forge" | "artifacts" | "manifest" | "write";
 type WorkspaceLeftTab = "chat" | "review" | "diff" | "blueprints" | "terminal" | "artifacts";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 const OPENING_MESSAGE_STORAGE_KEY = "atlas-opening-message";
@@ -1862,6 +1863,15 @@ function RightPanel({
       ),
     },
     {
+      id: "write" as RightTab,
+      label: "Write",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
       id: "connections" as RightTab,
       label: "Connections",
       icon: (
@@ -2238,6 +2248,7 @@ function RightPanel({
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <FlowPanel projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onNavLedger={onNavLedger ?? (() => setTab("ledger"))} onNavPreview={onNavPreview ?? (() => setTab("preview"))} onMapReadinessChange={onMapReadinessChange} displayedReadinessScore={displayedReadinessScore} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} onForgeCompleted={onForgeCompleted} entryCount={entries?.length} />}
       {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} projectId={projectId} />}
+      {tab === "write" && <WriteTab projectId={projectId} isMobile={isMobile} />}
     </div>
   );
 }
@@ -4036,7 +4047,7 @@ export default function Workspace() {
     return "chat";
   });
   const [subheaderOpen, setSubheaderOpen] = useState(false);
-  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "blueprints" | "files" | "map" | "preview" | "manifest" | "memory" | "connections" | "artifacts" | "mcp">(() =>
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "blueprints" | "files" | "map" | "preview" | "manifest" | "memory" | "connections" | "artifacts" | "mcp" | "write">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
   const [rightOpen, setRightOpen] = useState(() =>
@@ -7360,7 +7371,7 @@ export default function Workspace() {
             pushHistory={pushHistory}
             onRollbackPush={handleRollbackPush}
             onHomeNav={() => setLocation("/home")}
-            forceTab={isMobile && mobileTab === "manifest" ? "manifest" : isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : isMobile && mobileTab === "blueprints" ? "blueprints" : isMobile && mobileTab === "memory" ? "memory" : isMobile && mobileTab === "connections" ? "connections" : desktopForceTab}
+            forceTab={isMobile && mobileTab === "manifest" ? "manifest" : isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : isMobile && mobileTab === "blueprints" ? "blueprints" : isMobile && mobileTab === "memory" ? "memory" : isMobile && mobileTab === "connections" ? "connections" : isMobile && mobileTab === "write" ? "write" : desktopForceTab}
             onSendIntent={sendFromIntentCapture}
             onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
             onMapReadinessChange={setMapReadiness}
@@ -7990,6 +8001,7 @@ export default function Workspace() {
                   mobileTab === "memory" ? "memory" :
                   mobileTab === "connections" ? "connections" :
                   mobileTab === "mcp" ? "mcp" :
+                  mobileTab === "write" ? "write" :
                   undefined
                 }
                 onSendIntent={sendFromIntentCapture}
@@ -8101,6 +8113,16 @@ export default function Workspace() {
               margin: "0 auto 10px",
             }} />
             {([
+              {
+                id: "write" as const,
+                label: "Write",
+                icon: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M3 12h12M3 18h15"/>
+                  </svg>
+                ),
+                onSelect: () => { setMobileTab("write"); setRightOpen(true); setShowMoreSheet(false); },
+              },
               {
                 id: "files" as const,
                 label: "Files",

@@ -1282,4 +1282,127 @@ router.post("/projects/:id/append-thread", async (req, res): Promise<void> => {
   res.json({ ok: true, artifact, brief });
 });
 
+// ── POST /api/projects/:id/editorial — Atlas editorial analysis ───────────────
+router.post("/:id/editorial", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { text } = req.body as { text?: string };
+  if (!text || text.trim().length < 10) {
+    res.status(400).json({ error: "Text must be at least 10 characters" });
+    return;
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    res.status(503).json({ error: "AI not configured on this server" });
+    return;
+  }
+
+  const [[proj], [genome]] = await Promise.all([
+    db.select({ id: projectsTable.id, name: projectsTable.name })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId))),
+    db.select({
+      purpose: projectGenomeTable.purpose,
+      audience: projectGenomeTable.audience,
+      stage: projectGenomeTable.stage,
+      identity: projectGenomeTable.identity,
+      wedge: projectGenomeTable.wedge,
+      differentiator: projectGenomeTable.differentiator,
+    })
+      .from(projectGenomeTable)
+      .where(eq(projectGenomeTable.projectId, id))
+      .limit(1),
+  ]);
+
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const contextParts: string[] = [];
+  if (genome?.purpose)        contextParts.push(`Purpose: ${genome.purpose}`);
+  if (genome?.audience)       contextParts.push(`Audience: ${genome.audience}`);
+  if (genome?.stage)          contextParts.push(`Stage: ${genome.stage}`);
+  if (genome?.identity)       contextParts.push(`Identity: ${genome.identity}`);
+  if (genome?.wedge)          contextParts.push(`Wedge: ${genome.wedge}`);
+  if (genome?.differentiator) contextParts.push(`Edge: ${genome.differentiator}`);
+
+  const projectContext = contextParts.length > 0
+    ? `\nProject context — "${proj.name}":\n${contextParts.join("\n")}`
+    : `\nProject: "${proj.name}"`;
+
+  const systemPrompt = `You are Atlas — a world-class developmental editor and writing partner. Your job is to give the writer honest, specific, actionable editorial feedback that protects their voice while ruthlessly optimizing for clarity, structure, and impact.
+
+Analyze the submitted text and return a structured report with exactly these four sections. Use these headers verbatim:
+
+## ✦ VOICE FINGERPRINT
+
+## ✦ ARCHITECTURE REVIEW
+
+## ✦ THE TRIMMER
+
+## ✦ COGNITIVE LOAD
+
+Section instructions:
+
+VOICE FINGERPRINT: Characterize this writer's specific style — sentence length patterns, vocabulary register (formal/casual/technical), pacing, any distinctive phrases or tics. Then flag passages where the voice becomes inconsistent or slips into a different register. Format flagged items as:
+"quoted passage"
+→ what's happening and why it disrupts the voice
+
+ARCHITECTURE REVIEW: Map the structural skeleton of the piece. Identify the core argument or narrative purpose, how the sections are organized, and the quality of transitions. Flag: abandoned threads, conclusions that introduce new arguments, unsupported claims, or structural dead-ends. Format:
+"quoted passage"
+→ the structural problem and what to do
+
+THE TRIMMER: List the specific phrases, sentences, or clauses to cut or compress. Target ruthlessly: passive voice constructions, filler words (actually, basically, just, very, really, quite, sort of), nominalization bloat (e.g. "make a decision" → "decide"), ideas that repeat without adding, and hedging that weakens the point. Format:
+"quoted passage"
+→ cut/compress instruction with one-line rationale
+
+COGNITIVE LOAD: Identify where a reader will disengage, skim, or get lost. This includes: dense paragraphs with too many ideas, unexplained jargon, abrupt context shifts, and sentences that require re-reading. Format:
+"quoted passage"
+→ specific fix (break into bullets / add analogy / define term / shorten / restructure)
+
+Rules:
+- Every observation MUST quote the exact passage it refers to, verbatim, in quotation marks
+- Never give generic advice — all feedback must be specific to this document
+- Adapt your register to the writer's voice — suggest edits in their style, not yours
+- If a section genuinely has no significant issues, write "No issues found." and move on — don't invent problems
+- Focus on the 2–4 most important observations per section, not an exhaustive list
+- Be direct and honest. The writer hired a great editor, not a cheerleader
+${projectContext}`;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const writeSSE = (event: object) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch {}
+  };
+
+  try {
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const stream = await anthropic.messages.stream({
+      model: "claude-opus-4-5",
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: `Please analyze this text:\n\n${text.trim()}` }],
+    });
+
+    let accumulated = "";
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        accumulated += event.delta.text;
+        writeSSE({ type: "token", token: event.delta.text });
+      }
+    }
+
+    writeSSE({ type: "done", content: accumulated });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Analysis failed";
+    writeSSE({ type: "error", error: msg });
+  } finally {
+    res.end();
+  }
+});
+
 export default router;
