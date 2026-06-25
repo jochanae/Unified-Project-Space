@@ -146,6 +146,7 @@ type PeekState = {
   overallLabel?: string;
   entries: PeekEntry[];
   loading: boolean;
+  hasFlow?: boolean;
 };
 type Tension = {
   projectA: { id: number; name: string };
@@ -845,22 +846,26 @@ export default function MasterMap() {
         loading: true,
       });
       try {
-        const [entriesRes, readinessRes] = await Promise.allSettled([
+        const [entriesRes, readinessRes, flowRes] = await Promise.allSettled([
           fetch(`${BASE_URL}/api/projects/${proj.id}/entries?status=committed`, { credentials: "include" }),
           fetch(`${BASE_URL}/api/projects/${proj.id}/readiness`, { credentials: "include" }),
+          fetch(`${BASE_URL}/api/projects/${proj.id}/flow`, { credentials: "include" }),
         ]);
         const list = entriesRes.status === "fulfilled" && entriesRes.value.ok
           ? (await entriesRes.value.json()) as Array<{ id: number; title: string }>
           : [];
         const top3 = list.slice(0, 3).map(e => ({ id: e.id, title: e.title }));
+        const hasFlow = flowRes.status === "fulfilled" && flowRes.value.ok
+          ? await flowRes.value.json().then((d: { nodes?: unknown[] }) => Array.isArray(d?.nodes) && d.nodes.length > 0).catch(() => false)
+          : false;
         if (readinessRes.status === "fulfilled" && readinessRes.value.ok) {
           const rd = await readinessRes.value.json() as { overallScore: number; overallLabel: string };
           readinessCacheRef.current.set(proj.id, { score: rd.overallScore, label: rd.overallLabel });
           setPeek(prev => prev && prev.projectId === proj.id
-            ? { ...prev, score: rd.overallScore, overallLabel: rd.overallLabel, entries: top3, loading: false }
+            ? { ...prev, score: rd.overallScore, overallLabel: rd.overallLabel, entries: top3, hasFlow, loading: false }
             : prev);
         } else {
-          setPeek(prev => prev && prev.projectId === proj.id ? { ...prev, entries: top3, loading: false } : prev);
+          setPeek(prev => prev && prev.projectId === proj.id ? { ...prev, entries: top3, hasFlow, loading: false } : prev);
         }
       } catch {
         setPeek(prev => prev && prev.projectId === proj.id ? { ...prev, loading: false } : prev);
@@ -1623,7 +1628,7 @@ export default function MasterMap() {
                         }}
                         style={{
                           padding: "6px 14px",
-                          background: "rgba(201,162,76,0.12)",
+                          background: peek?.hasFlow === false ? "rgba(201,162,76,0.22)" : "rgba(201,162,76,0.12)",
                           border: `1px solid ${palette.goldText}`,
                           borderRadius: 6,
                           color: palette.goldTextStrong,
@@ -1635,7 +1640,7 @@ export default function MasterMap() {
                           pointerEvents: "auto",
                         }}
                       >
-                        Open flow map →
+                        {peek?.hasFlow === false ? "Generate Flow Map →" : "Open flow map →"}
                       </button>
                       {projectId && (
                         <button

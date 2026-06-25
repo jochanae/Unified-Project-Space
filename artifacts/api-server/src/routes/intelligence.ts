@@ -20,6 +20,7 @@ import {
   projectGenomeTable,
   entriesTable,
   nexusMessagesTable,
+  projectFlowCanvasTable,
 } from "@workspace/db";
 import { computeProjectReadiness } from "./readiness";
 import type { AtlasState } from "./genome";
@@ -104,6 +105,7 @@ export async function computeProjectIntelligence(projectId: number) {
     recentEntries,
     [msgRow],
     [objectCountRow],
+    [flowCanvas],
   ] = await Promise.all([
     db.select()
       .from(projectGenomeTable)
@@ -156,10 +158,16 @@ export async function computeProjectIntelligence(projectId: number) {
         eq(entriesTable.projectId, projectId),
         ne(entriesTable.status, "archived"),
       )),
+
+    db.select()
+      .from(projectFlowCanvasTable)
+      .where(eq(projectFlowCanvasTable.projectId, projectId))
+      .limit(1),
   ]);
 
   const recentMsgCount = Number(msgRow?.n ?? 0);
   const objectCount = Number(objectCountRow?.n ?? 0);
+  const hasFlow = !!(flowCanvas?.nodes && Array.isArray(flowCanvas.nodes) && (flowCanvas.nodes as unknown[]).length > 0);
   const constraints = genome?.constraints ?? [];
   const openQuestions = genome?.openQuestions ?? [];
   const stage = genome?.stage ?? "Think";
@@ -252,6 +260,9 @@ export async function computeProjectIntelligence(projectId: number) {
       warnings: readiness.warnings,
       sourceBreakdown: readiness.sourceBreakdown,
     },
+
+    // Flow canvas — whether a mapped flow exists for this project
+    hasFlow,
 
     // Entries — typed lists for Master Map, Ledger, and HUD
     entries: entryGroups,

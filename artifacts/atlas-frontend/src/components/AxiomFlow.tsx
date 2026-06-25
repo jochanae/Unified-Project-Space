@@ -600,12 +600,19 @@ export function AxiomFlow({
   const theme = useThemeMode();
   const palette = flowPaletteFor(theme);
   const [, setLocation] = useLocation();
+  // When projectId exists we always load from DB first. Start with empty arrays
+  // to avoid a flash of seed nodes, then hydrate from DB (or localStorage migration).
   const [nodes, setNodes] = useState<ArchNode[]>(() =>
-    projectId ? buildInitialNodes(projectName) : loadNodes(storageKey, projectName)
+    projectId ? [] : loadNodes(storageKey, projectName)
   );
   const [edges, setEdges] = useState<ArchEdge[]>(() =>
-    projectId ? INITIAL_EDGES : loadEdges(storageKey)
+    projectId ? [] : loadEdges(storageKey)
   );
+  // flowLoading: true while waiting for the DB response on first mount
+  const [flowLoading, setFlowLoading] = useState(() => !!projectId);
+  // flowEmpty: true after DB + localStorage both confirmed empty (no real data)
+  const [flowEmpty, setFlowEmpty] = useState(false);
+
   const mapSeenKey = projectId ? `atlas-map-seen-${projectId}` : "atlas-map-seen-standalone";
   const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
     try { return localStorage.getItem(mapSeenKey) === "1"; } catch { return false; }
@@ -637,16 +644,70 @@ export function AxiomFlow({
   const dbLoadedRef = useRef(false);
   useEffect(() => {
     if (!projectId || dbLoadedRef.current) return;
-    dbLoadedRef.current = true;
-    fetch(`/api/projects/${projectId}/flow`, { credentials: 'include' })
+    fetch(`/api/projects/${projectId}/flow`, { credentials: "include" })
       .then(r => (r.ok ? r.json() : null))
       .then((data: { nodes: ArchNode[]; edges: ArchEdge[] } | null) => {
-        if (!data || !Array.isArray(data.nodes) || data.nodes.length === 0) return;
-        setNodes(data.nodes);
-        setEdges(data.edges ?? []);
+        if (data && Array.isArray(data.nodes) && data.nodes.length > 0) {
+          // DB has real data — use it directly
+          setNodes(data.nodes);
+          setEdges(data.edges ?? []);
+          dbLoadedRef.current = true;
+          setFlowLoading(false);
+          return;
+        }
+        // DB is empty — attempt one-time localStorage migration
+        const migKey = `${storageKey}-db-migrated`;
+        try {
+          if (localStorage.getItem(migKey) !== "1") {
+            const raw = localStorage.getItem(storageKey);
+            const edgesRaw = localStorage.getItem(`${storageKey}-edges`);
+            if (raw) {
+              const parsed = JSON.parse(raw) as ArchNode[];
+              const parsedEdges = edgesRaw ? (JSON.parse(edgesRaw) as ArchEdge[]) : [];
+              if (Array.isArray(parsed) && parsed.length > 0 && !isLegacyDefault(parsed, parsedEdges)) {
+                setNodes(parsed);
+                setEdges(parsedEdges);
+                dbLoadedRef.current = true;
+                setFlowLoading(false);
+                // Write to DB immediately (no debounce) to complete the migration
+                fetch(`/api/projects/${projectId}/flow`, {
+                  method: "PUT",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ nodes: parsed, edges: parsedEdges }),
+                }).catch(() => {});
+                try { localStorage.setItem(migKey, "1"); } catch {}
+                return;
+              }
+            }
+          }
+        } catch {}
+        // No real data anywhere — project has no flow yet
+        dbLoadedRef.current = true;
+        setFlowLoading(false);
+        setFlowEmpty(true);
       })
-      .catch(() => {});
-  }, [projectId]);
+      .catch(() => {
+        // Network failure — fall back to localStorage if available, else empty state
+        dbLoadedRef.current = true;
+        try {
+          const raw = localStorage.getItem(storageKey);
+          const edgesRaw = localStorage.getItem(`${storageKey}-edges`);
+          if (raw) {
+            const parsed = JSON.parse(raw) as ArchNode[];
+            const parsedEdges = edgesRaw ? (JSON.parse(edgesRaw) as ArchEdge[]) : [];
+            if (Array.isArray(parsed) && parsed.length > 0 && !isLegacyDefault(parsed, parsedEdges)) {
+              setNodes(parsed);
+              setEdges(parsedEdges);
+              setFlowLoading(false);
+              return;
+            }
+          }
+        } catch {}
+        setFlowLoading(false);
+        setFlowEmpty(true);
+      });
+  }, [projectId, storageKey]);
 
   const dbSyncedRef = useRef(false);
   useEffect(() => {
@@ -877,6 +938,22 @@ export function AxiomFlow({
   const projectLabel = projectName?.trim() || "this project";
 
   useEffect(() => { onReadinessChange?.(readinessScore); }, [readinessScore, onReadinessChange]);
+
+  // Generate Flow Map — create seed nodes, persist to DB immediately (no debounce)
+  const generateFlowMap = useCallback(() => {
+    if (!projectId) return;
+    const initial = buildInitialNodes(projectName);
+    const initialEdges = INITIAL_EDGES;
+    setNodes(initial);
+    setEdges(initialEdges);
+    setFlowEmpty(false);
+    fetch(`/api/projects/${projectId}/flow`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodes: initial, edges: initialEdges }),
+    }).catch(() => {});
+  }, [projectId, projectName]);
 
   useEffect(() => {
     onNodesChange?.(nodes);
@@ -1215,6 +1292,126 @@ export function AxiomFlow({
       onClick={onContainerClick}
     >
       <style>{EDGE_FLOW_STYLE}</style>
+
+      {/* DB loading state — shown while first fetch is in-flight */}
+      {flowLoading && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 30,
+          background: palette.rootBg,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          pointerEvents: "all",
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: "50%",
+            border: `2px solid rgba(${palette.goldRgb},0.15)`,
+            borderTopColor: `rgba(${palette.goldRgb},0.65)`,
+            animation: "axiomFlowSpin 0.8s linear infinite",
+          }} />
+          <style>{`@keyframes axiomFlowSpin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {/* Empty state — no flow data for this project yet */}
+      {!flowLoading && flowEmpty && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute", inset: 0, zIndex: 30,
+            background: palette.rootBg,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexDirection: "column", gap: 16, padding: "32px 24px",
+            pointerEvents: "all",
+            textAlign: "center",
+          }}
+        >
+          {/* Icon */}
+          <div style={{
+            width: 56, height: 56, borderRadius: "50%",
+            border: `1.5px solid rgba(${palette.goldRgb},0.28)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: `radial-gradient(circle at 50% 50%, rgba(${palette.goldRgb},0.08), transparent 70%)`,
+          }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={`rgba(${palette.goldRgb},0.7)`} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
+            </svg>
+          </div>
+
+          <div style={{ maxWidth: 300 }}>
+            <div style={{
+              fontFamily: "var(--app-font-mono)",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: `rgba(${palette.goldRgb},0.75)`,
+              marginBottom: 8,
+            }}>
+              No flow mapped yet
+            </div>
+            <div style={{
+              fontSize: 13, lineHeight: 1.6,
+              color: palette.mutedText,
+              fontFamily: "var(--app-font-sans)",
+            }}>
+              Generate a flow map to track strategy, blockers, and decisions for{" "}
+              <span style={{ color: palette.fgText, fontWeight: 500 }}>{projectLabel}</span>.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); generateFlowMap(); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              padding: "9px 20px",
+              borderRadius: 8,
+              background: `linear-gradient(180deg, rgba(${palette.goldRgb},0.90) 0%, rgba(${palette.goldRgb},0.72) 100%)`,
+              border: `1px solid rgba(${palette.goldRgb},0.55)`,
+              color: "#0C0A09",
+              cursor: "pointer",
+              fontFamily: "var(--app-font-mono)",
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              boxShadow: `0 0 20px rgba(${palette.goldRgb},0.25)`,
+              transition: "opacity 120ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+          >
+            Generate Flow Map
+          </button>
+
+          {onNodeFocus && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNodeFocus(`Let's map ${projectLabel}. What does winning look like, and what are the must-haves to get there?`);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                padding: "7px 16px",
+                borderRadius: 7,
+                background: "transparent",
+                border: `1px solid rgba(${palette.goldRgb},0.20)`,
+                color: palette.mutedText,
+                cursor: "pointer",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Ask Atlas to map it
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Dot grid */}
       <div className="absolute inset-0" style={{
