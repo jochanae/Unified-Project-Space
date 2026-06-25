@@ -464,6 +464,32 @@ const LEGACY_GOAL_DEFAULT = {
   details: "What does winning look like for this project?",
 };
 
+// Labels that come from the generic template seed — before any real project
+// knowledge is extracted. A canvas is a "generic shell" when ALL nodes carry
+// these labels AND none have been answered or detailed by the user.
+const GENERIC_SHELL_NODE_LABELS = new Set([
+  "foundation", "core requirement", "initial milestone", "open decision",
+  "open blocker", "should-have", "should have", "nice to have",
+  "won't have", "wont have", "key decision", "milestone",
+]);
+
+// Returns true when the canvas contains only machine-generated placeholder nodes
+// with no real user content. Goal nodes are always template-generated so they
+// are always treated as shells for this check.
+function isGenericShell(nodes: ArchNode[]): boolean {
+  if (nodes.length === 0) return false;
+  return nodes.every(n => {
+    // Any answered or detailed node means a human touched this canvas
+    const hasRealContent = !!(
+      (n.strategicAnswer && n.strategicAnswer.trim().length > 0) ||
+      (n.details && n.details.trim().length > 0)
+    );
+    if (hasRealContent) return false;
+    if (n.type === "goal") return true; // goal label is always machine-generated
+    return GENERIC_SHELL_NODE_LABELS.has(n.label?.toLowerCase() ?? "");
+  });
+}
+
 function isLegacyDefault(parsedNodes: unknown, parsedEdges: unknown): boolean {
   if (!Array.isArray(parsedNodes) || parsedNodes.length !== 1) return false;
   const only = parsedNodes[0] as Partial<ArchNode>;
@@ -992,6 +1018,22 @@ export function AxiomFlow({
     }
   }, [projectId, hydrateLoading]);
 
+  // Auto-hydrate from data spine when canvas is a generic shell.
+  // Contract:
+  //  1. Canvas has nodes but they're all template placeholders (no user content)
+  //  2. Project has a real projectId (so the hydrate endpoint can read its data)
+  //  3. User has NOT answered or detailed any node (no manual customisation)
+  //  4. Only triggered once per mount — autoHydrateTriggeredRef guards re-runs
+  const autoHydrateTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!projectId || flowLoading || hydrateLoading || flowEmpty) return;
+    if (autoHydrateTriggeredRef.current) return;
+    if (nodes.length === 0) return;
+    if (!isGenericShell(nodes)) return; // real user data present — never overwrite
+    autoHydrateTriggeredRef.current = true;
+    void hydrateFlow();
+  }, [projectId, flowLoading, hydrateLoading, flowEmpty, nodes, hydrateFlow]);
+
   useEffect(() => {
     onNodesChange?.(nodes);
     if (!projectId) {
@@ -1101,13 +1143,6 @@ export function AxiomFlow({
       },
     });
   }, [fitMap]);
-
-  const tidyLayout = useCallback(() => {
-    const normalized = normalizeGoalNodes(nodes, edges);
-    setNodes(layoutRadial(normalized.nodes));
-    setEdges(normalized.edges);
-    haptics.tap();
-  }, [nodes, edges]);
 
   const onDoubleClick = useCallback(() => { resetView(); }, [resetView]);
 
@@ -1345,6 +1380,48 @@ export function AxiomFlow({
             animation: "axiomFlowSpin 0.8s linear infinite",
           }} />
           <style>{`@keyframes axiomFlowSpin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {/* Auto-hydrating overlay — shown over the generic-shell canvas while
+          Atlas reads the project's data spine and generates real nodes.
+          Semi-transparent so the user sees the canvas beneath it. */}
+      {hydrateLoading && !flowEmpty && nodes.length > 0 && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 28,
+          background: "rgba(8,6,10,0.78)",
+          backdropFilter: "blur(3px)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          gap: 14, pointerEvents: "all",
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: "50%",
+            border: `2px solid rgba(${palette.goldRgb},0.15)`,
+            borderTopColor: `rgba(${palette.goldRgb},0.72)`,
+            animation: "axiomFlowSpin 0.8s linear infinite",
+            flexShrink: 0,
+          }} />
+          <span style={{
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 10, letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: `rgba(${palette.goldRgb},0.65)`,
+          }}>
+            Atlas is mapping your project…
+          </span>
+          {hydrateError && (
+            <div style={{
+              maxWidth: 260, padding: "7px 12px", borderRadius: 7,
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.22)",
+              color: "rgba(239,68,68,0.85)",
+              fontFamily: "var(--app-font-sans)",
+              fontSize: 11, lineHeight: 1.5, textAlign: "center",
+            }}>
+              {hydrateError}
+            </div>
+          )}
         </div>
       )}
 
@@ -1844,44 +1921,6 @@ export function AxiomFlow({
           />
         </div>
       )}
-
-      <div
-        style={{
-          position: "absolute",
-          right: 14,
-          bottom: 52,
-          zIndex: 8,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); tidyLayout(); }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          title="Tidy layout"
-          aria-label="Tidy layout"
-          style={{
-            padding: "7px 10px",
-            borderRadius: 8,
-            background: palette.panelBg,
-            border: `1px solid rgba(${palette.goldRgb},0.32)`,
-            color: palette.goldText,
-            cursor: "pointer",
-            fontFamily: "var(--app-font-mono)",
-            fontSize: 9,
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            boxShadow: palette.panelShadow,
-          }}
-        >
-          Tidy layout
-        </button>
-      </div>
 
       {/* Hint — compact (?) icon, expands on hover/tap */}
       <div
