@@ -331,12 +331,6 @@ export default function Ledger() {
           >
             Parking Lot →
           </Link>
-          <Link
-            href="/compass"
-            style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--phosphor)", textDecoration: "none", marginLeft: "auto" }}
-          >
-            Compass →
-          </Link>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
