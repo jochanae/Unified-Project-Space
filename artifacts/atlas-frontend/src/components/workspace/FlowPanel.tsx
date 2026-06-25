@@ -858,124 +858,35 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
         )}
       </div>
 
-      {/* Persistent Flow toolbar — Axiom Flow title + layout & export controls */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "3px 6px 3px 10px",
-        background: "var(--atlas-flow-pane-bg)",
-        borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.08)",
-        flexShrink: 0,
-        minHeight: 28,
-      }}>
-        {/* Left: Axiom Flow label */}
-        <span style={{
-          color: "rgba(var(--atlas-gold-rgb),0.45)", fontSize: 9,
-          fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em",
-          userSelect: "none", textTransform: "uppercase",
+      {/* Slim toggle — visible when chat is open */}
+      {showChat && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "4px 12px",
+          background: "var(--atlas-flow-pane-bg)",
+          borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.08)",
+          flexShrink: 0,
         }}>
-          Axiom Flow
-        </span>
-
-        {/* Right: layout toggle + export icons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-          {/* Chat fullscreen toggle (only when chat is open) */}
-          {showChat && (
-            <button
-              onClick={() => setChatFullscreen(v => !v)}
-              title={chatFullscreen ? "Show map + chat" : "Chat fullscreen"}
-              aria-label={chatFullscreen ? "Show map" : "Chat fullscreen"}
-              style={{
-                minWidth: 26, height: 22, padding: "0 5px", borderRadius: 4,
-                background: "transparent", border: "none", cursor: "pointer",
-                color: "rgba(var(--atlas-gold-rgb),0.55)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                {chatFullscreen ? (
-                  <>
-                    <path d="M4 4h7v7H4z" />
-                    <path d="M13 13h7v7h-7z" />
-                  </>
-                ) : (
-                  <>
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                  </>
-                )}
-              </svg>
-            </button>
-          )}
-          {/* Chat show/hide toggle */}
+          <span style={{
+            color: "rgba(var(--atlas-gold-rgb),0.35)", fontSize: 10,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+            userSelect: "none",
+          }}>
+            {chatFullscreen ? "flow chat" : "intent capture"}
+          </span>
           <button
-            onClick={() => { setChatFullscreen(false); setShowChat(v => !v); }}
-            title={showChat ? "Hide chat" : "Show chat"}
-            aria-label={showChat ? "Hide chat" : "Show chat"}
+            onClick={() => setChatFullscreen(v => !v)}
             style={{
-              minWidth: 26, height: 22, padding: "0 5px", borderRadius: 4,
-              background: "transparent", border: "none", cursor: "pointer",
-              color: "rgba(var(--atlas-gold-rgb),0.55)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              {showChat ? (
-                <path d="M18 6L6 18M6 6l12 12" />
-              ) : (
-                <>
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </>
-              )}
-            </svg>
-          </button>
-          <span style={{ width: 1, height: 12, background: "rgba(var(--atlas-gold-rgb),0.15)", margin: "0 3px" }} aria-hidden />
-          {/* Copy blueprint */}
-          <button
-            onClick={handleExportCopy}
-            title="Copy blueprint"
-            aria-label="Copy blueprint"
-            style={{
-              minWidth: 26, height: 22, padding: "0 5px", borderRadius: 4,
-              background: exportFlash === "copied" ? "rgba(var(--atlas-gold-rgb),0.14)" : "transparent",
-              border: "none", cursor: "pointer",
-              color: "rgba(var(--atlas-gold-rgb),0.55)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            {exportFlash === "copied" ? (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-            ) : (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-            )}
-          </button>
-          {/* Download blueprint */}
-          <button
-            onClick={handleExportDownload}
-            title="Download blueprint"
-            aria-label="Download blueprint"
-            style={{
-              minWidth: 26, height: 22, padding: "0 5px", borderRadius: 4,
-              background: exportFlash === "downloaded" ? "rgba(var(--atlas-gold-rgb),0.14)" : "transparent",
-              border: "none", cursor: "pointer",
-              color: "rgba(var(--atlas-gold-rgb),0.55)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            {exportFlash === "downloaded" ? (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-            ) : (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-            )}
+              background: chatFullscreen ? "rgba(var(--atlas-gold-rgb),0.14)" : "rgba(var(--atlas-gold-rgb),0.07)",
+              border: `1px solid ${chatFullscreen ? "rgba(var(--atlas-gold-rgb),0.5)" : "rgba(var(--atlas-gold-rgb),0.28)"}`,
+              borderRadius: 5, padding: "2px 9px", cursor: "pointer",
+              color: "rgba(var(--atlas-gold-rgb),0.78)", fontSize: 9,
+              fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+            }}>
+            {chatFullscreen ? "⊠ Show map" : "⛶ Chat full"}
           </button>
         </div>
-      </div>
+      )}
 
       {/* INTENT CAPTURE */}
       {showChat && (

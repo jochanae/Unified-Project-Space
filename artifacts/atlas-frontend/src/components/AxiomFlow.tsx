@@ -616,14 +616,6 @@ export function AxiomFlow({
   const [hydrateLoading, setHydrateLoading] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
 
-  const mapSeenKey = projectId ? `atlas-map-seen-${projectId}` : "atlas-map-seen-standalone";
-  const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
-    try { return localStorage.getItem(mapSeenKey) === "1"; } catch { return false; }
-  });
-
-  useEffect(() => {
-    try { setSummaryCollapsed(localStorage.getItem(mapSeenKey) === "1"); } catch { setSummaryCollapsed(false); }
-  }, [mapSeenKey]);
 
   // If projectName arrives or changes after mount and the goal node still
   // carries the generic "The Goal" label, rewrite just the goal to read as
@@ -934,13 +926,6 @@ export function AxiomFlow({
   const readinessScore = Math.round(
     (nonWontNodes.filter(isNodeDefined).length / Math.max(nonWontNodes.length, 1)) * 100
   );
-  const goalForSummary = nodes.find(n => n.type === "goal") ?? nodes[0];
-  const mustCount = nodes.filter(n => getMoscow(n) === "must").length;
-  const shouldCount = nodes.filter(n => getMoscow(n) === "should").length;
-  const openDecisionCount = nodes.filter(n => n.type === "decision" && !isNodeDefined(n)).length;
-  const blockerCount = nodes.filter(n => n.type === "blocker").length;
-  const definedCount = nodes.filter(isNodeDefined).length;
-  const isEmptyMap = definedCount === 0;
   const projectLabel = projectName?.trim() || "this project";
 
   useEffect(() => { onReadinessChange?.(readinessScore); }, [readinessScore, onReadinessChange]);
@@ -1579,129 +1564,6 @@ export function AxiomFlow({
         </button>
       </div>
 
-      {nodes.length > 0 && (
-        summaryCollapsed ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); setSummaryCollapsed(false); }}
-            onMouseDown={(e) => e.stopPropagation()}
-            title="Show Flow summary"
-            style={{
-              position: "absolute",
-              right: 14,
-              top: 14,
-              zIndex: 12,
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              background: palette.panelBg,
-              border: `1px solid rgba(${palette.goldRgb},0.32)`,
-              color: palette.goldText,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-              <path d="M3 4h10M3 8h7M3 12h5" />
-            </svg>
-          </button>
-        ) : (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: 42,
-              transform: "translateX(-50%)",
-              zIndex: 12,
-              width: "min(520px, calc(100% - 28px))",
-              background: theme === "parchment"
-                ? `linear-gradient(rgba(255,252,245,0.96), rgba(252,247,236,0.96)) padding-box, linear-gradient(135deg, rgba(${palette.goldRgb},0.55), rgba(${palette.goldRgb},0.18) 45%, rgba(${palette.goldRgb},0.55)) border-box`
-                : "linear-gradient(rgba(10,10,12,0.78), rgba(10,10,12,0.78)) padding-box, linear-gradient(135deg, rgba(167,139,250,0.75), rgba(139,92,246,0.35) 50%, rgba(167,139,250,0.75)) border-box",
-              border: "1.5px solid transparent",
-              borderRadius: 12,
-              padding: "12px 14px",
-              boxShadow: theme === "parchment"
-                ? `0 0 0 1px rgba(${palette.goldRgb},0.16), 0 8px 24px rgba(146,64,14,0.08), 0 20px 50px rgba(146,64,14,0.06)`
-                : "0 0 24px rgba(139,92,246,0.35), 0 0 60px rgba(139,92,246,0.18), 0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(167,139,250,0.08)",
-              backdropFilter: "blur(20px) saturate(140%)",
-              pointerEvents: "auto",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: palette.goldText, flexShrink: 0, boxShadow: `0 0 8px ${palette.goldText}` }} />
-              <span style={{ flex: 1, fontFamily: "var(--app-font-mono)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: theme === "parchment" ? "rgba(60,40,15,0.78)" : "rgba(231,229,226,0.85)" }}>
-                {isEmptyMap ? `${projectLabel} — nothing mapped yet` : "Here's what Atlas mapped from your conversation"}
-              </span>
-              <button
-                onClick={() => {
-                  setSummaryCollapsed(true);
-                  try { localStorage.setItem(mapSeenKey, "1"); } catch {}
-                }}
-                style={{ background: "transparent", border: "none", color: palette.fgText, opacity: 0.55, cursor: "pointer", fontSize: 16, lineHeight: 1 }}
-              >
-                ×
-              </button>
-            </div>
-            <div style={{ color: theme === "parchment" ? "rgba(60,40,15,0.72)" : "rgba(200,200,205,0.78)", fontSize: 12, lineHeight: 1.55, marginBottom: 12 }}>
-              {isEmptyMap ? (
-                <>Atlas hasn't extracted anything for <b style={{ color: theme === "parchment" ? "rgba(40,25,8,0.95)" : "rgba(231,229,226,0.95)", fontWeight: 600 }}>{projectLabel}</b> yet — the nodes below are empty placeholders, not real content. Tap any node to define it, or tap <b style={{ color: palette.goldText, fontWeight: 600 }}>Get started</b> and tell Atlas what you're building.</>
-              ) : (
-                <>Your goal is <b style={{ color: theme === "parchment" ? "rgba(40,25,8,0.95)" : "rgba(231,229,226,0.95)", fontWeight: 600 }}>{goalForSummary?.label ?? "your first node"}</b>. So far Atlas has captured {definedCount} of {nodes.length} nodes — {mustCount} must-haves, {shouldCount} should-haves, {openDecisionCount} open decisions, {blockerCount} blockers. Tap any node to edit.</>
-              )}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {isEmptyMap && onNodeFocus && (
-                <button
-                  onClick={() => {
-                    setSummaryCollapsed(true);
-                    try { localStorage.setItem(mapSeenKey, "1"); } catch {}
-                    onNodeFocus(`Let's map ${projectLabel}. What does winning look like, and what are the must-haves to get there?`);
-                  }}
-                  style={{
-                    padding: "7px 12px",
-                    borderRadius: 7,
-                    background: `linear-gradient(180deg, ${palette.goldText} 0%, #B8942A 100%)`,
-                    border: `1px solid rgba(${palette.goldRgb},0.55)`,
-                    color: "#0C0A09",
-                    cursor: "pointer",
-                    fontFamily: "var(--app-font-mono)",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    boxShadow: `0 0 16px rgba(${palette.goldRgb},0.25)`,
-                  }}
-                >
-                  Get started
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setSummaryCollapsed(true);
-                  try { localStorage.setItem(mapSeenKey, "1"); } catch {}
-                }}
-                style={{
-                  padding: "7px 12px",
-                  borderRadius: 7,
-                  background: "transparent",
-                  border: `1px solid rgba(255,255,255,0.10)`,
-                  color: "rgba(231,229,226,0.7)",
-                  cursor: "pointer",
-                  fontFamily: "var(--app-font-mono)",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Got it
-              </button>
-            </div>
-          </div>
-        )
-      )}
 
       {/* No floating pill in the canvas — handover is triggered from the
           CockpitBar navRight (mobile) or the RightPanel tab bar (desktop).
@@ -1987,7 +1849,7 @@ export function AxiomFlow({
         style={{
           position: "absolute",
           right: 14,
-          bottom: 10,
+          bottom: 52,
           zIndex: 8,
           display: "flex",
           alignItems: "center",
