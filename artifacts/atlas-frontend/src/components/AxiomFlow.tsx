@@ -1922,32 +1922,21 @@ export function AxiomFlow({
         </div>
       )}
 
-      {/* Hint — compact (?) icon, expands on hover/tap */}
+      {/* Hint — compact (?) icon, pinned to bottom-left, always visible */}
       <div
         title="Tap node · Pinch to zoom · Double-tap to fit"
         style={{
-          position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)",
+          position: "absolute", bottom: 10, left: 14,
           width: 18, height: 18, borderRadius: "50%",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 10, fontFamily: "var(--app-font-mono)",
           color: theme === "parchment" ? "rgba(146,64,14,0.55)" : "rgba(201,162,76,0.55)",
           border: `1px solid ${theme === "parchment" ? "rgba(146,64,14,0.22)" : "rgba(201,162,76,0.22)"}`,
           background: theme === "parchment" ? "rgba(255,252,245,0.55)" : "rgba(10,10,12,0.45)",
-          cursor: "help", zIndex: 6, userSelect: "none",
+          cursor: "help", zIndex: 6, userSelect: "none", flexShrink: 0,
         }}
       >
         ?
-      </div>
-
-      <div style={{
-        position: "absolute", bottom: 10, left: 14,
-        pointerEvents: "none", zIndex: 5,
-        fontSize: 8, letterSpacing: "0.22em",
-        fontFamily: "var(--app-font-mono)",
-        textTransform: "uppercase",
-        color: theme === "parchment" ? "rgba(146,64,14,0.30)" : "rgba(201,162,76,0.28)",
-      }}>
-        Axiom Flow
       </div>
     </div>
   );

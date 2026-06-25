@@ -554,7 +554,7 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
           <div
             style={{
               position: "absolute",
-              bottom: 8,
+              top: 8,
               right: 10,
               zIndex: 14,
               display: "flex",
