@@ -24,24 +24,25 @@ type Props = {
   onIntake: (content: string) => Promise<void> | void;
   onOpenProjectDna?: () => void;
   projectName?: string | null;
+  preloadContent?: string;
 };
 
-export function ForgeIntakeSheet({ open, onClose, onIntake, onOpenProjectDna, projectName }: Props) {
+export function ForgeIntakeSheet({ open, onClose, onIntake, onOpenProjectDna, projectName, preloadContent }: Props) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Reset on open. Skip autofocus — on Android, autofocusing while the
-  // long-press finger is still down triggers the native text-selection menu
-  // (Map / Cut / Copy / Paste). User can tap the textarea to focus.
+  // Reset on open — pre-fill from preloadContent when provided (Review & Forge path).
+  // Skip autofocus — on Android, autofocusing while the long-press finger is still
+  // down triggers the native text-selection menu (Map / Cut / Copy / Paste).
   useEffect(() => {
     if (!open) return;
-    setText("");
+    setText(preloadContent ?? "");
     setError(null);
     setDone(null);
-  }, [open]);
+  }, [open, preloadContent]);
 
   // Esc to close.
   useEffect(() => {

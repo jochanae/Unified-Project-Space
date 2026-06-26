@@ -1043,8 +1043,9 @@ export function AssistantBubble({
   onPreviewCode,
   onPrCreated,
   onRunCommand,
-  onExtractToForge,
-  onForgeIntake,
+  onForgeQuick,
+  onForgeReview,
+  onForgeNewIntake,
   onReviewDiff,
   onOpenArtifact,
   onEditDeclined,
@@ -1072,8 +1073,9 @@ export function AssistantBubble({
   onPreviewCode?: (code: string) => void;
   onPrCreated?: (prUrl: string) => void;
   onRunCommand?: (command: string) => void;
-  onExtractToForge?: (content: string) => void;
-  onForgeIntake?: (content: string) => Promise<void> | void;
+  onForgeQuick?: (content: string) => Promise<void> | void;
+  onForgeReview?: (content: string) => void;
+  onForgeNewIntake?: () => void;
   onReviewDiff: () => void;
   onOpenArtifact?: (title: string) => void;
   onEditDeclined?: () => void;
@@ -1092,6 +1094,7 @@ export function AssistantBubble({
   const [parkDone, setParkDone] = useState(false);
   const [dismissedChipLabels, setDismissedChipLabels] = useState<Set<string>>(new Set());
   const [intakeDone, setIntakeDone] = useState(false);
+  const [forgeExpanded, setForgeExpanded] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [showPushModal, setShowPushModal] = useState(false);
   const [showPlanPushModal, setShowPlanPushModal] = useState(false);
@@ -2240,18 +2243,53 @@ export function AssistantBubble({
                   disabled={parkDone}
                   onClick={() => { setMenuOpen(false); if (!parkDone) { onPark(message.content, message.id); setParkDone(true); } }}
                 />
-                {onForgeIntake && (
-                  <MenuItem
-                    icon={<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 11h10M4 8l3-5 3 5" /></svg>}
-                    label={intakeDone ? "Sent to Forge" : "Intake to Forge"}
-                    accent
-                    disabled={intakeDone}
-                    onClick={async () => {
-                      setMenuOpen(false);
-                      if (intakeDone) return;
-                      try { await onForgeIntake(message.content); setIntakeDone(true); } catch { /* surfaced by parent */ }
-                    }}
-                  />
+                {(onForgeQuick || onForgeReview || onForgeNewIntake) && (
+                  <>
+                    <MenuItem
+                      icon={<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 1.5 L4.5 6h2.5l-1 5 4-6H7.5z" /></svg>}
+                      label="Forge"
+                      accent
+                      onClick={() => setForgeExpanded(v => !v)}
+                      trailing={forgeExpanded
+                        ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M2 6.5l3-3 3 3" /></svg>
+                        : <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M2 3.5l3 3 3-3" /></svg>
+                      }
+                    />
+                    {forgeExpanded && (
+                      <div style={{ margin: "2px 0 2px 8px", borderLeft: "1.5px solid rgba(201,162,76,0.22)", paddingLeft: 8 }}>
+                        {onForgeQuick && (
+                          <MenuItem
+                            icon={<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 1L4 5.5h3L5 11l5-7H7z" /></svg>}
+                            label={intakeDone ? "Forged" : "Quick Forge"}
+                            sublabel={intakeDone ? undefined : "Map this response now"}
+                            accent
+                            disabled={intakeDone}
+                            onClick={async () => {
+                              if (intakeDone) return;
+                              setMenuOpen(false); setForgeExpanded(false);
+                              try { await onForgeQuick(message.content); setIntakeDone(true); } catch { /* surfaced by parent */ }
+                            }}
+                          />
+                        )}
+                        {onForgeReview && (
+                          <MenuItem
+                            icon={<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8.5V10h1.5l4.5-4.5-1.5-1.5L2 8.5z" /><path d="M9.5 3.5a1.06 1.06 0 00-1.5-1.5L7 3l1.5 1.5 1-1z" /></svg>}
+                            label="Review & Forge"
+                            sublabel="Edit before mapping"
+                            onClick={() => { setMenuOpen(false); setForgeExpanded(false); onForgeReview(message.content); }}
+                          />
+                        )}
+                        {onForgeNewIntake && (
+                          <MenuItem
+                            icon={<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="4.5" /><path d="M6 4v4M4 6h4" /></svg>}
+                            label="New Intake"
+                            sublabel="Add fresh context"
+                            onClick={() => { setMenuOpen(false); setForgeExpanded(false); onForgeNewIntake(); }}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
                 <MenuItem
                   icon={<Share2 size={13} strokeWidth={1.6} />}
@@ -2263,14 +2301,6 @@ export function AssistantBubble({
                     icon={<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="2" width="12" height="9" rx="1.5" /><path d="M5 5.5l2 2-2 2M8.5 9.5h1.5" /></svg>}
                     label="Preview in sandbox"
                     onClick={() => { setMenuOpen(false); onPreviewCode(previewableCode); }}
-                  />
-                )}
-                {onExtractToForge && (
-                  <MenuItem
-                    icon={<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 1v8M4 6l3 3 3-3" /><path d="M2 10v1.5A1.5 1.5 0 003.5 13h7a1.5 1.5 0 001.5-1.5V10" /></svg>}
-                    label="Extract to Forge"
-                    accent
-                    onClick={() => { setMenuOpen(false); onExtractToForge(message.content); }}
                   />
                 )}
                 <MenuItem
@@ -2301,13 +2331,15 @@ export function AssistantBubble({
 }
 
 function MenuItem({
-  icon, label, onClick, disabled, accent,
+  icon, label, sublabel, onClick, disabled, accent, trailing,
 }: {
   icon: React.ReactNode;
   label: string;
+  sublabel?: string;
   onClick: () => void;
   disabled?: boolean;
   accent?: boolean;
+  trailing?: React.ReactNode;
 }) {
   return (
     <button
@@ -2329,7 +2361,11 @@ function MenuItem({
       onPointerLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
       <span style={{ display: "inline-flex", width: 18, justifyContent: "center", color: accent ? "var(--atlas-gold)" : "var(--atlas-muted)" }}>{icon}</span>
-      <span style={{ flex: 1 }}>{label}</span>
+      <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+        <span>{label}</span>
+        {sublabel && <span style={{ fontSize: 10.5, opacity: 0.55, fontWeight: 400, letterSpacing: 0 }}>{sublabel}</span>}
+      </span>
+      {trailing && <span style={{ display: "inline-flex", color: "var(--atlas-muted)", opacity: 0.6 }}>{trailing}</span>}
     </button>
   );
 }
