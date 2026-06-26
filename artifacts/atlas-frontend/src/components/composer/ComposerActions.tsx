@@ -65,6 +65,8 @@ export interface ComposerActionsProps {
   onSketch?: (prompt: string) => void;
   /** Number of parked items for the current project — shows badge on P icon when > 0. */
   parkedCount?: number;
+  /** When true, hides the Park button entirely (e.g. ambient home before any conversation). */
+  hidePark?: boolean;
 }
 
 type PrimaryItem = {
@@ -170,6 +172,7 @@ export function ComposerActions({
   borderless = false,
   globalContext = false,
   onSketch,
+  hidePark = false,
 }: ComposerActionsProps) {
   const [showPlus, setShowPlus] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -255,35 +258,37 @@ export function ComposerActions({
         <MoreHorizontal size={17} strokeWidth={1.7} />
       </button>
 
-      {/* Park button — deferred intelligence, always visible */}
-      <button
-        type="button"
-        aria-label="Parking Lot"
-        title="Park a thought"
-        onClick={() => {
-          setShowPlus(false);
-          setShowMore(false);
-          onMenuAction("park");
-        }}
-        style={{ ...iconBtnStyle(false, false, borderless), position: "relative" }}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M5.5 11V5h3.2a2.3 2.3 0 0 1 0 4.6H5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        {parkedCount > 0 && (
-          <span style={{
-            position: "absolute", top: -3, right: -3,
-            minWidth: 14, height: 14, borderRadius: 7,
-            background: "var(--atlas-gold)", color: "#0D0B09",
-            fontSize: 8, fontFamily: "var(--app-font-mono)", fontWeight: 700,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: "0 3px", lineHeight: 1, pointerEvents: "none",
-          }}>
-            {parkedCount > 9 ? "9+" : parkedCount}
-          </span>
-        )}
-      </button>
+      {/* Park button — hidden in ambient home (no conversation yet) */}
+      {!hidePark && (
+        <button
+          type="button"
+          aria-label="Parking Lot"
+          title="Park a thought"
+          onClick={() => {
+            setShowPlus(false);
+            setShowMore(false);
+            onMenuAction("park");
+          }}
+          style={{ ...iconBtnStyle(false, false, borderless), position: "relative" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M5.5 11V5h3.2a2.3 2.3 0 0 1 0 4.6H5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {parkedCount > 0 && (
+            <span style={{
+              position: "absolute", top: -3, right: -3,
+              minWidth: 14, height: 14, borderRadius: 7,
+              background: "var(--atlas-gold)", color: "#0D0B09",
+              fontSize: 8, fontFamily: "var(--app-font-mono)", fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "0 3px", lineHeight: 1, pointerEvents: "none",
+            }}>
+              {parkedCount > 9 ? "9+" : parkedCount}
+            </span>
+          )}
+        </button>
+      )}
 
       {trailing}
 

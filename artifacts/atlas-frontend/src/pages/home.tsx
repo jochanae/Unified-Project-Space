@@ -4637,6 +4637,7 @@ export default function Home() {
                 hasProjectContext={false}
                 borderless={true}
                 hasAttachments={attachedFiles.length > 0}
+                hidePark={nexusChat.messages.length === 0 && !globalInsightOpen}
                 onFiles={(files) => {
                   const combined = [...attachedFiles, ...files].slice(0, 10);
                   if (files.length + attachedFiles.length > 10) toast("Max 10 items at a time");
@@ -5126,12 +5127,6 @@ export default function Home() {
           )}
 
 
-          {/* Gradient fade — clipped to hero, fades bottom into background */}
-          <div aria-hidden style={{
-            position: "absolute", bottom: 0, left: 0, right: 0,
-            height: 56, pointerEvents: "none", zIndex: 1,
-            background: "linear-gradient(to bottom, transparent, var(--atlas-bg))",
-          }} />
 
           </div>{/* end hero */}
 
