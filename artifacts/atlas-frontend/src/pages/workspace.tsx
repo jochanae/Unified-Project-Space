@@ -4341,7 +4341,7 @@ export default function Workspace() {
   }, [historyMsgCountRef, id, priorLoaded, setMessages]);
 
   useEffect(() => {
-    if (messages.length > 0 || greetingLoading || atlasGreeting || (isHomeHandoff && resumeBrief) || forgeRanRef.current || sessionsLoading) return;
+    if (messages.length > 0 || greetingLoading || atlasGreeting || (isHomeHandoff && resumeBrief) || forgeRanRef.current || sessionsLoading || !priorLoadedState) return;
     setGreetingLoading(true);
     fetch(`/api/projects/${id}/greeting`, {
       credentials: "include",
@@ -4359,7 +4359,7 @@ export default function Workspace() {
       })
       .catch(() => {})
       .finally(() => setGreetingLoading(false));
-  }, [id, messages.length, sessionsLoading]);
+  }, [id, messages.length, sessionsLoading, priorLoadedState]);
 
   // Reset workspace-owned chat state when the project changes.
   // (messages / sessionId / priorLoaded / historyMsgCountRef portion lives in useChatStream)
@@ -4369,6 +4369,8 @@ export default function Workspace() {
     setThinkingState(null);
     setManifestPreviewHtml(null);
     setManifestDecision(null);
+    setAtlasGreeting(null);
+    setGreetingLoading(false);
     homePlanLoadedRef.current = false;
     // Note: abort/chatPending/activityStream reset is owned by useChatStream.
     // Reset auto-prime guards so a fresh ?source=handoff load can seed its first message.
