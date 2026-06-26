@@ -1467,15 +1467,16 @@ export function AxiomFlow({
               color: `rgba(${palette.goldRgb},0.75)`,
               marginBottom: 8,
             }}>
-              No flow mapped yet
+              Conversation ready to map
             </div>
             <div style={{
               fontSize: 13, lineHeight: 1.6,
               color: palette.mutedText,
               fontFamily: "var(--app-font-sans)",
             }}>
-              Generate a flow map to track strategy, blockers, and decisions for{" "}
-              <span style={{ color: palette.fgText, fontWeight: 500 }}>{projectLabel}</span>.
+              Atlas has been shaping{" "}
+              <span style={{ color: palette.fgText, fontWeight: 500 }}>{projectLabel}</span>
+              {" "}through your conversations. Generate the first visual Flow from what Atlas understands so far.
             </div>
           </div>
 
@@ -1531,7 +1532,7 @@ export function AxiomFlow({
                   }} />
                   Hydrating…
                 </>
-              ) : "Hydrate from Conversations"}
+              ) : "Hydrate Flow"}
             </button>
           )}
 
