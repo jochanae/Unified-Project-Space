@@ -245,9 +245,8 @@ export interface ChatStreamProps {
   onPreviewCode: AssistantBubbleProp<"onPreviewCode">;
   onRunCommand: AssistantBubbleProp<"onRunCommand">;
   onPrCreated: (url: string) => void;
-  onForgeQuick?: (content: string) => Promise<void> | void;
-  onForgeReview?: (content: string) => void;
-  onForgeNewIntake?: () => void;
+  onExtractToForge: (content: string) => void;
+  onForgeIntake?: (content: string) => Promise<void> | void;
   onReviewDiff: () => void;
   onOpenArtifact?: (title: string) => void;
   onEditDeclined: () => void;
@@ -288,7 +287,7 @@ export function ChatStream(props: ChatStreamProps) {
     onEditUserMessage,
     projectId, sessionId, linkedRepo, trustMode,
     onPark, onCommit, onRegenerate, onSend,
-    onPreviewCode, onRunCommand, onPrCreated, onForgeQuick, onForgeReview, onForgeNewIntake, onReviewDiff,
+    onPreviewCode, onRunCommand, onPrCreated, onExtractToForge, onForgeIntake, onReviewDiff,
     onOpenArtifact,
     onEditDeclined, onAlertDismiss, onStreamActivityUpdate, onStreamActivityComplete,
     onCommitCardDone,
@@ -455,9 +454,8 @@ export function ChatStream(props: ChatStreamProps) {
                 onPreviewCode={onPreviewCode}
                 onRunCommand={onRunCommand}
                 onPrCreated={onPrCreated}
-                onForgeQuick={onForgeQuick}
-                onForgeReview={onForgeReview}
-                onForgeNewIntake={onForgeNewIntake}
+                onExtractToForge={onExtractToForge}
+                onForgeIntake={onForgeIntake}
                 onReviewDiff={onReviewDiff}
                 onOpenArtifact={onOpenArtifact}
                 onEditDeclined={onEditDeclined}

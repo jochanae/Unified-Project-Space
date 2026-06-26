@@ -4938,7 +4938,6 @@ export default function Workspace() {
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [forgeIntakeSheetOpen, setForgeIntakeSheetOpen] = useState(false);
-  const [forgeIntakePreload, setForgeIntakePreload] = useState<string | undefined>(undefined);
   const [showHistorySheet, setShowHistorySheet] = useState(false);
   const [showParkSheet, setShowParkSheet] = useState(false);
   const [showDeepDive, setShowDeepDive] = useState(false);
@@ -7611,9 +7610,8 @@ export default function Workspace() {
               onPreviewCode: handlePreviewCode,
               onRunCommand: handleRunCommand,
               onPrCreated: (url) => { setSessionPrUrl(url); setLeftTab("diff"); },
-              onForgeQuick: handleForgeIntake,
-              onForgeReview: (content) => { setForgeIntakePreload(extractStrategicIntent(content)); setForgeIntakeSheetOpen(true); },
-              onForgeNewIntake: () => { setForgeIntakePreload(undefined); setForgeIntakeSheetOpen(true); },
+              onExtractToForge: (content) => { setForgePreloadContent(extractStrategicIntent(content)); setShowForgeExternal(true); },
+              onForgeIntake: handleForgeIntake,
               onReviewDiff: () => setLeftTab("diff"),
               onOpenArtifact: (_title: string) => {
                 setLeftTab("artifacts");
@@ -7730,8 +7728,7 @@ export default function Workspace() {
               setShowParkingDrawer,
               refreshParkedEntries,
               onPark: handlePark,
-              onForgeQuick: handleForgeIntake,
-              onForgeNewIntake: () => { setForgeIntakePreload(undefined); setForgeIntakeSheetOpen(true); },
+              onForgeIntake: handleForgeIntake,
               showModelPicker,
               wsModel,
               onOpenModelSheet: () => setShowWsModelSheet(true),
@@ -8293,14 +8290,13 @@ export default function Workspace() {
         />
       )}
 
-      {/* Forge intake — bottom sheet opened by Atlas Pulse long-press, "+" menu, or Forge picker */}
+      {/* Forge intake — bottom sheet opened by Atlas Pulse long-press or "+" menu */}
       <ForgeIntakeSheet
         open={forgeIntakeSheetOpen}
-        onClose={() => { setForgeIntakeSheetOpen(false); setForgeIntakePreload(undefined); }}
+        onClose={() => setForgeIntakeSheetOpen(false)}
         onIntake={handleForgeIntake}
         onOpenProjectDna={() => setShowProjectSettings(true)}
         projectName={project?.name ?? null}
-        preloadContent={forgeIntakePreload}
       />
 
       <HistoryBookmarksSheet
