@@ -311,6 +311,14 @@ const EDGE_FLOW_STYLE = `
   from { opacity: 0; transform: translate(var(--fly-dx), var(--fly-dy)) scale(0.2); }
   to   { opacity: 1; transform: translate(0px, 0px) scale(1); }
 }
+@keyframes drill-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes drill-node-fade-out {
+  from { opacity: var(--node-base-opacity, 1); }
+  to   { opacity: 0; }
+}
 @keyframes gold-pulse {
   0%, 100% { box-shadow: 0 0 10px rgba(212,175,55,0.30); }
   50%      { box-shadow: 0 0 22px rgba(212,175,55,0.60); }
@@ -890,6 +898,10 @@ export function AxiomFlow({
   const [drillNode, setDrillNode] = useState<ArchNode | null>(null);
   const [subNodeCache, setSubNodeCache] = useState<Record<string, ArchNode[]>>({});
   const [drillLoading, setDrillLoading] = useState(false);
+  // pendingDrillId: node being drilled (before drillNode is set) — lets us fade other L1 nodes
+  const [pendingDrillId, setPendingDrillId] = useState<string | null>(null);
+  // drillNewIds: freshly-generated sub-node IDs for the bloom fly-in
+  const [drillNewIds, setDrillNewIds] = useState<ReadonlySet<string>>(new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -1233,11 +1245,17 @@ export function AxiomFlow({
   const drillIntoNode = useCallback(async (node: ArchNode) => {
     const cacheKey = `${node.id}:${lens}`;
     if (subNodeCache[cacheKey]) {
-      setDrillNode(node);
+      // Cached path: fade L1 nodes for 160ms before switching to L2 layout
+      setPendingDrillId(node.id);
       setActiveCardNodeId(null);
-      setTimeout(() => fitMap(), 60);
+      setTimeout(() => {
+        setDrillNode(node);
+        setPendingDrillId(null);
+        setTimeout(() => fitMap(), 60);
+      }, 160);
       return;
     }
+    // Network path: overlay covers transition; bloom sub-nodes when they arrive
     setDrillLoading(true);
     setDrillNode(node);
     setActiveCardNodeId(null);
@@ -1256,6 +1274,9 @@ export function AxiomFlow({
       });
       if (!res.ok) throw new Error("expand failed");
       const data = await res.json() as { nodes: ArchNode[] };
+      const freshIds = new Set<string>(data.nodes.map((n: ArchNode) => n.id));
+      setDrillNewIds(freshIds);
+      setTimeout(() => setDrillNewIds(new Set()), 900);
       setSubNodeCache(prev => ({ ...prev, [cacheKey]: data.nodes }));
     } catch {
       setDrillNode(null);
@@ -1481,6 +1502,7 @@ export function AxiomFlow({
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
           gap: 12, pointerEvents: "all",
+          animation: "drill-overlay-in 0.18s ease forwards",
         }}>
           <div style={{
             width: 24, height: 24, borderRadius: "50%",
@@ -1930,17 +1952,26 @@ export function AxiomFlow({
         </svg>
 
         {/* Nodes */}
-        {displayNodes.map(node => {
+        {displayNodes.map((node, _nodeIdx) => {
           const goalNode = displayNodes.find(n => n.type === "goal") || displayNodes[0];
           const goalX = goalNode ? goalNode.x : 300;
           const goalY = goalNode ? goalNode.y : 250;
+          // drillFade: during cached-path pending phase, fade all nodes except the one being drilled
+          const isDrillFade = !!pendingDrillId && node.id !== pendingDrillId;
+          // drillNew: freshly generated sub-nodes get the bloom fly-in with a small stagger
+          const isDrillNew = drillNewIds.has(node.id);
+          // Build a stable stagger index for bloom (sub-nodes only, not the goal)
+          const drillNewList = isDrillNew ? [...drillNewIds] : [];
+          const drillArrivalDelay = isDrillNew ? drillNewList.indexOf(node.id) * 55 : 0;
           return (
             <FlowNodeComponent
               key={node.id}
               node={node}
               onFocus={handleNodeTap}
               onDragStart={startNodeDrag}
-              newlyAdded={newlyAddedIds.has(node.id)}
+              newlyAdded={newlyAddedIds.has(node.id) || isDrillNew}
+              drillFade={isDrillFade}
+              animDelay={drillArrivalDelay}
               goalX={goalX}
               goalY={goalY}
               palette={palette}
@@ -2370,6 +2401,8 @@ function FlowNodeComponent({
   onFocus,
   onDragStart,
   newlyAdded = false,
+  drillFade = false,
+  animDelay = 0,
   goalX = 300,
   goalY = 250,
   palette,
@@ -2379,6 +2412,8 @@ function FlowNodeComponent({
   onFocus: (id: string, e: React.MouseEvent | React.TouchEvent) => void;
   onDragStart: (id: string, e: React.MouseEvent | React.TouchEvent) => void;
   newlyAdded?: boolean;
+  drillFade?: boolean;
+  animDelay?: number;
   goalX?: number;
   goalY?: number;
   palette: FlowPalette;
@@ -2408,12 +2443,14 @@ function FlowNodeComponent({
         top: node.y - v.size / 2,
         background: "none", border: "none", padding: 0, cursor: "pointer",
         display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-        opacity: v.opacity,
-        transition: "opacity 300ms ease",
+        opacity: drillFade ? 0 : v.opacity,
+        // Position transition so the drillNode slides to center (same React key in L1→L2)
+        transition: "opacity 160ms ease, left 0.38s cubic-bezier(0.25,0.46,0.45,0.94), top 0.38s cubic-bezier(0.25,0.46,0.45,0.94)",
         // CSS custom properties for the fly-in keyframe
         ["--fly-dx" as string]: flyDx,
         ["--fly-dy" as string]: flyDy,
-        animation: newlyAdded ? "node-fly-in 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards" : undefined,
+        ["--node-base-opacity" as string]: String(v.opacity),
+        animation: newlyAdded ? `node-fly-in 420ms cubic-bezier(0.16, 1, 0.3, 1) ${animDelay}ms forwards` : undefined,
       }}
     >
       <div className={node.type === "wont" || moscow === "wont" ? "flow-node-strike" : undefined} style={{
