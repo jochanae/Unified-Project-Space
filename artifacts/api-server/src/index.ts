@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "./lib/logger";
 import { spawn } from "node:child_process";
+import { sql } from "drizzle-orm";
 import { startScheduledChecksWorker } from "./lib/scheduledChecksWorker";
 import { seedMissingGenomes, backfillEmptyGenomes, seedMissingSessionsForCommitted } from "./lib/genomeExtract";
 
@@ -85,6 +86,20 @@ async function pushSchema(): Promise<void> {
   });
 }
 
+// Idempotent SQL safety-net: ensures any columns that drizzle-kit push
+// may have missed (e.g. because it needs a TTY) are present before serving.
+async function ensureColumns(): Promise<void> {
+  try {
+    await db.execute(sql`
+      ALTER TABLE project_flow_canvas
+        ADD COLUMN IF NOT EXISTS drill_cache jsonb NOT NULL DEFAULT '{}'::jsonb
+    `);
+    logger.info("ensureColumns: drill_cache column verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: failed — server will start anyway");
+  }
+}
+
 async function main() {
   // Fire and forget — never block startup
   initStripe().catch((err) => {
@@ -95,6 +110,10 @@ async function main() {
   pushSchema().catch((err) => {
     logger.warn({ err }, "Schema push threw — server will start anyway");
   });
+
+  // Belt-and-suspenders: ensure any columns that drizzle-kit push may have
+  // skipped (needs TTY for interactive prompts) are applied via raw SQL.
+  await ensureColumns();
 
   try {
     await migrate(db, { migrationsFolder: "../../lib/db/migrations" });
