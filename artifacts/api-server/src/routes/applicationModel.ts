@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, applicationModelsTable, applicationModelHistoryTable, projectsTable, projectFlowCanvasTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { db, applicationModelsTable, applicationModelHistoryTable, projectsTable, projectFlowCanvasTable, sessionsTable, chatMessagesTable } from "@workspace/db";
+import { eq, and, desc, inArray, isNotNull } from "drizzle-orm";
 import { ApplicationModelPatchSchema, ApplicationModelSchema, ApplicationModelHistorySchema } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { syncFlowCanvasFromModel } from "../lib/flowMapSync";
@@ -271,6 +271,135 @@ router.post("/projects/:id/model/sync-flow", async (req, res): Promise<void> => 
     res.json({ synced: true, ...result });
   } catch (err) {
     req.log.error({ err }, "POST /projects/:id/model/sync-flow failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Alignment helpers ────────────────────────────────────────────────────────
+
+function toSlugs(name: string): string[] {
+  const lower = name.toLowerCase().trim();
+  const variants = [
+    lower.replace(/\s+/g, ""),
+    lower.replace(/\s+/g, "-"),
+    lower.replace(/\s+/g, "_"),
+    lower.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase(),
+  ];
+  return [...new Set(variants)].filter((s) => s.length > 1);
+}
+
+function findInPaths(paths: string[], name: string, extra?: string): string | undefined {
+  const slugs = toSlugs(name);
+  if (extra) slugs.push(...toSlugs(extra.replace(/^\//, "")));
+  return paths.find((fp) => slugs.some((v) => fp.includes(v)));
+}
+
+const SCHEMA_PATH_HINTS = ["schema", "model", "type", "entity", "db/", "database", "migration", "drizzle"];
+
+function findEntityInPaths(paths: string[], name: string): string | undefined {
+  const slugs = toSlugs(name);
+  const schemaMatch = paths.find(
+    (fp) => slugs.some((v) => fp.includes(v)) && SCHEMA_PATH_HINTS.some((h) => fp.includes(h))
+  );
+  return schemaMatch ?? paths.find((fp) => slugs.some((v) => fp.includes(v)));
+}
+
+// GET /api/projects/:id/model/alignment
+// Compares the Application Model (pages/components/entities) against all file
+// paths that Atlas has actually edited in this project's build sessions.
+// Returns status: aligned | partial | drift | no-builds | empty
+router.get("/projects/:id/model/alignment", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).userId as number;
+    const projectId = parseProjectId(req.params.id);
+    if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+    const owns = await assertProjectOwner(projectId, userId);
+    if (!owns) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const model = await getOrCreateApplicationModel(projectId);
+
+    type RawPage = { name: string; route?: string };
+    type RawComp = { name: string };
+    type RawEntity = { name: string };
+    type RawArtifact = { type: string; label: string };
+
+    const pages = (model.pages as RawPage[]) ?? [];
+    const components = (model.components as RawComp[]) ?? [];
+    const entities = ((model.data as any)?.entities as RawEntity[]) ?? [];
+
+    if (pages.length === 0 && components.length === 0 && entities.length === 0) {
+      res.json({ status: "empty", pages: [], components: [], entities: [], builtFileCount: 0, checkedAt: new Date().toISOString() });
+      return;
+    }
+
+    // Gather all file paths edited across all sessions for this project
+    const sessions = await db
+      .select({ id: sessionsTable.id })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.projectId, projectId));
+
+    const sessionIds = sessions.map((s) => s.id);
+    const rawPaths: string[] = [];
+
+    if (sessionIds.length > 0) {
+      const rows = await db
+        .select({ runArtifacts: chatMessagesTable.runArtifacts })
+        .from(chatMessagesTable)
+        .where(and(inArray(chatMessagesTable.sessionId, sessionIds), isNotNull(chatMessagesTable.runArtifacts)));
+
+      for (const row of rows) {
+        const artifacts = row.runArtifacts as RawArtifact[] | null;
+        if (!Array.isArray(artifacts)) continue;
+        for (const a of artifacts) {
+          if (a.type === "file" && a.label) rawPaths.push(a.label.toLowerCase());
+        }
+      }
+    }
+
+    const uniquePaths = [...new Set(rawPaths)];
+
+    if (uniquePaths.length === 0) {
+      res.json({
+        status: "no-builds",
+        pages: pages.map((p) => ({ name: p.name, found: false })),
+        components: components.map((c) => ({ name: c.name, found: false })),
+        entities: entities.map((e) => ({ name: e.name, found: false })),
+        builtFileCount: 0,
+        checkedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const pageResults = pages.map((p) => {
+      const match = findInPaths(uniquePaths, p.name, p.route);
+      return { name: p.name, found: !!match, matchedFile: match };
+    });
+    const componentResults = components.map((c) => {
+      const match = findInPaths(uniquePaths, c.name);
+      return { name: c.name, found: !!match, matchedFile: match };
+    });
+    const entityResults = entities.map((e) => {
+      const match = findEntityInPaths(uniquePaths, e.name);
+      return { name: e.name, found: !!match, matchedFile: match };
+    });
+
+    const all = [...pageResults, ...componentResults, ...entityResults];
+    const foundCount = all.filter((r) => r.found).length;
+    const ratio = all.length > 0 ? foundCount / all.length : 0;
+    const status = ratio >= 0.8 ? "aligned" : ratio >= 0.2 ? "partial" : "drift";
+
+    logger.info({ projectId, status, foundCount, total: all.length, builtFileCount: uniquePaths.length }, "AM alignment checked");
+
+    res.json({
+      status,
+      pages: pageResults,
+      components: componentResults,
+      entities: entityResults,
+      builtFileCount: uniquePaths.length,
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "GET /projects/:id/model/alignment failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

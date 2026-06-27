@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { useApplicationModel } from "@/hooks/useApplicationModel";
 import type { AMPage, AMComponent, AMEntity, AMRelationship, AMLogic } from "@/hooks/useApplicationModel";
+import { useModelAlignment } from "@/hooks/useModelAlignment";
+import type { AlignmentResult, AlignmentItemResult } from "@/hooks/useModelAlignment";
 
 type BPTab = "spec" | "components" | "data" | "logic";
 
@@ -64,7 +66,91 @@ function TagList({ label, items }: { label: string; items?: string[] }) {
   );
 }
 
-function SpecTab({ model }: { model: ReturnType<typeof useApplicationModel>["model"] }) {
+const ALIGNMENT_COLORS: Record<string, string> = {
+  aligned: "#4ADE80",
+  partial: "#FBBF24",
+  drift: "#F87171",
+  "no-builds": "#8B8577",
+  empty: "#8B8577",
+};
+
+const ALIGNMENT_LABELS: Record<string, string> = {
+  aligned: "Aligned",
+  partial: "Partial",
+  drift: "Drift",
+  "no-builds": "No builds yet",
+  empty: "Blueprint empty",
+};
+
+function AlignmentBadge({ alignment }: { alignment: AlignmentResult | null }) {
+  if (!alignment || alignment.status === "empty") return null;
+  const color = ALIGNMENT_COLORS[alignment.status] ?? MUTED;
+  const label = ALIGNMENT_LABELS[alignment.status] ?? alignment.status;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+      <span style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background: color,
+        flexShrink: 0,
+        boxShadow: `0 0 5px ${color}66`,
+      }} />
+      <span style={{ fontFamily: MONO, fontSize: 9, color, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function AlignmentSection({ alignment }: { alignment: AlignmentResult | null }) {
+  if (!alignment || alignment.status === "empty" || alignment.status === "no-builds") return null;
+
+  const missing = [
+    ...alignment.pages.filter((p) => !p.found).map((p) => ({ kind: "Page", name: p.name })),
+    ...alignment.components.filter((c) => !c.found).map((c) => ({ kind: "Component", name: c.name })),
+    ...alignment.entities.filter((e) => !e.found).map((e) => ({ kind: "Entity", name: e.name })),
+  ];
+
+  if (missing.length === 0 && alignment.status === "aligned") return null;
+
+  return (
+    <div style={{
+      margin: "12px 16px 0",
+      padding: "10px 12px",
+      background: "rgba(255,255,255,0.02)",
+      border: `1px solid ${BORDER}`,
+      borderRadius: 6,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: missing.length > 0 ? 8 : 0 }}>
+        <span style={{ ...labelStyle, opacity: 0.6 }}>Build Alignment</span>
+        <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.5 }}>
+          {alignment.builtFileCount} file{alignment.builtFileCount !== 1 ? "s" : ""} built
+        </span>
+      </div>
+      {missing.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {missing.map((item, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.5, width: 68, flexShrink: 0 }}>
+                {item.kind}
+              </span>
+              <span style={{ fontSize: 11.5, color: FG, opacity: 0.7 }}>{item.name}</span>
+              <span style={{ fontFamily: MONO, fontSize: 9, color: "#F87171", opacity: 0.7, marginLeft: "auto" }}>
+                missing
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SpecTab({ model, alignment }: {
+  model: ReturnType<typeof useApplicationModel>["model"];
+  alignment: AlignmentResult | null;
+}) {
   const identity = model?.identity ?? {};
   const intent = model?.intent ?? {};
 
@@ -85,6 +171,7 @@ function SpecTab({ model }: { model: ReturnType<typeof useApplicationModel>["mod
       <TagList label="Core Problems" items={intent.coreProblems} />
       <TagList label="Key Outcomes" items={intent.keyOutcomes} />
       <TagList label="Constraints" items={intent.constraints} />
+      <AlignmentSection alignment={alignment} />
     </div>
   );
 }
@@ -352,11 +439,13 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
   const [activeTab, setActiveTab] = useState<BPTab>("spec");
   const [approving, setApproving] = useState(false);
   const { model, loading, approve, unapprove, refetch } = useApplicationModel(projectId);
+  const { alignment, refetch: refetchAlignment } = useModelAlignment(projectId);
 
   useEffect(() => {
     if (refreshTrigger === undefined || refreshTrigger === 0) return;
     void refetch();
-  }, [refreshTrigger, refetch]);
+    void refetchAlignment();
+  }, [refreshTrigger, refetch, refetchAlignment]);
 
   const handleApprove = useCallback(async () => {
     setApproving(true);
@@ -406,6 +495,7 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
               {model.identity.name}
             </span>
           )}
+          <AlignmentBadge alignment={alignment} />
         </div>
         {hasAnyContent && (
           <ApproveButton
@@ -456,7 +546,7 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
             <span style={mutedStyle}>Loading…</span>
           </div>
         )}
-        {!loading && activeTab === "spec" && <SpecTab model={model} />}
+        {!loading && activeTab === "spec" && <SpecTab model={model} alignment={alignment} />}
         {!loading && activeTab === "components" && <ComponentsTab model={model} />}
         {!loading && activeTab === "data" && <DataTab model={model} />}
         {!loading && activeTab === "logic" && <LogicTab model={model} />}
