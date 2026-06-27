@@ -1707,6 +1707,7 @@ function RightPanel({
   showModelPicker,
   onShowModelPickerChange,
   messages: messagesProp,
+  amRefreshTrigger,
 }: {
   projectId: number;
   projectName: string;
@@ -1771,6 +1772,7 @@ function RightPanel({
   showModelPicker: boolean;
   onShowModelPickerChange: (v: boolean) => void;
   messages?: ChatMessage[];
+  amRefreshTrigger?: number;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -2120,7 +2122,7 @@ function RightPanel({
         </div>
       )}
       {tab === "artifacts" && <ArtifactsPanel projectId={projectId} />}
-      {tab === "blueprints" && <BlueprintPanel projectId={projectId} />}
+      {tab === "blueprints" && <BlueprintPanel projectId={projectId} refreshTrigger={amRefreshTrigger} />}
       {tab === "files" && (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
           {/* Sub-tab bar: 4 focused tabs */}
@@ -5028,6 +5030,16 @@ export default function Workspace() {
     return () => clearInterval(t);
   }, [chatPending]);
 
+  // After each chat turn, schedule a Blueprint refresh so any AM extraction
+  // results (which run async on the server after the stream closes) are visible
+  // in the Blueprint tab. 5s delay gives Haiku extraction time to complete.
+  const [amRefreshTrigger, setAmRefreshTrigger] = useState(0);
+  useEffect(() => {
+    if (chatPending) return;
+    const t = setTimeout(() => setAmRefreshTrigger(n => n + 1), 5000);
+    return () => clearTimeout(t);
+  }, [chatPending]);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatPanelScrollRef = useRef<HTMLDivElement>(null);
   const [showWsScrollBtn, setShowWsScrollBtn] = useState(false);
@@ -5708,7 +5720,11 @@ export default function Workspace() {
       setOpeningMessage(null);
       return;
     }
-    if (!sessionId || sessionsLoading) return;
+    // Gate: wait until sessionId is set, sessions are done loading, AND prior
+    // DB messages have been fetched (priorLoadedState). This prevents the auto-send
+    // from firing before the session is fully hydrated, eliminating the race that
+    // caused "network error" on the very first workspace load.
+    if (!sessionId || sessionsLoading || !priorLoadedState) return;
     const trimmedOpeningMessage = openingMessage.message.trim();
     if (!trimmedOpeningMessage) {
       try {
@@ -5720,27 +5736,27 @@ export default function Workspace() {
     }
     initialSent.current = true;
     setInput("");
-    doSend(trimmedOpeningMessage, sessionId, []);
+    // Pass messagesRef.current so transferred thread messages are included as history context.
+    doSend(trimmedOpeningMessage, sessionId, messagesRef.current);
     try {
       sessionStorage.removeItem(OPENING_MESSAGE_STORAGE_KEY);
       sessionStorage.removeItem(OPENING_MESSAGE_PROJECT_ID_STORAGE_KEY);
     } catch {}
     setOpeningMessage(null);
-  }, [openingMessage, id, sessionId, sessionsLoading, doSend, setInput]);
+  }, [openingMessage, id, sessionId, sessionsLoading, priorLoadedState, doSend, setInput, messagesRef]);
 
   useEffect(() => {
-    if (!sessionId || initialSent.current) return;
+    // Same gate: don't fire until session AND prior messages are fully ready.
+    if (!sessionId || sessionsLoading || !priorLoadedState || initialSent.current) return;
     const key = `atlas-initial-${id}`;
     const initial = sessionStorage.getItem(key);
     if (initial) {
       sessionStorage.removeItem(key);
       initialSent.current = true;
-      setTimeout(() => {
-        setInput("");
-        doSend(initial, sessionId, []);
-      }, 80);
+      setInput("");
+      doSend(initial, sessionId, messagesRef.current);
     }
-  }, [sessionId, id, doSend]);
+  }, [sessionId, sessionsLoading, priorLoadedState, id, doSend, messagesRef]);
 
   // Resume from Parking Lot → pre-fill composer with parked item title
   useEffect(() => {
@@ -7466,6 +7482,7 @@ export default function Workspace() {
               try { localStorage.setItem("atlas-power-model-picker", val ? "1" : "0"); } catch {}
             }}
             messages={messages}
+            amRefreshTrigger={amRefreshTrigger}
           />
         ) : undefined}
         showFlow={!isMobile}
@@ -8097,6 +8114,7 @@ export default function Workspace() {
                   try { localStorage.setItem("atlas-power-model-picker", val ? "1" : "0"); } catch {}
                 }}
                 messages={messages}
+                amRefreshTrigger={amRefreshTrigger}
               />
             </div>
           </div>

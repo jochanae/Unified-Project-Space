@@ -277,7 +277,10 @@ export async function extractAndUpdateApplicationModel({
 }): Promise<void> {
   if (!projectId || !userMessage || !assistantReply) return;
   // Only extract when there's real content — skip greetings, acks, etc.
-  if (assistantReply.trim().length < 100) return;
+  if (assistantReply.trim().length < 100) {
+    logger.info({ projectId, replyLen: assistantReply.trim().length }, "AM extraction: skipped (reply too short)");
+    return;
+  }
 
   try {
     const currentModel = await getCurrentModel(projectId);
@@ -306,10 +309,23 @@ export async function extractAndUpdateApplicationModel({
       return;
     }
 
-    if (Object.keys(patch).length === 0) return;
+    if (Object.keys(patch).length === 0) {
+      logger.info({ projectId }, "AM extraction: skipped (empty patch — no new model data detected)");
+      return;
+    }
+    const fields = Object.keys(patch);
     await applyModelPatch(projectId, patch);
-    logger.info({ projectId, fields: Object.keys(patch) }, "applicationModelExtraction: applied");
+    logger.info({ projectId, fields }, "AM extraction: applied");
+
+    // Flow sync fires inside applyModelPatch when pages/data changed.
+    // Log which structural fields triggered it for traceability.
+    const structuralFields = fields.filter(f => f === "pages" || f === "data");
+    if (structuralFields.length > 0) {
+      logger.info({ projectId, structuralFields }, "AM extraction: flow sync triggered");
+    } else {
+      logger.info({ projectId, fields }, "AM extraction: flow sync skipped (no structural changes)");
+    }
   } catch (err) {
-    logger.warn({ err, projectId }, "applicationModelExtraction: failed — non-fatal");
+    logger.warn({ err, projectId }, "AM extraction: failed — non-fatal");
   }
 }

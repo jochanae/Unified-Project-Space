@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useApplicationModel } from "@/hooks/useApplicationModel";
 import type { AMPage, AMComponent, AMEntity, AMRelationship, AMLogic } from "@/hooks/useApplicationModel";
 
@@ -345,12 +345,18 @@ function ApproveButton({
 
 interface BlueprintPanelProps {
   projectId: number;
+  refreshTrigger?: number;
 }
 
-export function BlueprintPanel({ projectId }: BlueprintPanelProps) {
+export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProps) {
   const [activeTab, setActiveTab] = useState<BPTab>("spec");
   const [approving, setApproving] = useState(false);
-  const { model, loading, approve, unapprove } = useApplicationModel(projectId);
+  const { model, loading, approve, unapprove, refetch } = useApplicationModel(projectId);
+
+  useEffect(() => {
+    if (refreshTrigger === undefined || refreshTrigger === 0) return;
+    void refetch();
+  }, [refreshTrigger, refetch]);
 
   const handleApprove = useCallback(async () => {
     setApproving(true);
