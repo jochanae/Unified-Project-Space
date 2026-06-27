@@ -178,6 +178,79 @@ router.get("/projects/:id/model/history", async (req, res): Promise<void> => {
   }
 });
 
+// POST /api/projects/:id/model/approve
+// Sets intent.approvedAt = now, recording the user's explicit sign-off on this AM version.
+router.post("/projects/:id/model/approve", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).userId as number;
+    const projectId = parseProjectId(req.params.id);
+    if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+    const owns = await assertProjectOwner(projectId, userId);
+    if (!owns) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const current = await getOrCreateApplicationModel(projectId);
+    const newVersion = current.version + 1;
+    const prevIntent = (current.intent as Record<string, unknown>) ?? {};
+    const newIntent = { ...prevIntent, approvedAt: new Date().toISOString() };
+
+    await db.update(applicationModelsTable)
+      .set({ version: newVersion, intent: newIntent })
+      .where(eq(applicationModelsTable.projectId, projectId));
+
+    await db.insert(applicationModelHistoryTable).values([{
+      projectId,
+      modelVersion: newVersion,
+      fieldChanged: "intent",
+      previousValue: prevIntent,
+      newValue: newIntent,
+      reason: "blueprint-approved",
+    }]);
+
+    const updated = await getOrCreateApplicationModel(projectId);
+    res.json(serializeModel(updated));
+  } catch (err) {
+    req.log.error({ err }, "POST /projects/:id/model/approve failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /api/projects/:id/model/unapprove
+// Clears intent.approvedAt so the blueprint can be revised before building.
+router.post("/projects/:id/model/unapprove", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).userId as number;
+    const projectId = parseProjectId(req.params.id);
+    if (!projectId) { res.status(400).json({ error: "Invalid project id" }); return; }
+    const owns = await assertProjectOwner(projectId, userId);
+    if (!owns) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const current = await getOrCreateApplicationModel(projectId);
+    const newVersion = current.version + 1;
+    const prevIntent = (current.intent as Record<string, unknown>) ?? {};
+    const { approvedAt: _removed, ...rest } = prevIntent;
+    const newIntent = rest;
+
+    await db.update(applicationModelsTable)
+      .set({ version: newVersion, intent: newIntent })
+      .where(eq(applicationModelsTable.projectId, projectId));
+
+    await db.insert(applicationModelHistoryTable).values([{
+      projectId,
+      modelVersion: newVersion,
+      fieldChanged: "intent",
+      previousValue: prevIntent,
+      newValue: newIntent,
+      reason: "blueprint-unapproved",
+    }]);
+
+    const updated = await getOrCreateApplicationModel(projectId);
+    res.json(serializeModel(updated));
+  } catch (err) {
+    req.log.error({ err }, "POST /projects/:id/model/unapprove failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // POST /api/projects/:id/model/sync-flow
 // Merge-syncs the Flow Map canvas from Application Model pages + data.entities.
 // Safe to call repeatedly: AM-origin nodes are added/updated/removed to match the

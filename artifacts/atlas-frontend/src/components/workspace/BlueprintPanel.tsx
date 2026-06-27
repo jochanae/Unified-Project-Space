@@ -1,0 +1,481 @@
+import { useState, useCallback } from "react";
+import { useApplicationModel } from "@/hooks/useApplicationModel";
+import type { AMPage, AMComponent, AMEntity, AMRelationship, AMLogic } from "@/hooks/useApplicationModel";
+
+type BPTab = "spec" | "components" | "data" | "logic";
+
+const MONO = "var(--app-font-mono)";
+const GOLD = "var(--atlas-gold, #C9A24C)";
+const FG = "var(--atlas-fg, #F5F0E8)";
+const MUTED = "var(--atlas-muted, #8B8577)";
+const BORDER = "var(--atlas-border, rgba(255,255,255,0.08))";
+const BG = "var(--atlas-bg, #0E0D0B)";
+const SURFACE = "var(--atlas-surface, rgba(255,255,255,0.03))";
+
+const labelStyle: React.CSSProperties = {
+  fontFamily: MONO,
+  fontSize: 9,
+  letterSpacing: "0.18em",
+  textTransform: "uppercase",
+  color: GOLD,
+  opacity: 0.8,
+};
+
+const mutedStyle: React.CSSProperties = {
+  fontFamily: MONO,
+  fontSize: 11,
+  color: MUTED,
+  opacity: 0.6,
+  fontStyle: "italic",
+};
+
+function EmptySlot({ message }: { message: string }) {
+  return (
+    <div style={{ padding: "32px 20px", textAlign: "center" }}>
+      <p style={mutedStyle}>{message}</p>
+    </div>
+  );
+}
+
+function FieldRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "10px 0", borderBottom: `1px solid ${BORDER}` }}>
+      <span style={labelStyle}>{label}</span>
+      <span style={{ fontSize: 13, color: FG, lineHeight: 1.55 }}>{value}</span>
+    </div>
+  );
+}
+
+function TagList({ label, items }: { label: string; items?: string[] }) {
+  if (!items?.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 0", borderBottom: `1px solid ${BORDER}` }}>
+      <span style={labelStyle}>{label}</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <span style={{ color: GOLD, opacity: 0.5, fontFamily: MONO, fontSize: 10, marginTop: 2 }}>—</span>
+            <span style={{ fontSize: 12, color: FG, lineHeight: 1.5, opacity: 0.9 }}>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SpecTab({ model }: { model: ReturnType<typeof useApplicationModel>["model"] }) {
+  const identity = model?.identity ?? {};
+  const intent = model?.intent ?? {};
+
+  const hasContent = identity.name || identity.purpose || identity.audience || intent.summary ||
+    intent.coreProblems?.length || intent.keyOutcomes?.length || intent.constraints?.length;
+
+  if (!hasContent) {
+    return <EmptySlot message="Chat with Atlas to define what you're building. Spec fills here." />;
+  }
+
+  return (
+    <div style={{ padding: "4px 16px 24px" }}>
+      <FieldRow label="App Name" value={identity.name} />
+      <FieldRow label="Purpose" value={identity.purpose} />
+      <FieldRow label="Audience" value={identity.audience} />
+      <FieldRow label="Category" value={identity.category} />
+      <FieldRow label="Intent" value={intent.summary} />
+      <TagList label="Core Problems" items={intent.coreProblems} />
+      <TagList label="Key Outcomes" items={intent.keyOutcomes} />
+      <TagList label="Constraints" items={intent.constraints} />
+    </div>
+  );
+}
+
+function PageCard({ page }: { page: AMPage }) {
+  return (
+    <div style={{
+      background: SURFACE,
+      border: `1px solid ${BORDER}`,
+      borderRadius: 8,
+      padding: "10px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 4,
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ fontSize: 13, color: FG, fontWeight: 500 }}>{page.name}</span>
+        {page.route && (
+          <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED, opacity: 0.7 }}>{page.route}</span>
+        )}
+      </div>
+      {page.description && (
+        <span style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>{page.description}</span>
+      )}
+    </div>
+  );
+}
+
+function ComponentCard({ comp }: { comp: AMComponent }) {
+  return (
+    <div style={{
+      background: SURFACE,
+      border: `1px solid ${BORDER}`,
+      borderRadius: 8,
+      padding: "10px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 3,
+    }}>
+      <span style={{ fontSize: 13, color: FG, fontWeight: 500 }}>{comp.name}</span>
+      {comp.description && (
+        <span style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>{comp.description}</span>
+      )}
+    </div>
+  );
+}
+
+function ComponentsTab({ model }: { model: ReturnType<typeof useApplicationModel>["model"] }) {
+  const pages = model?.pages ?? [];
+  const components = model?.components ?? [];
+
+  if (!pages.length && !components.length) {
+    return <EmptySlot message="Pages and components appear here as you describe your screens." />;
+  }
+
+  return (
+    <div style={{ padding: "4px 16px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+      {pages.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={labelStyle}>Pages</span>
+          {pages.map((p) => <PageCard key={p.id} page={p} />)}
+        </div>
+      )}
+      {components.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={labelStyle}>Components</span>
+          {components.map((c) => <ComponentCard key={c.id} comp={c} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EntityCard({ entity }: { entity: AMEntity }) {
+  return (
+    <div style={{
+      background: SURFACE,
+      border: `1px solid ${BORDER}`,
+      borderRadius: 8,
+      padding: "10px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 6,
+    }}>
+      <span style={{ fontSize: 13, color: FG, fontWeight: 500 }}>{entity.name}</span>
+      {entity.description && (
+        <span style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>{entity.description}</span>
+      )}
+      {entity.fields && entity.fields.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
+          {entity.fields.map((f, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ fontFamily: MONO, fontSize: 10.5, color: FG, opacity: 0.85 }}>{f.name}</span>
+              <span style={{ fontFamily: MONO, fontSize: 9.5, color: GOLD, opacity: 0.55 }}>{f.type}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RelationshipRow({ rel, entities }: { rel: AMRelationship; entities: AMEntity[] }) {
+  const fromName = entities.find((e) => e.id === rel.from)?.name ?? rel.from;
+  const toName = entities.find((e) => e.id === rel.to)?.name ?? rel.to;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${BORDER}` }}>
+      <span style={{ fontSize: 12, color: FG }}>{fromName}</span>
+      <span style={{ fontFamily: MONO, fontSize: 9, color: GOLD, opacity: 0.6 }}>
+        {rel.type === "one-to-many" ? "1→n" : rel.type === "many-to-many" ? "n→n" : "1→1"}
+      </span>
+      <span style={{ fontSize: 12, color: FG }}>{toName}</span>
+      {rel.label && <span style={{ fontSize: 10.5, color: MUTED, opacity: 0.7, marginLeft: 4 }}>{rel.label}</span>}
+    </div>
+  );
+}
+
+function DataTab({ model }: { model: ReturnType<typeof useApplicationModel>["model"] }) {
+  const data = model?.data ?? { entities: [], relationships: [] };
+  const entities = data.entities ?? [];
+  const relationships = data.relationships ?? [];
+
+  if (!entities.length && !relationships.length) {
+    return <EmptySlot message="Data entities and relationships appear here as you describe your data model." />;
+  }
+
+  return (
+    <div style={{ padding: "4px 16px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+      {entities.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={labelStyle}>Entities</span>
+          {entities.map((e) => <EntityCard key={e.id} entity={e} />)}
+        </div>
+      )}
+      {relationships.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ ...labelStyle, marginBottom: 6 }}>Relationships</span>
+          {relationships.map((r) => <RelationshipRow key={r.id} rel={r} entities={entities} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LogicCard({ rule }: { rule: AMLogic }) {
+  return (
+    <div style={{
+      background: SURFACE,
+      border: `1px solid ${BORDER}`,
+      borderRadius: 8,
+      padding: "10px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 4,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 13, color: FG, fontWeight: 500 }}>{rule.name}</span>
+        <span style={{ fontFamily: MONO, fontSize: 9, color: GOLD, opacity: 0.55, textTransform: "uppercase" }}>{rule.type}</span>
+      </div>
+      {rule.description && (
+        <span style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>{rule.description}</span>
+      )}
+    </div>
+  );
+}
+
+function LogicTab({ model }: { model: ReturnType<typeof useApplicationModel>["model"] }) {
+  const logic = model?.logic ?? [];
+
+  if (!logic.length) {
+    return <EmptySlot message="Business rules and logic appear here as you define how your app behaves." />;
+  }
+
+  return (
+    <div style={{ padding: "4px 16px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={labelStyle}>Rules &amp; Logic</span>
+      {logic.map((l) => <LogicCard key={l.id} rule={l} />)}
+    </div>
+  );
+}
+
+function ApproveButton({
+  approvedAt,
+  onApprove,
+  onUnapprove,
+  busy,
+}: {
+  approvedAt?: string | null;
+  onApprove: () => void;
+  onUnapprove: () => void;
+  busy: boolean;
+}) {
+  if (approvedAt) {
+    const date = new Date(approvedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return (
+      <button
+        type="button"
+        onClick={onUnapprove}
+        disabled={busy}
+        title={`Approved ${date} — click to revoke`}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+          padding: "4px 10px",
+          borderRadius: 5,
+          background: "rgba(201,162,76,0.15)",
+          border: "1px solid rgba(201,162,76,0.45)",
+          color: GOLD,
+          fontFamily: MONO,
+          fontSize: 9.5,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          cursor: busy ? "default" : "pointer",
+          opacity: busy ? 0.5 : 1,
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+          <path d="M2 6l3 3 5-5" stroke={GOLD} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Approved {date}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onApprove}
+      disabled={busy}
+      style={{
+        padding: "4px 10px",
+        borderRadius: 5,
+        background: "transparent",
+        border: `1px solid ${BORDER}`,
+        color: MUTED,
+        fontFamily: MONO,
+        fontSize: 9.5,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        cursor: busy ? "default" : "pointer",
+        opacity: busy ? 0.5 : 1,
+        transition: "border-color 0.15s, color 0.15s",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,162,76,0.4)";
+        (e.currentTarget as HTMLButtonElement).style.color = GOLD;
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER;
+        (e.currentTarget as HTMLButtonElement).style.color = MUTED;
+      }}
+    >
+      Approve Direction
+    </button>
+  );
+}
+
+interface BlueprintPanelProps {
+  projectId: number;
+}
+
+export function BlueprintPanel({ projectId }: BlueprintPanelProps) {
+  const [activeTab, setActiveTab] = useState<BPTab>("spec");
+  const [approving, setApproving] = useState(false);
+  const { model, loading, approve, unapprove } = useApplicationModel(projectId);
+
+  const handleApprove = useCallback(async () => {
+    setApproving(true);
+    await approve();
+    setApproving(false);
+  }, [approve]);
+
+  const handleUnapprove = useCallback(async () => {
+    setApproving(true);
+    await unapprove();
+    setApproving(false);
+  }, [unapprove]);
+
+  const tabs: { id: BPTab; label: string }[] = [
+    { id: "spec", label: "Spec" },
+    { id: "components", label: "Components" },
+    { id: "data", label: "Data Model" },
+    { id: "logic", label: "Logic" },
+  ];
+
+  const approvedAt = model?.intent?.approvedAt;
+  const hasAnyContent = model && (
+    model.identity?.name ||
+    model.intent?.summary ||
+    model.pages?.length ||
+    model.data?.entities?.length ||
+    model.logic?.length
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: BG, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "12px 16px 10px",
+        borderBottom: `1px solid ${BORDER}`,
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: GOLD, opacity: 0.7 }}>
+            Blueprint
+          </span>
+          {model?.identity?.name && (
+            <span style={{ fontSize: 13, color: FG, fontWeight: 500, lineHeight: 1.2 }}>
+              {model.identity.name}
+            </span>
+          )}
+        </div>
+        {hasAnyContent && (
+          <ApproveButton
+            approvedAt={approvedAt}
+            onApprove={() => void handleApprove()}
+            onUnapprove={() => void handleUnapprove()}
+            busy={approving}
+          />
+        )}
+      </div>
+
+      {/* Sub-tabs */}
+      <div style={{
+        display: "flex",
+        borderBottom: `1px solid ${BORDER}`,
+        flexShrink: 0,
+        padding: "0 12px",
+      }}>
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setActiveTab(t.id)}
+            style={{
+              padding: "8px 10px",
+              background: "transparent",
+              border: "none",
+              borderBottom: activeTab === t.id ? `2px solid ${GOLD}` : "2px solid transparent",
+              color: activeTab === t.id ? GOLD : MUTED,
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              transition: "color 0.15s",
+              marginBottom: -1,
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        {loading && !model && (
+          <div style={{ padding: "32px 20px", textAlign: "center" }}>
+            <span style={mutedStyle}>Loading…</span>
+          </div>
+        )}
+        {!loading && activeTab === "spec" && <SpecTab model={model} />}
+        {!loading && activeTab === "components" && <ComponentsTab model={model} />}
+        {!loading && activeTab === "data" && <DataTab model={model} />}
+        {!loading && activeTab === "logic" && <LogicTab model={model} />}
+      </div>
+
+      {/* Footer: version + last extracted */}
+      {model && (
+        <div style={{
+          padding: "8px 16px",
+          borderTop: `1px solid ${BORDER}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexShrink: 0,
+        }}>
+          <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.5 }}>
+            v{model.version}
+          </span>
+          {model.buildState?.lastExtractedAt && (
+            <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED, opacity: 0.5 }}>
+              extracted {new Date(model.buildState.lastExtractedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

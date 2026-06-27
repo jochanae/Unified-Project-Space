@@ -97,6 +97,7 @@ import { ParkSheet } from "@/components/ParkSheet";
 import { UnifiedConversationSurface } from "@/components/UnifiedConversationSurface";
 import { MemoryTab } from "@/components/workspace/MemoryTab";
 import { BlueprintsTab } from "@/components/BlueprintsTab";
+import { BlueprintPanel } from "@/components/workspace/BlueprintPanel";
 import { SecretsPanel } from "@/components/workspace/SecretsPanel";
 import { JobsPanel } from "@/components/workspace/JobsPanel";
 import { McpPanel } from "@/components/workspace/McpPanel";
@@ -1849,7 +1850,7 @@ function RightPanel({
     },
     {
       id: "blueprints" as RightTab,
-      label: "Blueprints",
+      label: "Blueprint",
       icon: (
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
           <path d="M2 2h8l3 3v9H2V2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
@@ -2119,7 +2120,7 @@ function RightPanel({
         </div>
       )}
       {tab === "artifacts" && <ArtifactsPanel projectId={projectId} />}
-      {tab === "blueprints" && <BlueprintsTab projectId={projectId} />}
+      {tab === "blueprints" && <BlueprintPanel projectId={projectId} />}
       {tab === "files" && (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
           {/* Sub-tab bar: 4 focused tabs */}
