@@ -26,3 +26,4 @@ export * from "./image_versions";
 export * from "./scheduled_checks";
 export * from "./zip_imports";
 export * from "./embeddings";
+export * from "./application_model";

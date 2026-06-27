@@ -18,3 +18,5 @@
 - [Builder Lens Identity](builder-lens-identity.md) — Builder must stay clinical/schema-aesthetic; status-grouped flat lists erode its identity vs Storyteller
 - [Plan Artifact SSE Architecture](plan-artifact-sse.md) — StructuredPlanArtifact: second Haiku pass on displayContent after stream, emits {type:"plan"} SSE before done; run_artifacts stores {type:"plan",meta:JSON}; fullText declared at line ~3868 so extraction must use displayContent
 - [Atlas Architecture 2.0](atlas-architecture-2.0-constitution.md) — the governing constitution; five pillars, Application Model, No Duplicate Truth rule, full ownership table; read before any new feature or task
+- [Drizzle-kit TTY limitation](drizzle-kit-tty.md) — drizzle-kit push cannot create new tables in non-TTY spawned processes; use raw SQL CREATE TABLE IF NOT EXISTS in ensureColumns() instead
+- [Application Model Phase 2A](application-model-2a.md) — application_models + application_model_history tables live; GET/PATCH/history routes at /api/projects/:id/model; all existing projects seeded on boot

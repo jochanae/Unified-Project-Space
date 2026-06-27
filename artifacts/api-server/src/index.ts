@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { sql } from "drizzle-orm";
 import { startScheduledChecksWorker } from "./lib/scheduledChecksWorker";
 import { seedMissingGenomes, backfillEmptyGenomes, seedMissingSessionsForCommitted } from "./lib/genomeExtract";
+import { seedMissingApplicationModels } from "./routes/applicationModel";
 
 const rawPort = process.env["PORT"];
 
@@ -86,8 +87,10 @@ async function pushSchema(): Promise<void> {
   });
 }
 
-// Idempotent SQL safety-net: ensures any columns that drizzle-kit push
-// may have missed (e.g. because it needs a TTY) are present before serving.
+// Idempotent SQL safety-net: ensures any columns/tables that drizzle-kit push
+// may have missed (e.g. because it needs a TTY for interactive prompts) are
+// present before serving. Add new tables/columns here rather than relying on
+// drizzle-kit in non-TTY environments.
 async function ensureColumns(): Promise<void> {
   try {
     await db.execute(sql`
@@ -96,7 +99,41 @@ async function ensureColumns(): Promise<void> {
     `);
     logger.info("ensureColumns: drill_cache column verified");
   } catch (err) {
-    logger.warn({ err }, "ensureColumns: failed — server will start anyway");
+    logger.warn({ err }, "ensureColumns: drill_cache failed — server will start anyway");
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS application_models (
+        id serial PRIMARY KEY,
+        project_id integer NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+        version integer NOT NULL DEFAULT 1,
+        identity jsonb NOT NULL DEFAULT '{}',
+        intent jsonb NOT NULL DEFAULT '{}',
+        pages jsonb NOT NULL DEFAULT '[]',
+        components jsonb NOT NULL DEFAULT '[]',
+        data jsonb NOT NULL DEFAULT '{"entities":[],"relationships":[]}',
+        logic jsonb NOT NULL DEFAULT '[]',
+        build_state jsonb NOT NULL DEFAULT '{}',
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS application_model_history (
+        id serial PRIMARY KEY,
+        project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        model_version integer NOT NULL,
+        field_changed text NOT NULL,
+        previous_value jsonb,
+        new_value jsonb,
+        reason text,
+        changed_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    logger.info("ensureColumns: application_models tables verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: application_models tables failed — server will start anyway");
   }
 }
 
@@ -107,7 +144,8 @@ async function main() {
   });
 
   // Sync schema before starting. Never block on failure.
-  pushSchema().catch((err) => {
+  // We await this so seeds that depend on the schema run after tables exist.
+  await pushSchema().catch((err) => {
     logger.warn({ err }, "Schema push threw — server will start anyway");
   });
 
@@ -158,6 +196,10 @@ async function main() {
   // that have never had genome extraction run. Runs serially, non-blocking.
   backfillEmptyGenomes().catch((err) => {
     logger.warn({ err }, "genome backfill on startup failed — non-fatal");
+  });
+
+  seedMissingApplicationModels().catch((err) => {
+    logger.warn({ err }, "application model seed on startup failed — non-fatal");
   });
 
   app.listen(port, () => {
