@@ -13,25 +13,24 @@ import { ensureComposerAuraCSS, getAuraVars, type AuraContext } from "@/lib/comp
 
 const LENS_PLACEHOLDERS: Record<WorkspaceLens, string[]> = {
   flow: [
-    "What are you turning over…",
-    "What's the constraint you haven't named…",
-    "What would have to be true for this to work…",
-    "Where did the last session leave things…",
+    "Describe what you want to build…",
+    "What should Atlas work on next…",
+    "What's the next thing to ship…",
   ],
   build: [
+    "Describe what you want to build…",
     "What needs to be built or fixed…",
     "What's the smallest next step…",
-    "Where does this slot into the system…",
   ],
   look: [
     "What visual change do you need…",
     "What feels off in the UI…",
-    "Describe the vibe you're chasing…",
+    "Describe the look you're after…",
   ],
   scenario: [
     "What if…",
     "What changes if this assumption flips…",
-    "Walk a scenario forward — what breaks first…",
+    "Walk a scenario forward…",
   ],
 };
 
@@ -290,22 +289,16 @@ export function ChatComposer(props: ChatComposerProps) {
   const isMultiAgent = !wsModel || wsModel === "multi";
 
   const [composerMode, setComposerMode] = useState<"plan" | "build">(defaultComposerMode ?? "plan");
-  const [planBannerVisible, setPlanBannerVisible] = useState(false);
   const filePreviewUrls = useRef<Map<File, string>>(new Map());
   // Intake mode lives in ForgeIntakeSheet now — composer no longer tracks it.
 
   const togglePlanMode = () => {
     setComposerMode(mode => {
-      const next = mode === "plan" ? "build" : "plan";
-      setPlanBannerVisible(true);
-      window.setTimeout(() => setPlanBannerVisible(false), 1500);
       try { (navigator as any).vibrate?.(10); } catch {}
-      return next;
+      return mode === "plan" ? "build" : "plan";
     });
   };
   const composerModeIsPlan = composerMode === "plan";
-  const composerModeAccent = composerModeIsPlan ? "var(--atlas-gold)" : "hsl(217, 80%, 64%)";
-  const composerModeShadow = composerModeIsPlan ? "rgba(201,162,76,0.7)" : "hsla(217, 80%, 64%, 0.7)";
 
   
 
@@ -545,36 +538,6 @@ export function ChatComposer(props: ChatComposerProps) {
           </div>
         )}
 
-        {(() => {
-          const bannerActive = planBannerVisible || chatPending;
-          return (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                display: "flex", justifyContent: "center", alignItems: "center", gap: 6,
-                marginBottom: bannerActive ? 6 : 0,
-                height: bannerActive ? "auto" : 0,
-                overflow: "hidden",
-                fontFamily: "var(--app-font-mono)",
-                fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase",
-                color: composerModeAccent,
-                opacity: bannerActive ? 0.85 : 0,
-                transition: "opacity 1.5s ease-out",
-                pointerEvents: "none",
-              }}
-            >
-              <span style={{
-                width: 5, height: 5, borderRadius: "50%",
-                background: composerModeAccent,
-                boxShadow: `0 0 6px ${composerModeShadow}`,
-              }} />
-              {composerModeIsPlan
-                ? `Plan Mode · ${chatPending ? "Strategizing" : "Active"}`
-                : `Build Mode · ${chatPending ? "Executing" : "Ready"}`}
-            </div>
-          );
-        })()}
 
         {chatPending && (
           <style>{`
@@ -595,26 +558,7 @@ export function ChatComposer(props: ChatComposerProps) {
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
             <div style={{ position: "relative", flex: 1 }}>
-              {!hasInput && (planBannerVisible || chatPending) ? (
-                <div
-                  aria-hidden
-                  style={{
-                    position: "absolute", top: 0, left: 2,
-                    color: composerModeAccent, fontSize: 14, lineHeight: 1.6,
-                    opacity: (planBannerVisible || chatPending) ? 0.75 : 0,
-                    transition: "opacity 1.5s ease-out",
-                    pointerEvents: "none",
-                    fontFamily: "var(--app-font-sans)",
-                    fontStyle: "italic",
-                  }}
-                >
-                  {composerModeIsPlan
-                    ? (chatPending ? "Strategizing…" : "Ready to strategize…")
-                    : (chatPending ? "Executing build…" : "Ready to build…")}
-                </div>
-              ) : (
-                <RotatingPlaceholder wsLens={wsLens} hasInput={hasInput} inputFocused={inputFocused} hasMessages={messages.length > 0} />
-              )}
+              <RotatingPlaceholder wsLens={wsLens} hasInput={hasInput} inputFocused={inputFocused} hasMessages={messages.length > 0} />
 
               <textarea
                 ref={textareaRef}
@@ -755,71 +699,80 @@ export function ChatComposer(props: ChatComposerProps) {
             )}
 
 
-            {/* Trust mode toggle */}
+            {/* Trust mode toggle — compact ⚡ icon */}
             {onToggleTrustMode && (
               <button
                 type="button"
                 onClick={onToggleTrustMode}
-                title={trustMode === "auto" ? "Auto Apply — Atlas applies file changes immediately. Click to require review." : "Review Writes — Atlas asks before applying file changes. Click to auto-apply."}
+                title={trustMode === "auto" ? "Auto Apply on — tap to require review" : "Review Writes on — tap to auto-apply"}
+                aria-label={trustMode === "auto" ? "Auto Apply" : "Review Writes"}
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 5,
-                  padding: "5px 9px", borderRadius: 999,
-                  background: trustMode === "auto" ? "rgba(52,211,153,0.08)" : "rgba(255,255,255,0.03)",
-                  backdropFilter: "blur(10px) saturate(140%)",
-                  border: `1px solid ${trustMode === "auto" ? "rgba(52,211,153,0.25)" : "var(--atlas-border)"}`,
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  width: 32, height: 32, borderRadius: 8,
+                  background: "transparent",
+                  border: "none",
                   color: trustMode === "auto" ? "#34d399" : "var(--atlas-muted)",
                   cursor: "pointer",
-                  fontFamily: "var(--app-font-mono)",
-                  fontSize: 9.5, letterSpacing: "0.08em", textTransform: "uppercase" as const,
-                  whiteSpace: "nowrap" as const, flexShrink: 0,
-                  transition: "all 160ms ease",
+                  flexShrink: 0,
+                  transition: "color 160ms ease, opacity 160ms ease",
+                  opacity: trustMode === "auto" ? 1 : 0.45,
                 }}
               >
-                <span style={{
-                  width: 5, height: 5, borderRadius: "50%",
-                  background: trustMode === "auto" ? "#34d399" : "var(--atlas-muted)",
-                  boxShadow: trustMode === "auto" ? "0 0 6px rgba(52,211,153,0.5)" : "none",
-                  flexShrink: 0,
-                  transition: "all 160ms ease",
-                }} />
-                {trustMode === "auto" ? "Auto Apply" : "Review Writes"}
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M9.5 1L3 9h5.5L6.5 15 14 7H8.5L9.5 1z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
             )}
 
             {/* Right: plan mode + voice input + send */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: "auto" }}>
+              {/* ☐ Plan — checkbox + label + existing icon */}
               <button
                 onClick={togglePlanMode}
-                title="Plan mode"
+                title={composerModeIsPlan ? "Plan only — tap to let Atlas build" : "Tap to plan only (no code writes)"}
                 aria-label={composerModeIsPlan ? "Switch to build mode" : "Switch to plan mode"}
-                aria-pressed
+                aria-pressed={composerModeIsPlan}
                 style={{
-                  minWidth: 44, minHeight: 44, padding: 7, borderRadius: 8,
-                  background: composerModeIsPlan
-                    ? "linear-gradient(135deg, rgba(201,162,76,0.28), rgba(201,162,76,0.14))"
-                    : "linear-gradient(135deg, hsla(217, 80%, 64%, 0.28), hsla(217, 80%, 64%, 0.14))",
-                  border: `1px solid ${composerModeIsPlan ? "rgba(201,162,76,0.55)" : "hsla(217, 80%, 64%, 0.55)"}`,
-                  boxShadow: composerModeIsPlan ? "0 0 14px -4px rgba(201,162,76,0.55), inset 0 0 0 1px rgba(201,162,76,0.15)" : "0 0 14px -4px hsla(217, 80%, 64%, 0.55), inset 0 0 0 1px hsla(217, 80%, 64%, 0.15)",
-                  color: composerModeAccent,
-                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all var(--motion-fast) var(--ease-standard)", flexShrink: 0,
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  minHeight: 44, padding: "0 8px 0 6px", borderRadius: 8,
+                  background: "transparent",
+                  border: "none",
+                  color: composerModeIsPlan ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                  cursor: "pointer",
+                  transition: "color var(--motion-fast) var(--ease-standard)",
+                  flexShrink: 0,
+                  opacity: composerModeIsPlan ? 1 : 0.55,
                 }}
               >
-                {/* Checklist + gold dot — Plan mode signifier */}
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                {/* Checkbox */}
+                <span style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  width: 15, height: 15, borderRadius: 3,
+                  border: `1.5px solid ${composerModeIsPlan ? "var(--atlas-gold)" : "var(--atlas-muted)"}`,
+                  background: composerModeIsPlan ? "var(--atlas-gold)" : "transparent",
+                  flexShrink: 0,
+                  transition: "all var(--motion-fast) var(--ease-standard)",
+                }}>
+                  {composerModeIsPlan && (
+                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                      <polyline points="1.5,5 4,7.5 8.5,2" stroke="rgba(8,8,10,0.9)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </span>
+                {/* Label */}
+                <span style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", lineHeight: 1 }}>
+                  Plan
+                </span>
+                {/* Existing checklist icon */}
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M2.5 6L4 7.5L6.5 5" stroke="currentColor" strokeWidth="1.5" />
                   <path d="M2.5 12L4 13.5L6.5 11" stroke="currentColor" strokeWidth="1.5" />
                   <line x1="9" y1="6.5" x2="14" y2="6.5" stroke="currentColor" strokeWidth="1.5" />
                   <line x1="9" y1="12.5" x2="13" y2="12.5" stroke="currentColor" strokeWidth="1.5" />
                   <circle
-                    cx="16"
-                    cy="4"
-                    r={2.4}
-                    fill={composerModeAccent}
-                    style={{
-                      filter: `drop-shadow(0 0 4px ${composerModeIsPlan ? "rgba(201,162,76,0.75)" : "hsla(217, 80%, 64%, 0.75)"})`,
-                      transition: "all var(--motion-fast) var(--ease-standard)",
-                    }}
+                    cx="16" cy="4" r={2.4}
+                    fill={composerModeIsPlan ? "var(--atlas-gold)" : "var(--atlas-muted)"}
+                    style={{ filter: composerModeIsPlan ? "drop-shadow(0 0 4px rgba(201,162,76,0.75))" : "none", transition: "all var(--motion-fast) var(--ease-standard)" }}
                   />
                 </svg>
               </button>
