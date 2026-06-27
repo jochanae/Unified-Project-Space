@@ -659,6 +659,21 @@ LINE_PATCH_END
 
 The FIND block must match EXACTLY. Copy it directly from the code in context.
 
+FILE_DELETE (to permanently delete a file from the workspace):
+FILE_DELETE_START
+path: src/old-component.ts
+FILE_DELETE_END
+
+Only emit FILE_DELETE when the user explicitly asks to delete, remove, or clean up a specific file. Always explain what you are deleting and why before the block.
+
+FILE_MOVE (to rename or relocate a file):
+FILE_MOVE_START
+from: src/OldName.tsx
+to: src/components/NewName.tsx
+FILE_MOVE_END
+
+After a FILE_MOVE, emit FILE_EDIT blocks for any files that import the moved file so their import paths are updated. Do not emit FILE_MOVE and FILE_EDIT for the same path — move first, then update importers.
+
 FILE_READ:
 When you need a file not in context, emit at the end of your response:
 FILE_READ_REQUEST:{"paths":["src/components/Foo.tsx"]}
@@ -1341,6 +1356,83 @@ interface ResponsePlan {
   confidence: "high" | "medium" | "low";
   estimatedChanges: number;
   reversible: boolean;
+}
+
+interface FileDelete {
+  path: string;
+}
+
+interface FileMove {
+  from: string;
+  to: string;
+}
+
+function extractAllFileDeletes(content: string): { visibleContent: string; fileDeletes: FileDelete[] } {
+  const startMarker = "FILE_DELETE_START";
+  const endMarker = "FILE_DELETE_END";
+  const fileDeletes: FileDelete[] = [];
+
+  let searchFrom = 0;
+  while (true) {
+    const startIdx = content.indexOf(startMarker, searchFrom);
+    if (startIdx === -1) break;
+    const endIdx = content.indexOf(endMarker, startIdx + startMarker.length);
+    if (endIdx === -1) break;
+    const block = content.slice(startIdx + startMarker.length, endIdx).trim();
+    let filePath = "";
+    for (const line of block.split("\n")) {
+      const ci = line.indexOf(":");
+      if (ci === -1) continue;
+      const key = line.slice(0, ci).trim();
+      const val = line.slice(ci + 1).trim();
+      if (key === "path") { filePath = val; break; }
+    }
+    if (filePath && !BLOCKED_PATH_RE.test(filePath) && !BLOCKED_DIR_RE.test(filePath)) {
+      fileDeletes.push({ path: filePath });
+    }
+    searchFrom = endIdx + endMarker.length;
+  }
+
+  const visibleContent = content
+    .replace(/FILE_DELETE_START[\s\S]*?FILE_DELETE_END/g, "")
+    .trim();
+
+  return { visibleContent, fileDeletes };
+}
+
+function extractAllFileMoves(content: string): { visibleContent: string; fileMoves: FileMove[] } {
+  const startMarker = "FILE_MOVE_START";
+  const endMarker = "FILE_MOVE_END";
+  const fileMoves: FileMove[] = [];
+
+  let searchFrom = 0;
+  while (true) {
+    const startIdx = content.indexOf(startMarker, searchFrom);
+    if (startIdx === -1) break;
+    const endIdx = content.indexOf(endMarker, startIdx + startMarker.length);
+    if (endIdx === -1) break;
+    const block = content.slice(startIdx + startMarker.length, endIdx).trim();
+    let from = "";
+    let to = "";
+    for (const line of block.split("\n")) {
+      const ci = line.indexOf(":");
+      if (ci === -1) continue;
+      const key = line.slice(0, ci).trim();
+      const val = line.slice(ci + 1).trim();
+      if (key === "from") from = val;
+      if (key === "to") to = val;
+    }
+    if (from && to) {
+      fileMoves.push({ from, to });
+    }
+    searchFrom = endIdx + endMarker.length;
+  }
+
+  const visibleContent = content
+    .replace(/FILE_MOVE_START[\s\S]*?FILE_MOVE_END/g, "")
+    .trim();
+
+  return { visibleContent, fileMoves };
 }
 
 function extractAllLinePatches(content: string): { visibleContent: string; linePatches: LinePatch[] } {
@@ -3410,9 +3502,11 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } catch { /* leave malformed clarification blocks visible */ }
   }
 
-  // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
+  // Parse: LINE_PATCHes → FILE_EDITs → FILE_DELETEs → FILE_MOVEs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
-  const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
+  const { visibleContent: afterEdits, fileEdits } = extractAllFileEdits(afterPatches);
+  const { visibleContent: afterDeletes, fileDeletes } = extractAllFileDeletes(afterEdits);
+  const { visibleContent, fileMoves } = extractAllFileMoves(afterDeletes);
   const parsedConfidenceAssessment = extractConfidenceAssessment(visibleContent);
   const hasProposedFileChanges = fileEdits.length > 0 || linePatches.length > 0;
   const confidenceAssessment = normalizeConfidenceAssessmentForFileChanges({
@@ -3802,6 +3896,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     fileEdits: responseFileEdits.length > 0 ? responseFileEdits : undefined,
     fileEdit: responseFileEdits.length > 0 ? responseFileEdits[0] : undefined,
     linePatches: responseLinePatches.length > 0 ? responseLinePatches : undefined,
+    fileDeletes: fileDeletes.length > 0 ? fileDeletes : undefined,
+    fileMoves: fileMoves.length > 0 ? fileMoves : undefined,
     plan: responsePlan ?? undefined,
     ...(structuredPlanArtifact ? { planArtifact: structuredPlanArtifact } : {}),
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,

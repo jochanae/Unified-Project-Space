@@ -105,6 +105,8 @@ type InlinePreviewLine = { type: "added" | "removed"; line: string };
 function InlineDiffCard({
   fileEdits,
   linePatches,
+  fileDeletes = [],
+  fileMoves = [],
   linkedRepo,
   projectId,
   autoApplied,
@@ -115,6 +117,8 @@ function InlineDiffCard({
 }: {
   fileEdits: FileEdit[];
   linePatches: LinePatch[];
+  fileDeletes?: Array<{ path: string }>;
+  fileMoves?: Array<{ from: string; to: string }>;
   linkedRepo: LinkedRepo | null;
   projectId: number;
   autoApplied?: boolean;
@@ -134,6 +138,9 @@ function InlineDiffCard({
   const [inlineApplied, setInlineApplied] = useState<string[] | null>(null);
   const [inlineApplyError, setInlineApplyError] = useState<string | null>(null);
   const [importWarnDismissed, setImportWarnDismissed] = useState(false);
+  const [checkpointId, setCheckpointId] = useState<string | null>(null);
+  const [rollingBack, setRollingBack] = useState(false);
+  const [rollbackDone, setRollbackDone] = useState(false);
   const pushSucceededRef = useRef(false);
 
   const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
@@ -244,9 +251,10 @@ function InlineDiffCard({
   const targetPaths = fileEdits.length > 0
     ? fileEdits.map((edit) => edit.path)
     : Object.keys(patchGroups);
-  const firstPath = targetPaths[0] ?? "changes";
-  const filename = targetPaths.length > 1
-    ? `${firstPath.split("/").pop() ?? firstPath} +${targetPaths.length - 1}`
+  const totalOps = targetPaths.length + fileDeletes.length + fileMoves.length;
+  const firstPath = targetPaths[0] ?? fileDeletes[0]?.path ?? fileMoves[0]?.from ?? "changes";
+  const filename = totalOps > 1
+    ? `${firstPath.split("/").pop() ?? firstPath} +${totalOps - 1}`
     : firstPath;
   const changedCount = previewLines.length;
   const visibleLines = open ? previewLines : previewLines.slice(0, 3);
@@ -289,17 +297,48 @@ function InlineDiffCard({
     setInlineApplying(true);
     setInlineApplyError(null);
     try {
+      // Checkpoint before writing so the user can undo
+      const pathsToCheckpoint = [
+        ...edits.map(e => e.path),
+        ...fileDeletes.map(d => d.path),
+        ...fileMoves.map(m => m.from),
+      ];
+      if (pathsToCheckpoint.length > 0) {
+        try {
+          const cpRes = await fetch(`/api/fs/${projectId}/checkpoint`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ files: pathsToCheckpoint }),
+          });
+          if (cpRes.ok) {
+            const cpData = await cpRes.json() as { checkpointId?: string };
+            if (cpData.checkpointId) setCheckpointId(cpData.checkpointId);
+          }
+        } catch { /* checkpoint failure is non-fatal */ }
+      }
+
       const r = await fetch("/api/github/apply-local", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ projectId, files: edits.map(e => ({ path: e.path, content: e.content })) }),
+        body: JSON.stringify({
+          projectId,
+          files: edits.map(e => ({ path: e.path, content: e.content })),
+          ...(fileDeletes.length > 0 ? { fileDeletes } : {}),
+          ...(fileMoves.length > 0 ? { fileMoves } : {}),
+        }),
       });
       if (!r.ok) { const d = await r.json() as { error?: string }; throw new Error(d.error ?? "Apply failed"); }
-      setInlineApplied(edits.map(e => e.path));
+      const appliedNames = [
+        ...edits.map(e => e.path),
+        ...fileDeletes.map(d => d.path),
+        ...fileMoves.map(m => m.to),
+      ];
+      setInlineApplied(appliedNames);
       // Pass paths so the onPushSuccess handler in workspace.tsx can build the correct message.
       // PushRecord has many required fields — we only need `path` here, cast through unknown.
-      onPushSuccess(edits.map(e => ({ path: e.path } as unknown as import("@/pages/workspace").PushRecord)));
+      onPushSuccess(appliedNames.map(p => ({ path: p } as unknown as import("@/pages/workspace").PushRecord)));
     } catch (e) {
       setInlineApplyError(e instanceof Error ? e.message : "Apply failed");
     } finally {
@@ -310,17 +349,43 @@ function InlineDiffCard({
   const handleApply = () => {
     // Local workspace (no GitHub) — apply inline, no modal
     if (!linkedRepo) {
-      if (fileEdits.length > 0) { void applyLocal(fileEdits); return; }
-      setError("Line patches require a GitHub repo. Ask Atlas to rewrite the full file instead.");
+      // Apply file edits, deletes, and moves together
+      void applyLocal(fileEdits);
       return;
     }
-    // GitHub flow — open modal
-    if (fileEdits.length > 0) {
+    // GitHub flow — open modal (file edits only; deletes/moves require local apply)
+    if (fileEdits.length > 0 && fileDeletes.length === 0 && fileMoves.length === 0) {
       pushSucceededRef.current = false;
       setShowPushModal(true);
       return;
     }
+    // If there are deletes or moves, fall back to local apply even with GitHub
+    if (fileEdits.length > 0 || fileDeletes.length > 0 || fileMoves.length > 0) {
+      void applyLocal(fileEdits);
+      return;
+    }
     void applyLinePatches();
+  };
+
+  const handleRollback = async () => {
+    if (!checkpointId) return;
+    setRollingBack(true);
+    try {
+      const r = await fetch(`/api/fs/${projectId}/rollback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ checkpointId }),
+      });
+      if (!r.ok) { const d = await r.json() as { error?: string }; throw new Error(d.error ?? "Rollback failed"); }
+      setRollbackDone(true);
+      setInlineApplied(null);
+      setCheckpointId(null);
+    } catch (e) {
+      setInlineApplyError(e instanceof Error ? e.message : "Rollback failed");
+    } finally {
+      setRollingBack(false);
+    }
   };
 
   const modalEdits = fileEdits.length > 0 ? fileEdits : patchedEdits;
@@ -331,8 +396,23 @@ function InlineDiffCard({
       ? `✓ Auto-applied — ${names.join(", ")}`
       : "Applied automatically";
     return (
-      <div style={{ marginTop: 12, fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.55 }}>
-        {label}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+        <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.55 }}>
+          {label}
+        </div>
+        {checkpointId && !rollbackDone && (
+          <button
+            type="button"
+            disabled={rollingBack}
+            onClick={handleRollback}
+            style={{ padding: "3px 8px", borderRadius: 4, background: "transparent", border: "1px solid color-mix(in oklab, var(--atlas-ember) 40%, transparent)", color: "var(--atlas-ember)", cursor: rollingBack ? "default" : "pointer", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.06em", opacity: rollingBack ? 0.5 : 0.75 }}
+          >
+            {rollingBack ? "Undoing…" : "↩ Undo"}
+          </button>
+        )}
+        {rollbackDone && (
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.55 }}>↩ Undone</span>
+        )}
       </div>
     );
   }
@@ -515,6 +595,24 @@ function InlineDiffCard({
               + {previewLines.length - 3} more changed line{previewLines.length - 3 === 1 ? "" : "s"}
             </div>
           )}
+
+          {/* FILE_DELETE rows */}
+          {fileDeletes.map((del, i) => (
+            <div key={`del-${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", borderTop: "1px solid var(--atlas-border)", background: "color-mix(in oklab, var(--atlas-ember) 5%, transparent)" }}>
+              <span style={{ color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", flexShrink: 0 }}>DELETE</span>
+              <span style={{ flex: 1, fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-ember)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{del.path}</span>
+            </div>
+          ))}
+
+          {/* FILE_MOVE rows */}
+          {fileMoves.map((mv, i) => (
+            <div key={`mv-${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", borderTop: "1px solid var(--atlas-border)", background: "color-mix(in oklab, var(--atlas-gold) 5%, transparent)" }}>
+              <span style={{ color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", flexShrink: 0 }}>MOVE</span>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.65, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, maxWidth: "40%" }}>{mv.from}</span>
+              <span style={{ color: "var(--atlas-gold)", opacity: 0.6, fontSize: 9 }}>→</span>
+              <span style={{ flex: 1, fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-gold)", opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{mv.to}</span>
+            </div>
+          ))}
         </div>
 
 
@@ -573,6 +671,19 @@ function InlineDiffCard({
           >
             {inlineApplying ? "Applying…" : inlineApplied ? "✓ Applied" : applying ? "Applying..." : "Apply"}
           </button>
+          {inlineApplied && checkpointId && !rollbackDone && (
+            <button
+              type="button"
+              disabled={rollingBack}
+              onClick={(e) => { e.stopPropagation(); void handleRollback(); }}
+              style={{ padding: "5px 10px", borderRadius: 5, background: "transparent", border: "1px solid color-mix(in oklab, var(--atlas-ember) 40%, transparent)", color: "var(--atlas-ember)", cursor: rollingBack ? "default" : "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.06em", opacity: rollingBack ? 0.5 : 1 }}
+            >
+              {rollingBack ? "Undoing…" : "↩ Undo"}
+            </button>
+          )}
+          {rollbackDone && (
+            <span style={{ padding: "5px 8px", fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.55 }}>↩ Undone</span>
+          )}
         </div>
 
       </div>
@@ -1959,10 +2070,12 @@ export function AssistantBubble({
           </div>
         )}
 
-        {!message.streaming && (userEdits.length > 0 || (message.linePatches && message.linePatches.length > 0)) && (
+        {!message.streaming && (userEdits.length > 0 || (message.linePatches && message.linePatches.length > 0) || (message.fileDeletes && message.fileDeletes.length > 0) || (message.fileMoves && message.fileMoves.length > 0)) && (
           <InlineDiffCard
             fileEdits={userEdits}
             linePatches={message.linePatches ?? []}
+            fileDeletes={message.fileDeletes ?? []}
+            fileMoves={message.fileMoves ?? []}
             linkedRepo={linkedRepo}
             projectId={projectId}
             autoApplied={!!message.autoPushed}

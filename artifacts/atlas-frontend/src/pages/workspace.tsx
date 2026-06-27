@@ -225,6 +225,8 @@ export interface ChatMessage {
   fileEdit?: FileEdit;
   fileEdits?: FileEdit[];
   linePatches?: LinePatch[];
+  fileDeletes?: Array<{ path: string }>;
+  fileMoves?: Array<{ from: string; to: string }>;
   memoryChips?: MemoryChip[];
   sentAt?: string;
   imageB64?: string;

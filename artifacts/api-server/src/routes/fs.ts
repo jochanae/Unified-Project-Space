@@ -908,5 +908,106 @@ router.post("/fs/:projectId/git/clone", async (req: Request, res: Response): Pro
   }
 });
 
+// ─── Checkpoint / Rollback ──────────────────────────────────────────────────
+// POST /api/fs/:projectId/checkpoint — snapshot the current content of a set of
+// files so the user can undo a subsequent apply. Stores the snapshot as a JSON
+// file inside the project workspace under .atlas-checkpoints/.
+// Body: { files: string[], messageId?: string }
+// Returns: { checkpointId: string }
+
+router.post("/:projectId/checkpoint", async (req, res): Promise<void> => {
+  const projectId = Number(req.params.projectId);
+  if (!projectId) { res.status(400).json({ error: "Invalid projectId" }); return; }
+
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { files, messageId } = req.body as { files?: string[]; messageId?: string };
+  if (!Array.isArray(files) || files.length === 0) {
+    res.status(400).json({ error: "files must be a non-empty array of paths" }); return;
+  }
+
+  const isOwner = await assertProjectOwner(projectId, userId);
+  if (!isOwner) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const wsDir = await ensureProjectWorkspaceDir(projectId);
+  const checkpointDir = path.join(wsDir, ".atlas-checkpoints");
+  await fsPromises.mkdir(checkpointDir, { recursive: true });
+
+  const snapshotEntries: Array<{ path: string; content: string | null }> = [];
+  for (const filePath of files) {
+    let content: string | null = null;
+    try {
+      const abs = resolveWorkspacePath(wsDir, filePath);
+      content = await fsPromises.readFile(abs, "utf-8");
+    } catch { /* file doesn't exist yet — content null means "was absent" */ }
+    snapshotEntries.push({ path: filePath, content });
+  }
+
+  const checkpointId = [Date.now(), Math.random().toString(36).slice(2, 8)].join("-");
+  const cpFile = path.join(checkpointDir, `${checkpointId}.json`);
+  await fsPromises.writeFile(cpFile, JSON.stringify({
+    checkpointId,
+    projectId,
+    messageId: messageId ?? null,
+    createdAt: new Date().toISOString(),
+    files: snapshotEntries,
+  }), "utf-8");
+
+  res.json({ checkpointId });
+});
+
+// POST /api/fs/:projectId/rollback — restore files to a previously saved checkpoint.
+// Body: { checkpointId: string }
+// Returns: { restored: string[], deleted: string[] }
+
+router.post("/:projectId/rollback", async (req, res): Promise<void> => {
+  const projectId = Number(req.params.projectId);
+  if (!projectId) { res.status(400).json({ error: "Invalid projectId" }); return; }
+
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { checkpointId } = req.body as { checkpointId?: string };
+  if (!checkpointId || !/^[\d]+-[a-z0-9]+$/.test(checkpointId)) {
+    res.status(400).json({ error: "Invalid checkpointId" }); return;
+  }
+
+  const isOwner = await assertProjectOwner(projectId, userId);
+  if (!isOwner) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const wsDir = await ensureProjectWorkspaceDir(projectId);
+  const cpFile = path.join(wsDir, ".atlas-checkpoints", `${checkpointId}.json`);
+
+  let checkpoint: { projectId: number; files: Array<{ path: string; content: string | null }> };
+  try {
+    checkpoint = JSON.parse(await fsPromises.readFile(cpFile, "utf-8")) as typeof checkpoint;
+  } catch {
+    res.status(404).json({ error: "Checkpoint not found" }); return;
+  }
+
+  if (checkpoint.projectId !== projectId) {
+    res.status(403).json({ error: "Checkpoint does not belong to this project" }); return;
+  }
+
+  const restored: string[] = [];
+  const deleted: string[] = [];
+
+  for (const entry of checkpoint.files) {
+    const abs = resolveWorkspacePath(wsDir, entry.path);
+    if (entry.content === null) {
+      // File didn't exist before — delete the current version if it exists
+      try { await fsPromises.unlink(abs); deleted.push(entry.path); } catch { /* already gone */ }
+    } else {
+      // Restore previous content
+      await fsPromises.mkdir(path.dirname(abs), { recursive: true });
+      await fsPromises.writeFile(abs, entry.content, "utf-8");
+      restored.push(entry.path);
+    }
+  }
+
+  res.json({ restored, deleted, checkpointId });
+});
+
 export default router;
 

@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { atlasIncidentsTable, connectionsTable, db, entriesTable, projectGenomeTable, projectsTable } from "@workspace/db";
 import { eq, and, desc, isNotNull, sql } from "drizzle-orm";
 import { spawn } from "child_process";
-import { writeFile, mkdir, rm } from "fs/promises";
+import { writeFile, mkdir, rm, unlink, rename } from "fs/promises";
 import { randomBytes } from "crypto";
 import * as nodePath from "path";
 import { decryptToken } from "../lib/tokenCrypto";
@@ -1412,11 +1412,15 @@ router.post("/github/bootstrap-repo", async (req, res): Promise<void> => {
 // workspace at /home/runner/workspace/.project-workspaces/{projectId}/.
 // Falls back to writing to the Replit workspace root for legacy callers without a projectId.
 router.post("/github/apply-local", async (req, res): Promise<void> => {
-  const { files, projectId: rawProjectId } = req.body as {
+  const { files, fileDeletes, fileMoves, projectId: rawProjectId } = req.body as {
     files?: Array<{ path: string; content: string }>;
+    fileDeletes?: Array<{ path: string }>;
+    fileMoves?: Array<{ from: string; to: string }>;
     projectId?: number;
   };
-  if (!files?.length) { res.status(400).json({ error: "Missing files" }); return; }
+  if (!files?.length && !fileDeletes?.length && !fileMoves?.length) {
+    res.status(400).json({ error: "Missing files, fileDeletes, or fileMoves" }); return;
+  }
 
   const userId = (req as any).authUser?.id as number | undefined;
   const projectId = rawProjectId ? Number(rawProjectId) : null;
@@ -1447,9 +1451,11 @@ router.post("/github/apply-local", async (req, res): Promise<void> => {
   }
 
   const applied: string[] = [];
+  const deletedPaths: string[] = [];
+  const movedPaths: Array<{ from: string; to: string }> = [];
   const needsBuild: boolean[] = [];
 
-  for (const { path: filePath, content } of files) {
+  for (const { path: filePath, content } of (files ?? [])) {
     let resolved: string;
     try {
       resolved = useProjectWorkspace
@@ -1469,8 +1475,53 @@ router.post("/github/apply-local", async (req, res): Promise<void> => {
     needsBuild.push(!useProjectWorkspace && filePath.startsWith("artifacts/api-server/"));
   }
 
+  // Process FILE_DELETE operations
+  for (const { path: filePath } of (fileDeletes ?? [])) {
+    let resolved: string;
+    try {
+      resolved = useProjectWorkspace
+        ? resolveWorkspacePath(writeRoot, filePath)
+        : nodePath.resolve(writeRoot, filePath);
+    } catch {
+      res.status(400).json({ error: `Disallowed path: ${filePath}` }); return;
+    }
+    if (!resolved.startsWith(writeRoot + nodePath.sep)) {
+      res.status(400).json({ error: `Disallowed path: ${filePath}` }); return;
+    }
+    try { await unlink(resolved); } catch { /* already gone */ }
+    deletedPaths.push(filePath);
+  }
+
+  // Process FILE_MOVE operations
+  for (const { from: fromPath, to: toPath } of (fileMoves ?? [])) {
+    let resolvedFrom: string;
+    let resolvedTo: string;
+    try {
+      resolvedFrom = useProjectWorkspace
+        ? resolveWorkspacePath(writeRoot, fromPath)
+        : nodePath.resolve(writeRoot, fromPath);
+      resolvedTo = useProjectWorkspace
+        ? resolveWorkspacePath(writeRoot, toPath)
+        : nodePath.resolve(writeRoot, toPath);
+    } catch {
+      res.status(400).json({ error: `Disallowed path in move: ${fromPath} → ${toPath}` }); return;
+    }
+    await mkdir(nodePath.dirname(resolvedTo), { recursive: true });
+    await rename(resolvedFrom, resolvedTo);
+    movedPaths.push({ from: fromPath, to: toPath });
+    needsBuild.push(
+      !useProjectWorkspace && (fromPath.startsWith("artifacts/api-server/") || toPath.startsWith("artifacts/api-server/"))
+    );
+  }
+
   const requiresServerBuild = needsBuild.some(Boolean);
-  res.json({ applied, requiresServerBuild, projectWorkspace: useProjectWorkspace });
+  res.json({
+    applied,
+    deleted: deletedPaths,
+    moved: movedPaths,
+    requiresServerBuild,
+    projectWorkspace: useProjectWorkspace,
+  });
 });
 
 // POST /api/github/typecheck — syntax-check a proposed file before pushing

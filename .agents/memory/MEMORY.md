@@ -17,3 +17,4 @@
 - [Axiom Flow Lens Architecture](flow-lens-architecture.md) — three lenses are genuinely different perspectives, not layouts; Builder=engineering board, Storyteller=narrative chapters, Designer=AxiomFlow canvas
 - [Builder Lens Identity](builder-lens-identity.md) — Builder must stay clinical/schema-aesthetic; status-grouped flat lists erode its identity vs Storyteller
 - [Plan Artifact SSE Architecture](plan-artifact-sse.md) — StructuredPlanArtifact: second Haiku pass on displayContent after stream, emits {type:"plan"} SSE before done; run_artifacts stores {type:"plan",meta:JSON}; fullText declared at line ~3868 so extraction must use displayContent
+- [Atlas Architecture 2.0](atlas-architecture-2.0-constitution.md) — the governing constitution; five pillars, Application Model, No Duplicate Truth rule, full ownership table; read before any new feature or task

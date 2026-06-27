@@ -50,9 +50,16 @@ Browser (Replit preview)
 - `scripts/sync-backend.sh` — pull Axiom-Atlas for backend migration review
 - `lib/db/src/schema/index.ts` — DB schema (⚠️ DO NOT TOUCH lib/db/src/index.ts)
 
+## Philosophy
+
+**Read this before planning or building anything new:**
+`.local/atlas-architecture-2.0.md` — the Atlas Architecture 2.0 constitution. Defines the five pillars, the Application Model, the "No Duplicate Truth" rule, the canonical ownership table, and the three-question evaluation test every feature must pass.
+
+The governing sentence: *"Atlas remembers what it agreed to build."*
+
 ## Product
 
-Axiom is a strategic thinking partner — a workspace where ideas hold their shape long enough to become real. Workspace, project management, decision ledger, parking lot, sessions, vault, and AI chat.
+Axiom is an application-modeling system that uses conversation as its interface. It captures intent, builds a structured model of what is being built, holds that model across sessions, and generates code, visual representations, and decisions from the same source of truth.
 
 ## User preferences
 

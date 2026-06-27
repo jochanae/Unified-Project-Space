@@ -506,6 +506,8 @@ export function useChatStream(
             }
             const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : []));
             const lps = res.linePatches ?? [];
+            const fds: Array<{ path: string }> = res.fileDeletes ?? [];
+            const fms: Array<{ from: string; to: string }> = res.fileMoves ?? [];
             const aff = res.autoFetchedFiles ?? [];
             const rawChips = res.memoryChips ?? [];
             const normalizedChips = rawChips.map((c: any) => typeof c === "string" ? { label: c } : c);
@@ -526,6 +528,8 @@ export function useChatStream(
               ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
               ...(res.autoApplied && fes.length > 0 ? { autoPushed: true } : {}),
               ...(lps.length > 0 ? { linePatches: lps } : {}),
+              ...(fds.length > 0 ? { fileDeletes: fds } : {}),
+              ...(fms.length > 0 ? { fileMoves: fms } : {}),
               ...(normalizedChips.length > 0 ? { memoryChips: normalizedChips } : {}),
               ...(res.imageB64
                 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType }
@@ -790,6 +794,8 @@ export function useChatStream(
           }
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : []));
           const lps = res.linePatches ?? [];
+          const fds: Array<{ path: string }> = res.fileDeletes ?? [];
+          const fms: Array<{ from: string; to: string }> = res.fileMoves ?? [];
           const aff = res.autoFetchedFiles ?? [];
           const rawChips = res.memoryChips ?? [];
           const normalizedChips = rawChips.map((c: any) => typeof c === "string" ? { label: c } : c);
@@ -809,6 +815,8 @@ export function useChatStream(
             ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
             ...(res.autoApplied && fes.length > 0 ? { autoPushed: true } : {}),
             ...(lps.length > 0 ? { linePatches: lps } : {}),
+            ...(fds.length > 0 ? { fileDeletes: fds } : {}),
+            ...(fms.length > 0 ? { fileMoves: fms } : {}),
             ...(normalizedChips.length > 0 ? { memoryChips: normalizedChips } : {}),
             ...(res.imageB64
               ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType }

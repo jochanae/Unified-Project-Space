@@ -1,59 +1,65 @@
 ---
-name: Atlas Builder Actions (FILE_EDIT capability)
-description: Current state of Atlas's file-editing / builder-action capability and what's still missing
+name: Atlas Builder Actions
+description: What file operation protocols exist, how they parse, apply, and undo — the full pipeline from system prompt to disk.
 ---
 
-## What's already built (do not rebuild)
+## What is built (as of Task #59)
 
-The full diff-first edit flow exists. It works when a GitHub repo is linked to the project.
+| Protocol | Status | Parser | Apply endpoint | UI |
+|---|---|---|---|---|
+| FILE_EDIT | ✅ live | extractAllFileEdits | apply-local (files[]) | DiffViewer / InlineDiffCard |
+| LINE_PATCH | ✅ live | extractAllLinePatches | apply-local (after conversion) | InlineDiffCard |
+| FILE_DELETE | ✅ live | extractAllFileDeletes | apply-local (fileDeletes[]) | DELETE row (ember-red) |
+| FILE_MOVE | ✅ live | extractAllFileMoves | apply-local (fileMoves[]) | MOVE row (gold, from→to) |
+| FILE_READ_REQUEST | ✅ live | regex at stream end | GET /api/fs/:id/file | none (auto-injected next turn) |
 
-| Capability | Location |
-|---|---|
-| `FILE_EDIT` block protocol | `artifacts/api-server/src/routes/chat.ts` — system prompt at line ~581 |
-| `LINE_PATCH` (surgical edits) | Same file — FIND/REPLACE blocks for large files |
-| `FILE_READ_REQUEST` | Same file — Atlas requests files before editing |
-| `DiffViewer` component | `artifacts/atlas-frontend/src/components/code/DiffViewer.tsx` |
-| `GitHubPushModal` | `artifacts/atlas-frontend/src/components/workspace/GitHubPushModal.tsx` — wired into `AssistantBubble.tsx` (3 places) |
-| FILE_EDIT stream detection | `workspace.tsx` — opens CHANGES tab on FILE_EDIT stream |
-| Preview/sandbox rendering | `artifacts/api-server/src/routes/preview.ts` — serves FILE_EDIT as standalone HTML |
-| Post-push Vercel poll | `artifacts/api-server/src/routes/deploy.ts` — polls up to 90s after push |
-| BUILD lens | `artifacts/api-server/src/lib/atlasKnowledge.ts` — code-first, every answer has FILE_EDIT blocks |
+## Pipeline: system prompt → disk
 
-## The flow (already implemented, diff-first by design)
+1. **System prompt** teaches Atlas the block syntax (chat.ts ~line 665–678)
+2. **Parsers** (chat.ts): extractAllLinePatches → extractAllFileEdits → extractAllFileDeletes → extractAllFileMoves — each strips its blocks from visible content
+3. **finalPayload** (chat.ts ~line 3900): fileDeletes/fileMoves added alongside fileEdits/linePatches
+4. **SSE done event** carries all four arrays
+5. **useChatStream** (both handlers) reads fds/fms from res and spreads into ChatMessage
+6. **ChatMessage type** (workspace.tsx): `fileDeletes?` / `fileMoves?` added after `linePatches`
+7. **InlineDiffCard** (AssistantBubble.tsx): receives all four, renders DELETE/MOVE rows, creates checkpoint before apply, shows ↩ Undo after apply
 
+## Checkpoint / rollback (NEW in Task #59)
+
+- `POST /api/fs/:projectId/checkpoint` — reads current file contents, writes `.atlas-checkpoints/{id}.json` inside project workspace. Call BEFORE apply.
+- `POST /api/fs/:projectId/rollback` — restores files; null content = file was absent = delete current version.
+- Checkpoint creation is non-fatal: if it fails, apply proceeds, Undo button just absent.
+- Rollback button only appears when `inlineApplied && checkpointId && !rollbackDone`.
+
+## apply-local (POST /api/github/apply-local)
+
+Accepts:
+```typescript
+{
+  files?: Array<{ path, content }>,     // FILE_EDIT
+  fileDeletes?: Array<{ path }>,         // FILE_DELETE
+  fileMoves?: Array<{ from, to }>,       // FILE_MOVE
+  projectId?: number,
+}
 ```
-User request
-  → Atlas proposes FILE_EDIT / LINE_PATCH blocks
-  → DiffViewer shows before/after
-  → User approves via GitHubPushModal
-  → Push to linked repo
-  → (optional) Vercel deploy poll
-```
+Returns: `{ applied, deleted, moved, requiresServerBuild, projectWorkspace }`
 
-Atlas does NOT silently apply. User controls the push gate.
+## Blocked paths
 
-## What's missing
+FILE_DELETE and FILE_MOVE parsers check BLOCKED_PATH_RE and BLOCKED_DIR_RE at parse time. apply-local's resolveWorkspacePath provides a second path-traversal guard.
 
-- `FILE_DELETE` — not in the protocol, no verb for it
-- `FILE_MOVE` — not in the protocol
-- `FILE_CREATE` as a distinct verb — partially covered (FILE_EDIT with a new path shows "New file" badge)
-- `BATCH_EDIT` as a verb — implicit only (multiple FILE_EDIT blocks in one response)
-- Apply without GitHub — the entire push flow requires a linked GitHub token per project (CONNECTIONS tab)
+## FILE_DELETE/MOVE in GitHub flow
 
-## Hard constraint (resolved)
+Deletes and moves always apply locally (project workspace) — never via GitHub modal. If `fileDeletes.length > 0 || fileMoves.length > 0`, handleApply() bypasses GitHub modal and calls applyLocal() directly.
 
-~~Everything requires a linked GitHub repo.~~ **GitHub is now optional.**
+**Why:** GitHub API requires file SHAs for deletion/move; local apply is sufficient for current architecture.
 
-- `FILE_READ_REQUEST` now tries GitHub first, falls back to local workspace (`/workspaces/{projectId}/`)
-- If neither works, Atlas receives `[FILE_READ_UNAVAILABLE: <reason>]` and is told to explain clearly — no silent failures
-- Every session receives a `--- FILE SOURCE CONTEXT ---` block telling Atlas: repo linked, local workspace initialized, file source (github/local/none), apply mode (push-to-github/local-apply/none)
-- The "Apply Changes" button in the modal (`/api/github/apply-local`) writes to the Replit workspace root — no project scoping
-- Per-project isolated file ops use `/api/fs/:projectId/` routes in `fs.ts` (separate system)
+## Batch grouping
 
-## Phase ordering (user's stated direction)
+InlineDiffCard header shows `totalOps = fileEdits.length + fileDeletes.length + fileMoves.length`. When > 1: displays `"filename.tsx +N"`.
 
-1. ✅ Stabilize: project creation, conversation persistence, Master Map, boundaries, Flow
-2. → Enable builder actions: FILE_EDIT/LINE_PATCH already live; FILE_DELETE/MOVE still missing
-3. → Atlas orchestration: conversation → decisions → plan → edit files → commit → workspace updates
+## Previous state (pre-Task #59)
 
-**Why:** The stabilization phase uncovers empty-state bugs and navigation inconsistencies that would mask edit-capability bugs. Fix the shell first.
+- FILE_DELETE and FILE_MOVE were missing from the protocol entirely
+- No checkpoint/rollback existed
+- apply-local only handled files[] (FILE_EDIT content)
+- InlineDiffCard had no delete/move rows or Undo button
