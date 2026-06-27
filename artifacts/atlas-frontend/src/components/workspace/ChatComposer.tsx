@@ -299,6 +299,8 @@ export function ChatComposer(props: ChatComposerProps) {
     });
   };
   const composerModeIsPlan = composerMode === "plan";
+  const composerModeAccent = composerModeIsPlan ? "var(--atlas-gold)" : "hsl(217, 80%, 64%)";
+  const composerModeShadow = composerModeIsPlan ? "rgba(201,162,76,0.7)" : "hsla(217, 80%, 64%, 0.7)";
 
   
 
@@ -699,80 +701,89 @@ export function ChatComposer(props: ChatComposerProps) {
             )}
 
 
-            {/* Trust mode toggle — compact ⚡ icon */}
+            {/* Trust mode toggle */}
             {onToggleTrustMode && (
               <button
                 type="button"
                 onClick={onToggleTrustMode}
-                title={trustMode === "auto" ? "Auto Apply on — tap to require review" : "Review Writes on — tap to auto-apply"}
-                aria-label={trustMode === "auto" ? "Auto Apply" : "Review Writes"}
+                title={trustMode === "auto" ? "Auto Apply — Atlas applies file changes immediately. Click to require review." : "Review Writes — Atlas asks before applying file changes. Click to auto-apply."}
                 style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: 32, height: 32, borderRadius: 8,
-                  background: "transparent",
-                  border: "none",
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  padding: "5px 9px", borderRadius: 999,
+                  background: trustMode === "auto" ? "rgba(52,211,153,0.08)" : "rgba(255,255,255,0.03)",
+                  backdropFilter: "blur(10px) saturate(140%)",
+                  border: `1px solid ${trustMode === "auto" ? "rgba(52,211,153,0.25)" : "var(--atlas-border)"}`,
                   color: trustMode === "auto" ? "#34d399" : "var(--atlas-muted)",
                   cursor: "pointer",
-                  flexShrink: 0,
-                  transition: "color 160ms ease, opacity 160ms ease",
-                  opacity: trustMode === "auto" ? 1 : 0.45,
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 9.5, letterSpacing: "0.08em", textTransform: "uppercase" as const,
+                  whiteSpace: "nowrap" as const, flexShrink: 0,
+                  transition: "all 160ms ease",
                 }}
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M9.5 1L3 9h5.5L6.5 15 14 7H8.5L9.5 1z" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <span style={{
+                  width: 5, height: 5, borderRadius: "50%",
+                  background: trustMode === "auto" ? "#34d399" : "var(--atlas-muted)",
+                  boxShadow: trustMode === "auto" ? "0 0 6px rgba(52,211,153,0.5)" : "none",
+                  flexShrink: 0,
+                  transition: "all 160ms ease",
+                }} />
+                {trustMode === "auto" ? "Auto Apply" : "Review Writes"}
               </button>
             )}
 
             {/* Right: plan mode + voice input + send */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: "auto" }}>
-              {/* ☐ Plan — checkbox + label + existing icon */}
               <button
                 onClick={togglePlanMode}
-                title={composerModeIsPlan ? "Plan only — tap to let Atlas build" : "Tap to plan only (no code writes)"}
+                title="Plan mode"
                 aria-label={composerModeIsPlan ? "Switch to build mode" : "Switch to plan mode"}
                 aria-pressed={composerModeIsPlan}
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 5,
-                  minHeight: 44, padding: "0 8px 0 6px", borderRadius: 8,
-                  background: "transparent",
-                  border: "none",
-                  color: composerModeIsPlan ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                  cursor: "pointer",
-                  transition: "color var(--motion-fast) var(--ease-standard)",
-                  flexShrink: 0,
-                  opacity: composerModeIsPlan ? 1 : 0.55,
+                  minWidth: 44, minHeight: 44, padding: "7px 10px 7px 8px", borderRadius: 8,
+                  background: composerModeIsPlan
+                    ? "linear-gradient(135deg, rgba(201,162,76,0.28), rgba(201,162,76,0.14))"
+                    : "linear-gradient(135deg, hsla(217, 80%, 64%, 0.28), hsla(217, 80%, 64%, 0.14))",
+                  border: `1px solid ${composerModeIsPlan ? "rgba(201,162,76,0.55)" : "hsla(217, 80%, 64%, 0.55)"}`,
+                  boxShadow: composerModeIsPlan
+                    ? "0 0 14px -4px rgba(201,162,76,0.55), inset 0 0 0 1px rgba(201,162,76,0.15)"
+                    : "0 0 14px -4px hsla(217, 80%, 64%, 0.55), inset 0 0 0 1px hsla(217, 80%, 64%, 0.15)",
+                  color: composerModeAccent,
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: 6, justifyContent: "center",
+                  transition: "all var(--motion-fast) var(--ease-standard)", flexShrink: 0,
                 }}
               >
                 {/* Checkbox */}
                 <span style={{
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: 15, height: 15, borderRadius: 3,
-                  border: `1.5px solid ${composerModeIsPlan ? "var(--atlas-gold)" : "var(--atlas-muted)"}`,
-                  background: composerModeIsPlan ? "var(--atlas-gold)" : "transparent",
-                  flexShrink: 0,
+                  width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                  border: `1.5px solid ${composerModeIsPlan ? "rgba(201,162,76,0.9)" : "hsla(217, 80%, 64%, 0.9)"}`,
+                  background: composerModeIsPlan ? "rgba(201,162,76,0.85)" : "transparent",
                   transition: "all var(--motion-fast) var(--ease-standard)",
                 }}>
                   {composerModeIsPlan && (
-                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-                      <polyline points="1.5,5 4,7.5 8.5,2" stroke="rgba(8,8,10,0.9)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                      <polyline points="1.5,5 4,7.5 8.5,2" stroke="rgba(8,8,10,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   )}
                 </span>
-                {/* Label */}
-                <span style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", lineHeight: 1 }}>
+                {/* "Plan" label */}
+                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", lineHeight: 1, textTransform: "uppercase" }}>
                   Plan
                 </span>
-                {/* Existing checklist icon */}
-                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                {/* Original checklist + gold dot icon */}
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M2.5 6L4 7.5L6.5 5" stroke="currentColor" strokeWidth="1.5" />
                   <path d="M2.5 12L4 13.5L6.5 11" stroke="currentColor" strokeWidth="1.5" />
                   <line x1="9" y1="6.5" x2="14" y2="6.5" stroke="currentColor" strokeWidth="1.5" />
                   <line x1="9" y1="12.5" x2="13" y2="12.5" stroke="currentColor" strokeWidth="1.5" />
                   <circle
                     cx="16" cy="4" r={2.4}
-                    fill={composerModeIsPlan ? "var(--atlas-gold)" : "var(--atlas-muted)"}
-                    style={{ filter: composerModeIsPlan ? "drop-shadow(0 0 4px rgba(201,162,76,0.75))" : "none", transition: "all var(--motion-fast) var(--ease-standard)" }}
+                    fill={composerModeAccent}
+                    style={{
+                      filter: `drop-shadow(0 0 4px ${composerModeShadow})`,
+                      transition: "all var(--motion-fast) var(--ease-standard)",
+                    }}
                   />
                 </svg>
               </button>
