@@ -6,18 +6,56 @@ export type CommitCardPayload = {
   verb: "commit";
 };
 
+// These trigger words indicate Atlas is proposing something new.
+// Keep them specific to forward-looking decision language.
 const DECISION_TRIGGERS = [
-  "recommend",
   "decided",
   "going with",
   "the approach is",
-  "this means",
   "locked in",
   "the fix is",
   "the pattern is",
   "the decision is",
-  "we should",
   "i'd go with",
+  "we're going with",
+  "we'll use",
+  "we've decided",
+  "let's use",
+  "let's go with",
+  "we'll go with",
+];
+
+// If any of these appear, Atlas is summarizing existing context —
+// not proposing a new decision. Suppress the card.
+const SUMMARY_SUPPRESSORS = [
+  "from what i can see",
+  "from what i've seen",
+  "from what i can tell",
+  "looking at the project",
+  "looking at your project",
+  "the committed decisions",
+  "committed decisions show",
+  "what i can see",
+  "as i understand",
+  "here's a summary",
+  "to summarize",
+  "in summary",
+  "reviewing your",
+  "i've reviewed",
+  "i've scanned",
+  "based on the project",
+  "based on what i",
+  "here's what i found",
+  "here's where we are",
+  "here's what i know",
+  "i can see that",
+  "what we have so far",
+  "the project shows",
+  "the architecture shows",
+  "based on the codebase",
+  "as far as i can tell",
+  "looking at what",
+  "from the codebase",
 ];
 
 const BLOCKER_TRIGGERS = ["block", "must", "critical"];
@@ -56,6 +94,11 @@ export function detectDecisionMoment(message: string): CommitCardPayload | null 
   if (isCodeHeavy(clean)) return null;
 
   const lower = clean.toLowerCase();
+
+  // Summaries and recaps should never show a commit card —
+  // Atlas is reporting what it found, not proposing something new.
+  if (SUMMARY_SUPPRESSORS.some((s) => lower.includes(s))) return null;
+
   if (!DECISION_TRIGGERS.some((trigger) => lower.includes(trigger))) return null;
 
   const sentences = sentenceSplit(clean);

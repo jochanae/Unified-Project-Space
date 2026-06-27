@@ -24,13 +24,6 @@ interface Props {
 }
 
 const monoFont = "var(--app-font-mono)";
-const gold = "rgba(212,175,55,0.9)";
-
-function formatDuration(durationMs?: number): string {
-  if (durationMs == null) return "";
-  if (durationMs < 1000) return `${durationMs}ms`;
-  return `${(durationMs / 1000).toFixed(1)}s`;
-}
 
 function DeveloperLensRow({ label, value }: { label: string; value: string | number | boolean }) {
   return (
@@ -41,27 +34,41 @@ function DeveloperLensRow({ label, value }: { label: string; value: string | num
   );
 }
 
+// Routine phases that don't need to be surfaced as named steps.
+const ROUTINE_PHASES = new Set(["scan", "analyze"]);
+
+function isRoutineStep(step: ThinkingStep): boolean {
+  return ROUTINE_PHASES.has(step.phase);
+}
+
 export function AtlasThinkingBlock({ thinkingState }: Props) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const { status, currentStep, history, developerLens } = thinkingState;
   const isProcessing = status === "processing";
+
   const collapsedLabels = useMemo(() => {
     const labels = history.length > 0 ? history.map((step) => step.label) : currentStep ? [currentStep.label] : [];
     return labels.length > 0 ? `✓ ${labels.join(" → ")}` : "✓ Thinking complete";
   }, [currentStep, history]);
 
+  // During processing, show the current step label only if it's meaningful.
+  // Routine scan/analyze phases collapse to a generic quiet label.
+  const processingLabel = useMemo(() => {
+    if (!currentStep) return "Working...";
+    if (isRoutineStep(currentStep)) return "Working...";
+    return currentStep.label;
+  }, [currentStep]);
+
   const containerStyle: CSSProperties = {
-    background: isProcessing ? "rgba(212,175,55,0.04)" : "transparent",
-    border: `1px solid ${isProcessing ? "rgba(212,175,55,0.12)" : "transparent"}`,
+    background: "transparent",
+    border: "1px solid transparent",
     borderRadius: 10,
-    padding: isProcessing ? "10px 14px" : "4px 14px",
-    maxHeight: isProcessing ? 260 : 18,
+    padding: isProcessing ? "6px 0" : "4px 14px",
+    maxHeight: isProcessing ? 40 : 18,
     overflow: "hidden",
     transition:
-      "max-height 300ms cubic-bezier(0.25,1,0.5,1), padding 300ms cubic-bezier(0.25,1,0.5,1), background-color 300ms cubic-bezier(0.25,1,0.5,1), border-color 300ms cubic-bezier(0.25,1,0.5,1), opacity 300ms cubic-bezier(0.25,1,0.5,1), transform 300ms cubic-bezier(0.25,1,0.5,1)",
-    transform: isProcessing ? "translateY(0)" : "translateY(-1px)",
+      "max-height 300ms cubic-bezier(0.25,1,0.5,1), padding 300ms cubic-bezier(0.25,1,0.5,1), opacity 300ms cubic-bezier(0.25,1,0.5,1)",
     opacity: 1,
-    willChange: "transform, opacity, max-height",
   };
 
   const drawerStyle: CSSProperties = {
@@ -84,96 +91,21 @@ export function AtlasThinkingBlock({ thinkingState }: Props) {
     <div>
       <style>{`
         @keyframes atlasPulse {
-          0%,100%{opacity:0.5;transform:scale(1)}
-          50%{opacity:1;transform:scale(1.35)}
+          0%,100%{opacity:0.38}
+          50%{opacity:0.72}
+        }
+        .atlas-thinking-quiet {
+          font-family: var(--app-font-mono);
+          font-size: 11px;
+          color: rgba(255,255,255,0.55);
+          animation: atlasPulse 2.4s ease-in-out infinite;
+          letter-spacing: 0.02em;
         }
       `}</style>
 
       <div style={containerStyle}>
         {isProcessing ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {history.map((step) => (
-              <div
-                key={step.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  opacity: 0.45,
-                  transform: "translateZ(0)",
-                  transition: "opacity 180ms ease, transform 180ms ease",
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: "rgba(80,180,120,0.7)",
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    flex: 1,
-                    fontFamily: monoFont,
-                    fontSize: 11,
-                    color: "rgba(255,255,255,0.78)",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {step.label}
-                </span>
-                <span
-                  style={{
-                    fontFamily: monoFont,
-                    fontSize: 10,
-                    color: "rgba(255,255,255,0.65)",
-                    lineHeight: 1,
-                    minWidth: 34,
-                    textAlign: "right",
-                  }}
-                >
-                  {formatDuration(step.durationMs)}
-                </span>
-              </div>
-            ))}
-
-            {currentStep && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  transform: "translateZ(0)",
-                  transition: "opacity 180ms ease, transform 180ms ease",
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: gold,
-                    flexShrink: 0,
-                    animation: "atlasPulse 1.2s ease-in-out infinite",
-                  }}
-                />
-                <span
-                  style={{
-                    fontFamily: monoFont,
-                    fontSize: 12,
-                    color: gold,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {currentStep.label}
-                </span>
-              </div>
-            )}
-          </div>
+          <span className="atlas-thinking-quiet">{processingLabel}</span>
         ) : (
           <div
             style={{
@@ -185,8 +117,6 @@ export function AtlasThinkingBlock({ thinkingState }: Props) {
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
-              transform: "translateZ(0)",
-              transition: "opacity 180ms ease, transform 180ms ease",
             }}
           >
             {collapsedLabels}
