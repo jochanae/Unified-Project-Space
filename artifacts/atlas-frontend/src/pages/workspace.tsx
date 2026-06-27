@@ -4419,7 +4419,6 @@ export default function Workspace() {
   // useSound / memoryChips / leftTab moved above (consumed by useChatStream).
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
   const [sessionPrUrl, setSessionPrUrl] = useState<string | null>(null);
-  const [, setLatestPlanArtifact] = useState<{ type: string; title: string; content: string } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   useEffect(() => {
     const mountedAt = Date.now();
@@ -5906,8 +5905,6 @@ export default function Workspace() {
 
       const artifact = { type: parsed.type, title: parsed.title, content: parsed.content };
       setMessages((prev) => prev.map((pm, pi) => (pi === idx ? { ...pm, content: cleaned, artifact } : pm)));
-      if (artifact.type === "plan") setLatestPlanArtifact(artifact);
-
       const title = parsed.title;
       void (async () => {
         try {
