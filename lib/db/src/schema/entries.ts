@@ -31,6 +31,7 @@ export const entriesTable = pgTable("entries", {
   contextWhat: text("context_what"),
   contextWhy: text("context_why"),
   enrichmentJson: text("enrichment_json"),
+  amField: text("am_field"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

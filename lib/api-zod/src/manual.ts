@@ -75,6 +75,7 @@ export const CreateEntryBody = z.object({
   context_what: z.string().optional(),
   context_why: z.string().optional(),
   mode: z.string().optional(),
+  am_field: z.string().optional(),
 }).passthrough();
 
 export const UpdateEntryBody = z.object({

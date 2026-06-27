@@ -3873,6 +3873,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           status: "committed",
           severity: "committed",
           mode: "decide",
+          amField: "intent",
           createdAt: new Date(),
           updatedAt: new Date(),
         })

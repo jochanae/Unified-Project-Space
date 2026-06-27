@@ -136,6 +136,16 @@ async function ensureColumns(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, "ensureColumns: application_models tables failed — server will start anyway");
   }
+
+  try {
+    await db.execute(sql`
+      ALTER TABLE entries
+        ADD COLUMN IF NOT EXISTS am_field text
+    `);
+    logger.info("ensureColumns: entries.am_field column verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: entries.am_field failed — server will start anyway");
+  }
 }
 
 async function main() {
@@ -207,6 +217,22 @@ async function main() {
   // Safe to run on every boot (no-ops if already migrated). Non-blocking.
   migrateGenomeToApplicationModel().catch((err) => {
     logger.warn({ err }, "genome→AM migration on startup failed — non-fatal");
+  });
+
+  // Backfill: set amField = 'intent' for all committed Decision entries that have no amField yet.
+  // Non-blocking — the column was just added; existing rows are null.
+  db.execute(sql`
+    UPDATE entries
+    SET am_field = 'intent'
+    WHERE type = 'Decision'
+      AND status = 'committed'
+      AND am_field IS NULL
+  `).then(({ rowCount }) => {
+    if ((rowCount ?? 0) > 0) {
+      logger.info({ count: rowCount }, "ledger→AM backfill: tagged entries with am_field=intent");
+    }
+  }).catch((err) => {
+    logger.warn({ err }, "ledger→AM backfill failed — non-fatal");
   });
 
   app.listen(port, () => {

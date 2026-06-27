@@ -2595,6 +2595,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
           status: "committed",
           severity: "committed",
           mode: "decide",
+          amField: "intent",
         });
       }
 
