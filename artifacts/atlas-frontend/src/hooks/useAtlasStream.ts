@@ -15,6 +15,11 @@ export interface AtlasStreamCallbacks {
   onData?: (data: unknown) => void;
   /** Called when stream completes — receives final full text and raw meta */
   onDone: (fullText: string, meta: Record<string, unknown>) => void;
+  /**
+   * Called when an async image event arrives AFTER done.
+   * Server sends this once image generation completes so the HUD can update.
+   */
+  onImage?: (payload: { images: Array<{ imageUrl: string; prompt: string; model: string; mode: "render" | "schematic" }> }) => void;
   /** Called on stream error */
   onError?: (message: string) => void;
 }
@@ -189,6 +194,11 @@ export function useAtlasStream(): UseAtlasStreamReturn {
                 // otherwise use accumulated streamedText
                 const finalText = doneData.content ?? streamedText;
                 callbacks.onDone(finalText, doneData);
+              } else if (evtName === "image") {
+                const imgPayload = JSON.parse(evtData) as {
+                  images: Array<{ imageUrl: string; prompt: string; model: string; mode: "render" | "schematic" }>;
+                };
+                callbacks.onImage?.(imgPayload);
               } else if (evtName === "error") {
                 pacer.abort();
                 const errMsg = JSON.parse(evtData) as string;

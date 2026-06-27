@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
@@ -15,6 +15,8 @@ export const nexusMessagesTable = pgTable("nexus_messages", {
   conversationId: text("conversation_id"),
   messageType: text("message_type").default("message"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Structured payload attached after generation (e.g. imageGen) — null for most messages */
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(null as any),
 });
 
 export const insertNexusMessageSchema = createInsertSchema(nexusMessagesTable).omit({ id: true, createdAt: true });

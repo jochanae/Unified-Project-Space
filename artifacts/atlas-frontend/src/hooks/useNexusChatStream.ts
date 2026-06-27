@@ -461,6 +461,28 @@ export function useNexusChatStream(
             setLiveStep(nextStep);
             setLiveSteps(prev => [...prev, nextStep].slice(-6));
           },
+          onImage: (imgPayload) => {
+            // Async image delivery: patch the last assistant message and clear the Sketching step.
+            const raw = imgPayload?.images?.[0]?.imageUrl;
+            if (!raw) return;
+            const match = raw.match(/^data:([^;]+);base64,(.+)$/);
+            setMessages(prev => {
+              const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === "assistant");
+              if (lastAssistantIdx === -1) return prev;
+              const idx = prev.length - 1 - lastAssistantIdx;
+              return prev.map((m, i) =>
+                i === idx
+                  ? {
+                      ...m,
+                      imageGen: imgPayload as NexusMessage["imageGen"],
+                      ...(match ? { imageB64: match[2], imageMimeType: match[1] } : {}),
+                      pendingSketch: false,
+                    }
+                  : m
+              );
+            });
+            setLiveStep(null);
+          },
           onData,
           onDone: (fullText, meta) => {
             if (meta && !(meta as any).imageGen && (meta as any).image_gen) {

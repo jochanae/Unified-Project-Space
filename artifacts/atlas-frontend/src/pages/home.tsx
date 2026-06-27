@@ -269,6 +269,8 @@ function normalizeLoadedHomeMessages(
     const runActions = (m.runActions ?? m.run_actions ?? null) as RunAction[] | null;
     const runArtifacts = (m.runArtifacts ?? m.run_artifacts ?? null) as RunArtifact[] | null;
     const runSummary = m.runSummary ?? m.run_summary ?? null;
+    // Restore persisted imageGen from thread response (P3 — sketches survive reload)
+    const imageGen = m.imageGen ?? (m.metadata as any)?.imageGen ?? null;
 
     const shouldMock = demoRunSummary && m.role === "assistant" && !runStatus;
     return {
@@ -311,6 +313,7 @@ function normalizeLoadedHomeMessages(
         : Array.isArray(m.surfacedMemories)
           ? m.surfacedMemories.length
           : 0,
+      ...(imageGen ? { imageGen } : {}),
     };
   };
   return mapMessage
@@ -726,25 +729,13 @@ function HomeRichText({ text }: { text: string }) {
 function HomeStreamingText({ text, animate, style }: { text: string; animate: boolean; style?: React.CSSProperties }) {
   if (!animate) return <div style={style}><HomeRichText text={text} /></div>;
 
-  const parts = text.match(/\S+|\s+/g) ?? [];
-  let lastWordIndex = -1;
-  for (let i = parts.length - 1; i >= 0; i -= 1) {
-    if (/\S/.test(parts[i])) {
-      lastWordIndex = i;
-      break;
-    }
-  }
-
+  // During streaming, render through the same markdown pipeline used for final output.
+  // This eliminates the "two products" flash where raw **markdown** syntax is visible
+  // mid-stream then snaps to formatted text on done. The cursor rides below the content.
   return (
-    <div style={{ ...style, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-      {parts.map((part, index) => /\S/.test(part) ? (
-        <span key={`${index}-${part}`} className={index === lastWordIndex ? "atlas-streaming-word-shimmer" : undefined}>
-          {part}
-        </span>
-      ) : (
-        <Fragment key={`${index}-space`}>{part}</Fragment>
-      ))}
-      <span className="atlas-cursor" />
+    <div style={style} className="atlas-streaming-active">
+      <HomeMarkdown text={text} />
+      <span className="atlas-cursor" style={{ display: "inline-block", marginLeft: 2 }} />
     </div>
   );
 }
@@ -1829,7 +1820,12 @@ export default function Home() {
   const overviewCloseTimerRef = useRef<number | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(() => {
+    // Restore last active conversation so the thread loader fires on mount,
+    // not just when a new stream comes in. Without this, tabbing away and back
+    // loses the conversation because the effect at line ~2601 sees null and clears.
+    try { return localStorage.getItem("atlas-home-conversation-id"); } catch { return null; }
+  });
   const homeResetGenerationRef = useRef(0);
   const rememberActiveConversationId = useCallback((conversationId: string) => {
     try { localStorage.setItem("atlas-home-conversation-id", conversationId); } catch {}

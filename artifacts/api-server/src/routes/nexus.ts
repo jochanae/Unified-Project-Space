@@ -1045,6 +1045,7 @@ type NexusMessageRow = {
   conversationId: string | null;
   messageType: string | null;
   createdAt: Date;
+  metadata?: Record<string, unknown> | null;
 };
 
 let nexusMessageTypeColumnExistsCache: boolean | null = null;
@@ -1087,6 +1088,7 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     content: nexusMessagesTable.content,
     conversationId: nexusMessagesTable.conversationId,
     createdAt: nexusMessagesTable.createdAt,
+    metadata: nexusMessagesTable.metadata,
   };
 
   if (!hasMessageType) {
@@ -1231,6 +1233,8 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
       role: m.role,
       content: m.content,
       isBriefing: m.messageType === "briefing",
+      // Restore persisted imageGen payload so sketches survive reload (P3)
+      imageGen: (m.metadata as any)?.imageGen ?? null,
       executionTimeMs: null,
       inputTokens: null,
       outputTokens: null,
@@ -2357,9 +2361,39 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     // Generate image AFTER done — client keeps the connection open for this event.
     // runImageGen has a 20 s internal timeout so it can never hang the stream.
     if (imageGenTokens.length > 0 && !res.writableEnded && !res.destroyed) {
+      // Tell the HUD exactly what's happening instead of going silent.
+      res.write(`event: step\ndata: ${JSON.stringify({ verb: "Sketching", target: "concept sketch" })}\n\n`);
       const nexusImageGenResult = await runImageGen();
       if (nexusImageGenResult && !res.writableEnded && !res.destroyed) {
         res.write(`event: image\ndata: ${JSON.stringify(nexusImageGenResult)}\n\n`);
+      }
+      // Persist imageGen payload to the message so sketches survive thread reload (P3).
+      // Find the most-recently inserted assistant message for this conversation, then UPDATE it.
+      if (nexusImageGenResult && effectiveConversationId) {
+        (async () => {
+          try {
+            const [latest] = await db
+              .select({ id: nexusMessagesTable.id })
+              .from(nexusMessagesTable)
+              .where(
+                and(
+                  eq(nexusMessagesTable.conversationId, effectiveConversationId),
+                  eq(nexusMessagesTable.role, "assistant"),
+                  eq(nexusMessagesTable.userId, userId),
+                )
+              )
+              .orderBy(desc(nexusMessagesTable.createdAt))
+              .limit(1);
+            if (latest) {
+              await db
+                .update(nexusMessagesTable)
+                .set({ metadata: { imageGen: nexusImageGenResult } })
+                .where(eq(nexusMessagesTable.id, latest.id));
+            }
+          } catch (err: unknown) {
+            logger.warn({ err }, "imageGen metadata persist failed — non-fatal");
+          }
+        })();
       }
     }
 
