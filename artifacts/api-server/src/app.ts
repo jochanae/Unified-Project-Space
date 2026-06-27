@@ -70,7 +70,7 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (ALLOWED_ORIGINS.has(origin)) return callback(null, true);
-      if (/^https:\/\/[^.]+\.replit\.(dev|app)$/.test(origin)) return callback(null, true);
+      if (/^https:\/\/([a-z0-9-]+\.)+replit\.(dev|app)$/.test(origin)) return callback(null, true);
       if (/^https:\/\/([a-z0-9-]+\.)*lovable\.app$/.test(origin)) return callback(null, true);
       if (/^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/.test(origin)) return callback(null, true);
       if (/^https:\/\/([a-z0-9-]+\.)*vercel\.app$/.test(origin)) return callback(null, true);
