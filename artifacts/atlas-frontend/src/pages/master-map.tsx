@@ -290,23 +290,26 @@ export default function MasterMap() {
   // Recompute on every render — wouter's useLocation only tracks pathname, not
   // search params, so memoizing on [location] misses ?projectId changes when
   // navigating in from a project tile.
+  //
+  // IMPORTANT: only award the active ring from explicit signals (URL param or
+  // sessionStorage written by workspace.tsx on project open). Never fall back
+  // to projects[0] — that caused multiple satellites to briefly flash the ring
+  // as projects loaded asynchronously and their sort order shifted.
   const activeProjectId = (() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const raw = params.get("projectId") ?? params.get("activeProjectId") ?? params.get("project") ?? sessionStorage.getItem("atlas-active-project-id");
       const parsed = raw ? Number(raw) : NaN;
       if (Number.isFinite(parsed)) return parsed;
-      // Fall back to most recently updated project
-      if (projects.length > 0) return projects[0].id;
       return null;
     } catch {
       return null;
     }
   })();
+  // Update synchronously so the animation loop (RAF) always reads the current
+  // value on the very next frame — a useEffect update would lag by one render.
   const activeProjectIdRef = useRef(activeProjectId);
-  useEffect(() => {
-    activeProjectIdRef.current = activeProjectId;
-  }, [activeProjectId]);
+  activeProjectIdRef.current = activeProjectId;
 
 
 
