@@ -2134,21 +2134,28 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       projectReadyToken = null;
     }
 
-    // Execute image generation if Atlas emitted IMAGE_GEN token(s)
+    // Image generation runs AFTER the done event to avoid blocking the HUD.
+    // Defined here for use below; executed after res.write(done).
     interface NexusGeneratedImage { imageUrl: string; prompt: string; model: string; mode: "render" | "schematic"; }
-    let nexusImageGenResult: { images: NexusGeneratedImage[] } | undefined;
-    if (imageGenTokens.length > 0) {
+    const runImageGen = async (): Promise<{ images: NexusGeneratedImage[] } | undefined> => {
+      if (imageGenTokens.length === 0) return undefined;
       const nexusImages: NexusGeneratedImage[] = [];
       for (const token of imageGenTokens.slice(0, 2)) {
         const enginePrompt = token.mode === "render"
           ? `${token.prompt} Ultra-premium, cinematic quality. Sleek dark-mode aesthetic with obsidian depth, luxury glassmorphism elements, subtle amber/gold accent glows. Sophisticated editorial lighting, presentation-ready professional finish. 8K resolution quality.`
           : `${token.prompt} Clean flat 2D technical diagram. High-contrast dark background, crisp connector lines, strict geometric layout, precise spatial placement, sharp labels. Pure structural accuracy.`;
         try {
-          const r = await genai.models.generateContent({
-            model: "gemini-2.5-flash-image",
-            contents: enginePrompt,
-            config: { responseModalities: ["IMAGE", "TEXT"] },
-          });
+          const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("image gen timeout")), 20_000)
+          );
+          const r = await Promise.race([
+            genai.models.generateContent({
+              model: "gemini-2.5-flash-image",
+              contents: enginePrompt,
+              config: { responseModalities: ["IMAGE", "TEXT"] },
+            }),
+            timeout,
+          ]);
           const parts = r.candidates?.[0]?.content?.parts ?? [];
           const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
           const textPart = parts.find((p: any) => p.text);
@@ -2161,11 +2168,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
             });
           }
         } catch (err) {
-          logger.warn({ err }, "Nexus image generation failed");
+          logger.warn({ err }, "Nexus image generation failed or timed out");
         }
       }
-      if (nexusImages.length > 0) nexusImageGenResult = { images: nexusImages };
-    }
+      return nexusImages.length > 0 ? { images: nexusImages } : undefined;
+    };
 
     // Strip MEMORY_Tn tags from persisted output
     const { content: rawVisibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
@@ -2344,7 +2351,18 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
     // Navigation intent is sent as structured data in the done event — never as a text token.
     // The frontend renders a suggestion card; the user decides when to navigate.
-    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, convState, ...(pendingNavProjectId !== null ? { navigateTo: { route: `/project/${pendingNavProjectId}`, projectId: pendingNavProjectId, projectName: pendingNavProjectName } } : {}), ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...(projectReadyToken ? { projectReady: projectReadyToken } : {}), ...runMetadata })}\n\n`);
+    // Send done immediately — HUD clears now regardless of image generation speed.
+    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, convState, ...(pendingNavProjectId !== null ? { navigateTo: { route: `/project/${pendingNavProjectId}`, projectId: pendingNavProjectId, projectName: pendingNavProjectName } } : {}), ...(handoffSignal ? { handoffSignal } : {}), ...(projectReadyToken ? { projectReady: projectReadyToken } : {}), ...runMetadata })}\n\n`);
+
+    // Generate image AFTER done — client keeps the connection open for this event.
+    // runImageGen has a 20 s internal timeout so it can never hang the stream.
+    if (imageGenTokens.length > 0 && !res.writableEnded && !res.destroyed) {
+      const nexusImageGenResult = await runImageGen();
+      if (nexusImageGenResult && !res.writableEnded && !res.destroyed) {
+        res.write(`event: image\ndata: ${JSON.stringify(nexusImageGenResult)}\n\n`);
+      }
+    }
+
     res.end();
   };
 

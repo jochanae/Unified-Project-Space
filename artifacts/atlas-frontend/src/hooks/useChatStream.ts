@@ -698,12 +698,16 @@ export function useChatStream(
                     sawFirstToken = true;
                     onFirstStreamingToken?.();
                   }
-                  streamedText += chunk;
+                  // Strip token-protocol lines that leaked through the live stream
+                  // before finishStream could remove them (IMAGE_GEN, CONV_STATE, etc.)
+                  const TOKEN_LINE_RE = /^(IMAGE_GEN|CONV_STATE|PROJECT_READY|BROWSER_VISIT|MEMORY_T\d+|MEMORY_UPDATE):[^\n]*/gm;
+                  const visibleChunk = chunk.replace(TOKEN_LINE_RE, "").replace(/\n{3,}/g, "\n\n");
+                  streamedText += visibleChunk;
                   triggerGithubAutoLink(streamedText);
                   // Feed the pacer instead of writing to React state directly.
                   // The pacer's rAF loop will release chars at human reading cadence
                   // and call setMessages at most once per frame.
-                  pacer?.push(chunk);
+                  if (visibleChunk) pacer?.push(visibleChunk);
                 } else if (evtName === "narration") {
                   // type-embedded: {"type":"narration","content":"text"}
                   const text = typeEmbedded
@@ -733,6 +737,33 @@ export function useChatStream(
                   setMessages((prev) =>
                     prev.map((m) => m.id === placeholderId ? { ...m, planArtifact: planPayload, awaitingPlan: false } : m)
                   );
+                } else if (evtName === "image") {
+                  // Async image delivery — server sends this AFTER the done event
+                  // once Gemini image generation completes. Update the last assistant message.
+                  try {
+                    const imgPayload = (typeEmbedded ?? JSON.parse(evtData)) as {
+                      images: Array<{ imageUrl: string; prompt: string; model: string; mode: "render" | "schematic" }>;
+                    };
+                    if (imgPayload?.images?.[0]?.imageUrl) {
+                      const raw = imgPayload.images[0].imageUrl;
+                      const match = raw.match(/^data:([^;]+);base64,(.+)$/);
+                      setMessages((prev) => {
+                        const lastAssistantIdx = [...prev].reverse().findIndex((m) => m.role === "assistant");
+                        if (lastAssistantIdx === -1) return prev;
+                        const idx = prev.length - 1 - lastAssistantIdx;
+                        return prev.map((m, i) =>
+                          i === idx
+                            ? {
+                                ...m,
+                                imageGen: imgPayload,
+                                ...(match ? { imageB64: match[2], imageMimeType: match[1] } : {}),
+                                pendingSketch: false,
+                              }
+                            : m
+                        );
+                      });
+                    }
+                  } catch { /* ignore malformed image event */ }
                 } else if (evtName === "error") {
                   // Server error event — clear activity, show message, stop stream.
                   const payload = typeEmbedded ?? JSON.parse(evtData) as unknown;
