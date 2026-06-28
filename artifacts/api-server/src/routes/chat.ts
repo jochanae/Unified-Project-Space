@@ -1941,7 +1941,8 @@ async function callModel(
   modelId: ModelId,
   systemPrompt: string,
   messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
-  imageData?: { base64: string; mediaType: string }
+  imageData?: { base64: string; mediaType: string },
+  onToken?: (chunk: string) => void
 ): Promise<ModelCallResult> {
   const startedAt = performance.now();
   if (modelId === "gpt4o") {
@@ -2025,6 +2026,35 @@ async function callModel(
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
   const claudeMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = messages as typeof claudeMessages;
+
+  if (onToken) {
+    // Streaming path — emit text deltas to the caller as they arrive from Anthropic
+    const stream = anthropic.messages.stream({
+      model,
+      max_tokens: 16000,
+      system: systemPrompt,
+      messages: claudeMessages,
+    });
+    let fullText = "";
+    stream.on("text", (textDelta: string) => {
+      fullText += textDelta;
+      try { onToken(textDelta); } catch { /* client disconnected — swallow */ }
+    });
+    const finalMsg = await stream.finalMessage();
+    const inputTokens = finalMsg.usage.input_tokens ?? null;
+    const outputTokens = finalMsg.usage.output_tokens ?? null;
+    return {
+      content: fullText,
+      model,
+      usage: {
+        executionTimeMs: Math.round(performance.now() - startedAt),
+        inputTokens,
+        outputTokens,
+        costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+      },
+    };
+  }
+
   const response = await anthropic.messages.create({
     model,
     max_tokens: 8192,
@@ -3223,7 +3253,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
   let modelResult: Awaited<ReturnType<typeof callModel>>;
   try {
-    modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, allAttachments[0]);
+    modelResult = await callModel(
+      activeModel,
+      systemPrompt,
+      dispatchMessages,
+      allAttachments[0],
+      // Stream tokens to the client as they arrive — eliminates the 15-60s blank wait
+      (chunk: string) => {
+        try { res.write(`data: ${JSON.stringify({ type: "token", content: chunk })}\n\n`); } catch { /* client gone */ }
+      },
+    );
   } catch (modelErr: unknown) {
     logger.error({ err: modelErr }, "callModel failed — sending error event to client");
     const isOverload = String(modelErr).includes("overloaded") || String(modelErr).includes("529");
