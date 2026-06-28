@@ -6890,17 +6890,23 @@ export default function Workspace() {
     }
   }, [messages]);
 
-  // ── Auto-activate shaping projects ───────────────────────────────────────
-  // When Atlas navigates directly to a project that is still in "shaping" status,
-  // activate it in-place rather than showing a dead-end guard screen.
+  // ── Auto-promote shaping projects ────────────────────────────────────────
+  // Any project opened in the workspace is committed by intent. Promote
+  // "shaping" → "committed" silently so the user never hits a gate screen.
   const autoActivateFiredRef = useRef(false);
   useEffect(() => {
     if (autoActivateFiredRef.current) return;
     if (!id || !project || project.status !== "shaping") return;
     autoActivateFiredRef.current = true;
-    fetch(`/api/projects/${id}/activate`, { method: "POST", credentials: "include" })
-      .catch(() => {})
-      .finally(() => { queryClient.invalidateQueries(); });
+    Promise.all([
+      fetch(`/api/projects/${id}/activate`, { method: "POST", credentials: "include" }).catch(() => {}),
+      fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "committed" }),
+      }).catch(() => {}),
+    ]).finally(() => { queryClient.invalidateQueries(); });
   }, [id, project, queryClient]);
 
   // ── Project not found ────────────────────────────────────────────────────
@@ -6940,39 +6946,6 @@ export default function Workspace() {
     );
   }
 
-  // ── Project still shaping ──────────────────────────────────────────────────
-  const projectIsShaping = !projectLoading && !!project && project.status === "shaping";
-  if (projectIsShaping) {
-    return (
-      <div style={{
-        position: "fixed", inset: 0, display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center", gap: 14, padding: 24,
-        background: "var(--atlas-bg)", color: "var(--atlas-fg)", textAlign: "center",
-      }}>
-        <div style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.3em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.6 }}>
-          Not yet a workspace
-        </div>
-        <div style={{ fontSize: 16, fontWeight: 400, letterSpacing: "-0.01em", maxWidth: 360 }}>
-          This project is still being shaped.
-        </div>
-        <div style={{ fontSize: 12, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.6, maxWidth: 320, lineHeight: 1.6 }}>
-          Commit the project on the Projects page to open the workspace.
-        </div>
-        <button
-          onClick={() => setLocation("/projects")}
-          style={{
-            marginTop: 4, padding: "9px 20px", borderRadius: 8,
-            background: "color-mix(in oklab, var(--atlas-gold) 12%, transparent)",
-            border: "1px solid rgba(201,162,76,0.3)", color: "var(--atlas-gold)",
-            fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-            textTransform: "uppercase", cursor: "pointer",
-          }}
-        >
-          Back to Projects
-        </button>
-      </div>
-    );
-  }
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (projectLoading || (sessionsLoading && !sessionId)) {
