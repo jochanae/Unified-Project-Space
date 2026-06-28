@@ -12,7 +12,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { db, applicationModelsTable, applicationModelHistoryTable, projectDnaTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { logProjectArtifact } from "./artifactLog";
 import { logger } from "./logger";
 import { syncFlowCanvasFromModel } from "./flowMapSync";
@@ -274,10 +274,8 @@ async function applyModelPatch(projectId: number, patch: ApplicationModelPatch):
 
   if (historyRows.length === 0 && !patch.creativePrinciples?.length && !patch.experienceIntent) return; // nothing new
 
-  // Route DNA fields to project_dna table (not application_models)
-  void upsertDnaFields(projectId, patch).catch((err) =>
-    logger.warn({ err, projectId }, "DNA upsert after AM extraction failed — non-fatal"),
-  );
+  // Route DNA fields to project_dna table (not application_models); awaited so ordering is deterministic
+  await upsertDnaFields(projectId, patch);
 
   // Stamp lastExtractedAt in buildState (no history record — operational metadata only)
   const prevBuildState = (row.buildState as Record<string, unknown>) ?? {};
@@ -305,55 +303,68 @@ async function upsertDnaFields(projectId: number, patch: ApplicationModelPatch):
   const hasEI = patch.experienceIntent && Object.keys(patch.experienceIntent).length > 0;
   if (!hasPrinciples && !hasEI) return;
 
-  const existing = await db.select().from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1);
-  const updates: Record<string, unknown> = {};
+  await db.transaction(async (tx) => {
+    // Ensure the row exists before locking — ON CONFLICT DO NOTHING is safe here because the
+    // SELECT FOR UPDATE below runs in the same transaction, so we always lock the row we just created.
+    await tx.execute(sql`
+      INSERT INTO project_dna (project_id) VALUES (${projectId})
+      ON CONFLICT (project_id) DO NOTHING
+    `);
 
-  if (hasPrinciples && patch.creativePrinciples) {
-    const prev = existing.length > 0 ? ((existing[0].creativePrinciples as string[]) ?? []) : [];
-    const prevNorm = new Set(prev.map((p) => p.trim().toLowerCase()));
-    const newPrinciples = patch.creativePrinciples.filter((p) => p && !prevNorm.has(p.trim().toLowerCase()));
-    if (newPrinciples.length > 0) {
-      updates.creativePrinciples = [...prev, ...newPrinciples];
-      const prevStatus = existing.length > 0 ? ((existing[0].status as Record<string, string>) ?? {}) : {};
-      if (!prevStatus.creativePrinciples || prevStatus.creativePrinciples === "guessed") {
-        updates.status = { ...(existing.length > 0 ? ((existing[0].status as Record<string, unknown>) ?? {}) : {}), creativePrinciples: "inferred" };
+    // Exclusive row lock eliminates concurrent read-modify-write races.
+    const locked = await tx.execute(sql`
+      SELECT creative_principles, experience_intent, status
+      FROM project_dna WHERE project_id = ${projectId} FOR UPDATE
+    `);
+    const row = (locked as { rows: Array<Record<string, unknown>> }).rows[0] ?? {};
+
+    const updates: Record<string, unknown> = {};
+
+    if (hasPrinciples && patch.creativePrinciples) {
+      const prev = (row.creative_principles as string[]) ?? [];
+      const prevNorm = new Set(prev.map((p) => p.trim().toLowerCase()));
+      const newPrinciples = patch.creativePrinciples.filter((p) => p && !prevNorm.has(p.trim().toLowerCase()));
+      if (newPrinciples.length > 0) {
+        updates.creativePrinciples = [...prev, ...newPrinciples];
+        const prevStatus = (row.status as Record<string, string>) ?? {};
+        if (!prevStatus.creativePrinciples || prevStatus.creativePrinciples === "guessed") {
+          updates.status = { ...prevStatus, creativePrinciples: "inferred" };
+        }
       }
     }
-  }
 
-  if (hasEI && patch.experienceIntent) {
-    const prev = existing.length > 0 ? ((existing[0].experienceIntent as Record<string, unknown>) ?? {}) : {};
-    const merged: Record<string, unknown> = { ...prev };
-    const ei = patch.experienceIntent;
-    if (ei.emotionalRegister?.length)    merged.emotionalRegister = ei.emotionalRegister;
-    if (ei.interactionPosture?.length)   merged.interactionPosture = ei.interactionPosture;
-    if (ei.visualLanguage?.length)       merged.visualLanguage = ei.visualLanguage;
-    if (ei.designPrinciples?.length)     merged.designPrinciples = ei.designPrinciples;
-    if (ei.confidence != null)           merged.confidence = ei.confidence;
-    if (JSON.stringify(merged) !== JSON.stringify(prev)) {
-      updates.experienceIntent = merged;
-      const prevStatus = updates.status as Record<string, unknown> | undefined
-        ?? (existing.length > 0 ? ((existing[0].status as Record<string, unknown>) ?? {}) : {});
-      const newStatus: Record<string, unknown> = { ...prevStatus };
-      const setIfLower = (key: string) => {
-        const cur = newStatus[key] as string | undefined;
-        if (!cur || cur === "guessed") newStatus[key] = "inferred";
-      };
-      if (ei.emotionalRegister?.length)   setIfLower("emotionalRegister");
-      if (ei.interactionPosture?.length)  setIfLower("interactionPosture");
-      if (ei.visualLanguage?.length)      setIfLower("visualLanguage");
-      if (ei.designPrinciples?.length)    setIfLower("designPrinciples");
-      updates.status = newStatus;
+    if (hasEI && patch.experienceIntent) {
+      const prev = (row.experience_intent as Record<string, unknown>) ?? {};
+      const merged: Record<string, unknown> = { ...prev };
+      const ei = patch.experienceIntent;
+      if (ei.emotionalRegister?.length)    merged.emotionalRegister = ei.emotionalRegister;
+      if (ei.interactionPosture?.length)   merged.interactionPosture = ei.interactionPosture;
+      if (ei.visualLanguage?.length)       merged.visualLanguage = ei.visualLanguage;
+      if (ei.designPrinciples?.length)     merged.designPrinciples = ei.designPrinciples;
+      if (ei.confidence != null)           merged.confidence = ei.confidence;
+      if (JSON.stringify(merged) !== JSON.stringify(prev)) {
+        updates.experienceIntent = merged;
+        const prevStatus = (updates.status as Record<string, unknown> | undefined)
+          ?? (row.status as Record<string, unknown>) ?? {};
+        const newStatus: Record<string, unknown> = { ...prevStatus };
+        const setIfLower = (key: string) => {
+          const cur = newStatus[key] as string | undefined;
+          if (!cur || cur === "guessed") newStatus[key] = "inferred";
+        };
+        if (ei.emotionalRegister?.length)   setIfLower("emotionalRegister");
+        if (ei.interactionPosture?.length)  setIfLower("interactionPosture");
+        if (ei.visualLanguage?.length)      setIfLower("visualLanguage");
+        if (ei.designPrinciples?.length)    setIfLower("designPrinciples");
+        updates.status = newStatus;
+      }
     }
-  }
 
-  if (Object.keys(updates).length === 0) return;
+    if (Object.keys(updates).length === 0) return;
 
-  if (existing.length === 0) {
-    await db.insert(projectDnaTable).values({ projectId, ...updates } as any).onConflictDoNothing();
-  } else {
-    await db.update(projectDnaTable).set(updates as any).where(eq(projectDnaTable.projectId, projectId));
-  }
+    await tx.update(projectDnaTable)
+      .set(updates as any)
+      .where(eq(projectDnaTable.projectId, projectId));
+  });
 }
 
 const VISUAL_MEMORY_PROMPT = `You are analyzing an image attached by a product founder — it may be a sketch, wireframe, mockup, photo, moodboard, or any visual artifact.
@@ -495,17 +506,22 @@ export async function extractVisualMemoryFromAttachments({
         await applyModelPatch(projectId, patch);
       }
 
-      // Append sketch entry to project_dna.visual_sketches
-      const dnaRows = await db.select().from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1);
-      const prevSketches = dnaRows.length > 0 ? ((dnaRows[0].visualSketches as unknown[]) ?? []) : [];
-      const newSketches = [...prevSketches, sketchEntry];
-      if (dnaRows.length === 0) {
-        await db.insert(projectDnaTable).values({ projectId, visualSketches: newSketches as any }).onConflictDoNothing();
-      } else {
-        await db.update(projectDnaTable)
+      // Append sketch entry to project_dna.visual_sketches — atomic transaction prevents lost appends
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`
+          INSERT INTO project_dna (project_id) VALUES (${projectId})
+          ON CONFLICT (project_id) DO NOTHING
+        `);
+        const locked = await tx.execute(sql`
+          SELECT visual_sketches FROM project_dna WHERE project_id = ${projectId} FOR UPDATE
+        `);
+        const dnaRow = (locked as { rows: Array<Record<string, unknown>> }).rows[0] ?? {};
+        const prevSketches = (dnaRow.visual_sketches as unknown[]) ?? [];
+        const newSketches = [...prevSketches, sketchEntry];
+        await tx.update(projectDnaTable)
           .set({ visualSketches: newSketches as any })
           .where(eq(projectDnaTable.projectId, projectId));
-      }
+      });
 
       logger.info({ projectId, description: result.description.slice(0, 80) }, "visual memory: sketch processed");
 
