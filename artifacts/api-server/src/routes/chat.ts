@@ -1860,7 +1860,12 @@ type ModelCallResult = {
   usage: ModelCallUsage;
 };
 
-function selectChatModelForMessage(message: string): ModelId {
+function selectChatModelForMessage(message: string, workspaceLens?: string): ModelId {
+  // BUILD lens is always handled by the builder (claude). gpt4o does not reliably emit
+  // FILE_EDIT blocks — routing build requests through it produces planning prose instead
+  // of actual file writes. Short-circuit before any pattern matching.
+  if (workspaceLens === "build") return "claude";
+
   if (/```[\s\S]*?```/.test(message)) return "gpt4o";
 
   const codeRequestPattern = /\b(write|fix|review|debug|implement|refactor|edit|modify|update|generate|create|build|patch)\b[\s\S]{0,80}\b(code|component|function|class|hook|api|endpoint|route|query|schema|migration|test|types?|css|html|sql|script|bug|error|file|repo|repository|pr|pull request)\b|\b(code|component|function|class|hook|api|endpoint|route|query|schema|migration|test|types?|css|html|sql|script|bug|error|file|repo|repository|pr|pull request)\b[\s\S]{0,80}\b(write|fix|review|debug|implement|refactor|edit|modify|update|generate|create|build|patch)\b/i;
@@ -2192,7 +2197,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     ...(body.attachments ?? []),
     ...(legacyBase64 && legacyMimeType ? [{ base64: legacyBase64, mediaType: legacyMimeType }] : []),
   ];
-  const activeModel = selectChatModelForMessage(message);
+  const activeModel = selectChatModelForMessage(message, (body.workspaceLens ?? "").toLowerCase());
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
 
