@@ -3090,9 +3090,10 @@ HARD RULE: Never answer from the context of a different project unless the user 
 
     // During a BUILD_HANDOFF (fresh project from a build request, no messages yet), treat the
     // local workspace as available even if the directory doesn't exist on disk yet.
+    // Same applies to SELF_CONTAINED_BUILD requests — they are unambiguous write intent and
     // ensureProjectWorkspaceDir() is called lazily on the first FILE_EDIT write, so the
     // directory will be created the moment Atlas emits its first block.
-    const effectiveLocalWsAvailable = localWsExists || isBuildHandoff;
+    const effectiveLocalWsAvailable = localWsExists || isBuildHandoff || isSelfContainedBuild;
 
     const fileSource = hasGithub ? "github" : effectiveLocalWsAvailable ? "local" : "none";
     const applyMode = hasGithub ? "push-to-github" : effectiveLocalWsAvailable ? "local-apply" : "none";
