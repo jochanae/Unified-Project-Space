@@ -29,6 +29,7 @@ import {
   Wand2,
   Activity,
   AlertTriangle,
+  Search,
 } from "lucide-react";
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -185,65 +186,86 @@ type ChangeGroup = {
   files: GeneratedFile[];
 };
 
+function tokenizeLine(line: string): string[] {
+  return line.split(/(\s+|[^\w])/g).filter(Boolean);
+}
+function lcsLengths(a: string[], b: string[]): number[][] {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  return dp;
+}
+type TokenSpan = { text: string; changed: boolean };
+function wordDiff(prev: string, curr: string): { prevSpans: TokenSpan[]; currSpans: TokenSpan[] } {
+  const a = tokenizeLine(prev), b = tokenizeLine(curr);
+  const dp = lcsLengths(a, b);
+  const prevSpans: TokenSpan[] = [], currSpans: TokenSpan[] = [];
+  let i = a.length, j = b.length;
+  const pBuf: TokenSpan[] = [], cBuf: TokenSpan[] = [];
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+      pBuf.unshift({ text: a[i - 1], changed: false });
+      cBuf.unshift({ text: b[j - 1], changed: false });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      cBuf.unshift({ text: b[j - 1], changed: true });
+      j--;
+    } else {
+      pBuf.unshift({ text: a[i - 1], changed: true });
+      i--;
+    }
+  }
+  prevSpans.push(...pBuf);
+  currSpans.push(...cBuf);
+  return { prevSpans, currSpans };
+}
+
 function DiffView({ previous, current }: { previous: string; current: string }) {
   const prevLines = previous.split("\n");
   const currLines = current.split("\n");
+  const maxLen = Math.max(prevLines.length, currLines.length);
+  const lineDiffs = useMemo(() => Array.from({ length: maxLen }, (_, i) => {
+    const p = prevLines[i] ?? "";
+    const c = currLines[i] ?? "";
+    if (p === c) return { lineChanged: false, prevSpans: [{ text: p || " ", changed: false }], currSpans: [{ text: c || " ", changed: false }] };
+    const { prevSpans, currSpans } = wordDiff(p, c);
+    return { lineChanged: true, prevSpans: prevSpans.length ? prevSpans : [{ text: " ", changed: false }], currSpans: currSpans.length ? currSpans : [{ text: " ", changed: false }] };
+  }), [previous, current]);
+
   return (
     <div style={{ display: "flex", gap: 2, overflow: "auto", flex: 1, minHeight: 0 }}>
-      {/* Previous */}
       <div style={{ flex: 1, minWidth: 0, overflow: "auto" }}>
-        <div style={{
-          ...MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
-          color: "#FF8A8A", padding: "4px 8px",
-          borderBottom: "1px solid rgba(255,138,138,0.15)",
-        }}>
+        <div style={{ ...MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#FF8A8A", padding: "4px 8px", borderBottom: "1px solid rgba(255,138,138,0.15)" }}>
           Previous
         </div>
         <div style={{ padding: "6px 0" }}>
-          {prevLines.map((line, i) => (
-            <div key={i} style={{
-              display: "flex", alignItems: "flex-start", gap: 6,
-              padding: "1px 8px",
-              background: currLines[i] !== line ? "rgba(255,138,138,0.07)" : "transparent",
-            }}>
-              <span style={{ ...MONO, fontSize: 9.5, color: "rgba(255,255,255,0.2)", minWidth: 28, textAlign: "right", userSelect: "none", flexShrink: 0 }}>
-                {i + 1}
-              </span>
-              <span style={{
-                ...MONO, fontSize: 11, color: currLines[i] !== line ? "#FF8A8A" : "var(--atlas-fg)",
-                whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.5,
-              }}>
-                {line || " "}
+          {lineDiffs.map(({ lineChanged, prevSpans }, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "1px 8px", background: lineChanged ? "rgba(255,138,138,0.07)" : "transparent" }}>
+              <span style={{ ...MONO, fontSize: 9.5, color: "rgba(255,255,255,0.2)", minWidth: 28, textAlign: "right", userSelect: "none", flexShrink: 0 }}>{i + 1}</span>
+              <span style={{ ...MONO, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.5 }}>
+                {prevSpans.map((s, si) => (
+                  <span key={si} style={{ background: s.changed ? "rgba(255,138,138,0.30)" : "transparent", color: s.changed ? "#FF8A8A" : "var(--atlas-fg)", borderRadius: 2 }}>{s.text}</span>
+                ))}
               </span>
             </div>
           ))}
         </div>
       </div>
       <div style={{ width: 1, background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
-      {/* Current */}
       <div style={{ flex: 1, minWidth: 0, overflow: "auto" }}>
-        <div style={{
-          ...MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
-          color: "#7CE3A0", padding: "4px 8px",
-          borderBottom: "1px solid rgba(124,227,160,0.15)",
-        }}>
+        <div style={{ ...MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#7CE3A0", padding: "4px 8px", borderBottom: "1px solid rgba(124,227,160,0.15)" }}>
           Current
         </div>
         <div style={{ padding: "6px 0" }}>
-          {currLines.map((line, i) => (
-            <div key={i} style={{
-              display: "flex", alignItems: "flex-start", gap: 6,
-              padding: "1px 8px",
-              background: prevLines[i] !== line ? "rgba(124,227,160,0.07)" : "transparent",
-            }}>
-              <span style={{ ...MONO, fontSize: 9.5, color: "rgba(255,255,255,0.2)", minWidth: 28, textAlign: "right", userSelect: "none", flexShrink: 0 }}>
-                {i + 1}
-              </span>
-              <span style={{
-                ...MONO, fontSize: 11, color: prevLines[i] !== line ? "#7CE3A0" : "var(--atlas-fg)",
-                whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.5,
-              }}>
-                {line || " "}
+          {lineDiffs.map(({ lineChanged, currSpans }, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "1px 8px", background: lineChanged ? "rgba(124,227,160,0.07)" : "transparent" }}>
+              <span style={{ ...MONO, fontSize: 9.5, color: "rgba(255,255,255,0.2)", minWidth: 28, textAlign: "right", userSelect: "none", flexShrink: 0 }}>{i + 1}</span>
+              <span style={{ ...MONO, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.5 }}>
+                {currSpans.map((s, si) => (
+                  <span key={si} style={{ background: s.changed ? "rgba(124,227,160,0.30)" : "transparent", color: s.changed ? "#7CE3A0" : "var(--atlas-fg)", borderRadius: 2 }}>{s.text}</span>
+                ))}
               </span>
             </div>
           ))}
@@ -402,6 +424,7 @@ function BuildChanges({
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({ unchanged: true });
   const [panelView, setPanelView] = useState<"list" | "detail">("list");
   const [showDiff, setShowDiff] = useState(false);
+  const [query, setQuery] = useState("");
 
   const selectedFile = useMemo(() => files.find((f) => f.id === selectedFileId) ?? null, [files, selectedFileId]);
 
@@ -414,9 +437,15 @@ function BuildChanges({
     prevSelectedIdRef.current = selectedFileId;
   }, [selectedFileId]);
 
+  const filteredFiles = useMemo(() => {
+    if (!query.trim()) return files;
+    const q = query.toLowerCase();
+    return files.filter((f) => f.path.toLowerCase().includes(q));
+  }, [files, query]);
+
   const groups: ChangeGroup[] = useMemo(() => {
     const grouped: Record<string, GeneratedFile[]> = { new: [], modified: [], deleted: [], unchanged: [] };
-    for (const f of files) {
+    for (const f of filteredFiles) {
       const s = normalizeFileStatus(f.status);
       grouped[s].push(f);
     }
@@ -426,7 +455,7 @@ function BuildChanges({
       { label: "Deleted", status: "deleted" as const, color: "#FF8A8A", files: grouped.deleted },
       { label: "Unchanged", status: "unchanged" as const, color: "rgba(255,255,255,0.35)", files: grouped.unchanged },
     ].filter((g) => g.files.length > 0);
-  }, [files]);
+  }, [filteredFiles]);
 
   if (panelView === "detail" && selectedFile) {
     return (
@@ -447,6 +476,32 @@ function BuildChanges({
 
   return (
     <div style={{ padding: "4px 4px 12px" }}>
+      {/* Search */}
+      <div style={{ padding: "4px 4px 6px" }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 7, padding: "5px 8px",
+        }}>
+          <Search size={11} strokeWidth={1.6} style={{ color: "var(--atlas-muted)", flexShrink: 0 }} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter files…"
+            style={{
+              flex: 1, background: "transparent", border: "none", outline: "none",
+              ...MONO, fontSize: 11, color: "var(--atlas-fg)",
+            }}
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery("")} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", padding: 0, lineHeight: 1 }}>✕</button>
+          )}
+        </div>
+        {query && filteredFiles.length === 0 && (
+          <div style={{ ...MONO, fontSize: 10, color: "var(--atlas-muted)", textAlign: "center", paddingTop: 16 }}>No files match "{query}"</div>
+        )}
+      </div>
       {groups.map((group) => {
         const collapsed = collapsedSections[group.status] ?? false;
         const toggleSection = () => setCollapsedSections((m) => ({ ...m, [group.status]: !collapsed }));
@@ -1014,6 +1069,7 @@ export default function CodePage() {
   const [mobilePane, setMobilePane] = useState<MobilePane>("Code");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(getRunIdFromUrl());
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const runSelectionRef = useRef<Map<string, string>>(new Map());
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [isPushingGithub, setIsPushingGithub] = useState(false);
@@ -1151,7 +1207,7 @@ export default function CodePage() {
   const badgeGreen = isLiveBuild;
   const handleSelectRun = (id: string) => {
     setSelectedRunId(id);
-    setSelectedFileId(null);
+    setSelectedFileId(runSelectionRef.current.get(id) ?? null);
     if (isMobile) setMobilePane("Changes");
   };
 
@@ -1453,7 +1509,10 @@ export default function CodePage() {
             <BuildChanges
               files={files}
               selectedFileId={selectedFileId}
-              onSelect={(f) => setSelectedFileId(f.id)}
+              onSelect={(f) => {
+                setSelectedFileId(f.id);
+                if (activeRun) runSelectionRef.current.set(activeRun.id, f.id);
+              }}
               projectId={projectId}
               edits={edits}
               loading={loading}
