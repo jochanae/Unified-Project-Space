@@ -220,3 +220,52 @@ export const ApplicationModelHistorySchema = z.object({
 
 export type ApplicationModel = typeof applicationModelsTable.$inferSelect;
 export type ApplicationModelHistory = typeof applicationModelHistoryTable.$inferSelect;
+
+// ── Design Plans ─────────────────────────────────────────────────────────────
+// Layer 4: Design Plan — structured visual + interaction design brief.
+// Lifecycle: draft → proposed → committed
+// Each project can accumulate multiple versions; the latest committed is canonical.
+export const designPlansTable = pgTable("design_plans", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
+  version: integer("version").notNull().default(1),
+  status: text("status").notNull().default("draft"), // 'draft' | 'proposed' | 'committed'
+  body: jsonb("body").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  committedAt: timestamp("committed_at", { withTimezone: true }),
+});
+
+export const DesignPlanBodySchema = z.object({
+  navigationPattern: z.string().optional(),
+  responsiveIntent: z.object({
+    mobile: z.string().optional(),
+    tablet: z.string().optional(),
+    desktop: z.string().optional(),
+  }).optional(),
+  informationHierarchy: z.array(z.string()).default([]),
+  componentPatterns: z.string().optional(),
+  motionPhilosophy: z.string().optional(),
+  cardDensity: z.string().optional(),
+  typographyScale: z.string().optional(),
+  emptyStates: z.string().optional(),
+  interactionPatterns: z.object({
+    primaryAction: z.string().optional(),
+    secondaryAction: z.string().optional(),
+    editingStyle: z.string().optional(),
+    confirmationBehavior: z.string().optional(),
+    gestures: z.string().optional(),
+    scrollingBehavior: z.string().optional(),
+  }).optional(),
+}).default(() => ({ informationHierarchy: [] }));
+
+export const DesignPlanSchema = z.object({
+  id: z.number(),
+  projectId: z.number(),
+  version: z.number(),
+  status: z.enum(["draft", "proposed", "committed"]),
+  body: DesignPlanBodySchema,
+  createdAt: z.string(),
+  committedAt: z.string().nullable().optional(),
+});
+
+export type DesignPlan = typeof designPlansTable.$inferSelect;

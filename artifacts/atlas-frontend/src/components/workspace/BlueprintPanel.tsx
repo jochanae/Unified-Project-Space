@@ -4,8 +4,9 @@ import type { AMPage, AMComponent, AMEntity, AMRelationship, AMLogic, Applicatio
 import { useModelAlignment } from "@/hooks/useModelAlignment";
 import type { AlignmentResult, AlignmentItemResult } from "@/hooks/useModelAlignment";
 import { ExperienceIntentCard } from "./ExperienceIntentCard";
+import { DesignPlanPanel } from "./DesignPlanPanel";
 
-type BPTab = "spec" | "components" | "data" | "logic" | "soul";
+type BPTab = "spec" | "components" | "data" | "logic" | "soul" | "design";
 
 const MONO = "var(--app-font-mono)";
 const GOLD = "var(--atlas-gold, #C9A24C)";
@@ -480,6 +481,7 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
     { id: "data", label: "Data Model" },
     { id: "logic", label: "Logic" },
     { id: "soul", label: "Soul", dot: hasSoul },
+    { id: "design", label: "Design" },
   ];
 
   const approvedAt = model?.intent?.approvedAt;
@@ -589,6 +591,7 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
             saving={patchSaving}
           />
         )}
+        {activeTab === "design" && <DesignPlanPanel projectId={projectId} />}
       </div>
 
       {/* Footer: version + last extracted */}

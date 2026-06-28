@@ -39,6 +39,7 @@ import previewRouter from "./preview";
 import manifestRouter from "./manifest";
 import genomeRouter from "./genome";
 import applicationModelRouter from "./applicationModel";
+import designPlanRouter from "./designPlan";
 import readinessRouter from "./readiness";
 import intelligenceRouter from "./intelligence";
 import fsRouter from "./fs";
@@ -117,6 +118,7 @@ router.use(requireAuth, previewRouter);
 router.use(requireAuth, manifestRouter);
 router.use(requireAuth, genomeRouter);
 router.use(requireAuth, applicationModelRouter);
+router.use(requireAuth, designPlanRouter);
 router.use(requireAuth, readinessRouter);
 router.use(requireAuth, intelligenceRouter);
 
