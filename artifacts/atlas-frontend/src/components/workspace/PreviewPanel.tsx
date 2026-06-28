@@ -1267,6 +1267,7 @@ ${t}
                         <>
                           {typeof fileCount === "number" && <DetailRow label="Source files" value={String(fileCount)} />}
                           {artifact.metadata.builtAt && <DetailRow label="Built at" value={new Date(String(artifact.metadata.builtAt)).toLocaleString()} />}
+                          <DetailRow label="Preview" value={buildAvailable ? "Live devserver running — click → Preview above" : "Not available — start Local Dev to open this build"} />
                         </>
                       )}
 

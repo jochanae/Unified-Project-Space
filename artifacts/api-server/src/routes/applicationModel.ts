@@ -212,7 +212,7 @@ router.post("/projects/:id/model/approve", async (req, res): Promise<void> => {
 
     const updated = await getOrCreateApplicationModel(projectId);
 
-    // Log to artifact gallery — fire and forget
+    // Log full AM snapshot to artifact gallery — fire and forget
     void logProjectArtifact({
       projectId,
       type: "blueprint_snapshot",
@@ -222,7 +222,15 @@ router.post("/projects/:id/model/approve", async (req, res): Promise<void> => {
       payload: {
         identity: updated.identity,
         intent: updated.intent,
-        pages: (updated.pages as unknown[]).slice(0, 20),
+        pages: updated.pages,
+        components: updated.components,
+        data: updated.data,
+        logic: updated.logic,
+        buildState: updated.buildState,
+        creativePrinciples: updated.creativePrinciples,
+        experienceIntent: updated.experienceIntent,
+        snapshotVersion: newVersion,
+        snapshotAt: new Date().toISOString(),
       },
     });
 
