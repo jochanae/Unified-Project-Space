@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import {
   Bookmark,
   BookmarkCheck,
+  ChevronLeft,
   Code2,
   CornerUpLeft,
   Gavel,
@@ -30,6 +31,7 @@ import {
   formatSnapshotTimestamp,
   groupByDay,
   useAtlasHistory,
+  useCheckpointCreatedListener,
   useCheckpoints,
 } from "@/lib/atlas-history";
 import { toast } from "sonner";
@@ -131,6 +133,19 @@ export function HistoryBookmarksSheet({
 
   const { checkpoints, isLoading: checkpointsLoading, refresh: refreshCheckpoints, createManual } =
     useCheckpoints(projectId);
+
+  // Inspect panel state — which checkpoint is expanded
+  const [inspectedCheckpoint, setInspectedCheckpoint] = useState<ProjectCheckpoint | null>(null);
+
+  // Toast whenever a new checkpoint is auto-created (fires even when sheet is closed)
+  useCheckpointCreatedListener((cp) => {
+    const icon = CHECKPOINT_ICON[cp.type] ?? "⭐";
+    toast.success(`${icon} Checkpoint saved`, {
+      description: cp.title,
+      duration: 4500,
+    });
+    refreshCheckpoints();
+  });
 
   const grouped = useMemo(() => groupByDay(active), [active]);
   const bookmarkSorted = useMemo(
@@ -330,6 +345,8 @@ export function HistoryBookmarksSheet({
     return (
       <div
         key={cp.id}
+        role="button"
+        tabIndex={0}
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -339,7 +356,10 @@ export function HistoryBookmarksSheet({
           background: "rgba(255,255,255,0.025)",
           border: `1px solid ${bg.replace("0.14", "0.25").replace("0.10", "0.20")}`,
           transition: "background 140ms ease, border-color 140ms ease",
+          cursor: "pointer",
         }}
+        onClick={() => setInspectedCheckpoint(cp)}
+        onKeyDown={(e) => e.key === "Enter" && setInspectedCheckpoint(cp)}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = bg;
           e.currentTarget.style.borderColor = color.replace("0.85", "0.4").replace("0.75", "0.35").replace("0.95", "0.45");
@@ -736,8 +756,13 @@ export function HistoryBookmarksSheet({
                 </button>
               )}
 
-              {/* Checkpoint list */}
-              {checkpointsLoading && checkpoints.length === 0 ? (
+              {/* Checkpoint list OR inspect panel */}
+              {inspectedCheckpoint ? (
+                <CheckpointInspectPanel
+                  checkpoint={inspectedCheckpoint}
+                  onBack={() => setInspectedCheckpoint(null)}
+                />
+              ) : checkpointsLoading && checkpoints.length === 0 ? (
                 <div
                   style={{
                     display: "flex",
@@ -913,6 +938,339 @@ function MenuRow({
     >
       {label}
     </button>
+  );
+}
+
+function CheckpointInspectPanel({
+  checkpoint: cp,
+  onBack,
+}: {
+  checkpoint: ProjectCheckpoint;
+  onBack: () => void;
+}) {
+  const icon = CHECKPOINT_ICON[cp.type] ?? "⭐";
+  const color = CHECKPOINT_COLOR[cp.type] ?? "rgba(228,196,128,0.75)";
+  const bg = CHECKPOINT_BG[cp.type] ?? "rgba(196,160,80,0.10)";
+
+  // Extract DNA snapshot fields
+  const dna = cp.dna_snapshot as {
+    creative_principles?: unknown;
+    experience_intent?: unknown;
+    visual_sketches?: unknown;
+  } | null;
+
+  const creativePrinciples: string[] = Array.isArray(dna?.creative_principles)
+    ? (dna!.creative_principles as string[])
+    : typeof dna?.creative_principles === "string" && dna.creative_principles
+      ? [dna.creative_principles]
+      : [];
+
+  const experienceIntent: Record<string, unknown> =
+    dna?.experience_intent && typeof dna.experience_intent === "object" && !Array.isArray(dna.experience_intent)
+      ? (dna.experience_intent as Record<string, unknown>)
+      : {};
+
+  // Extract AM snapshot fields
+  const am = cp.am_snapshot as {
+    identity?: { name?: string; description?: string };
+    intent?: string;
+    pages?: unknown[];
+    entities?: unknown[];
+  } | null;
+
+  const amName = am?.identity?.name ?? null;
+  const amDesc = am?.identity?.description ?? null;
+  const amIntent = am?.intent ?? null;
+  const amPages = Array.isArray(am?.pages) ? am!.pages.length : null;
+  const amEntities = Array.isArray(am?.entities) ? am!.entities.length : null;
+
+  const hasDna = creativePrinciples.length > 0 || Object.keys(experienceIntent).length > 0;
+  const hasAm = amName || amIntent || amPages;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0, animation: "atlasTabIn 150ms ease" }}>
+      {/* Back nav */}
+      <button
+        onClick={onBack}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          fontSize: 12,
+          color: "rgba(244,236,220,0.5)",
+          padding: "0 2px 14px",
+          letterSpacing: "0.04em",
+          transition: "color 120ms ease",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(244,236,220,0.85)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(244,236,220,0.5)")}
+      >
+        <ChevronLeft size={13} strokeWidth={2} />
+        Back to checkpoints
+      </button>
+
+      {/* Header card */}
+      <div
+        style={{
+          background: bg,
+          border: `1px solid ${color.replace("0.85", "0.3").replace("0.75", "0.25").replace("0.95", "0.35")}`,
+          borderRadius: 14,
+          padding: "16px 16px 14px",
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+          <span
+            style={{
+              flex: "0 0 40px",
+              height: 40,
+              display: "grid",
+              placeItems: "center",
+              borderRadius: 10,
+              background: "rgba(0,0,0,0.25)",
+              fontSize: 20,
+              lineHeight: 1,
+            }}
+          >
+            {icon}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color,
+                marginBottom: 3,
+              }}
+            >
+              {cp.label || cp.type}
+            </div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: "rgba(244,236,220,0.96)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {cp.title}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "rgba(244,236,220,0.45)" }}>
+            {formatSnapshotTimestamp(cp.created_at)}
+          </span>
+          {cp.created_by === "system" ? (
+            <span
+              style={{
+                fontSize: 10.5,
+                color: "rgba(244,236,220,0.35)",
+                background: "rgba(255,255,255,0.06)",
+                borderRadius: 4,
+                padding: "1px 6px",
+                letterSpacing: "0.06em",
+              }}
+            >
+              saved by Atlas
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: 10.5,
+                color: "rgba(244,236,220,0.35)",
+                background: "rgba(255,255,255,0.06)",
+                borderRadius: 4,
+                padding: "1px 6px",
+                letterSpacing: "0.06em",
+              }}
+            >
+              saved by you
+            </span>
+          )}
+        </div>
+
+        {cp.notes && (
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: "rgba(244,236,220,0.55)",
+              lineHeight: 1.5,
+            }}
+          >
+            {cp.notes}
+          </div>
+        )}
+      </div>
+
+      {/* DNA Snapshot */}
+      {hasDna && (
+        <InspectSection title="DNA Snapshot">
+          {creativePrinciples.length > 0 && (
+            <InspectBlock label="Creative principles">
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: 16,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                {creativePrinciples.map((p, i) => (
+                  <li key={i} style={{ fontSize: 12.5, color: "rgba(244,236,220,0.78)", lineHeight: 1.45 }}>
+                    {String(p)}
+                  </li>
+                ))}
+              </ul>
+            </InspectBlock>
+          )}
+          {Object.keys(experienceIntent).length > 0 && (
+            <InspectBlock label="Experience intent">
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                {Object.entries(experienceIntent).map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <span
+                      style={{
+                        flex: "0 0 auto",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        textTransform: "capitalize",
+                        letterSpacing: "0.06em",
+                        color: "rgba(244,236,220,0.42)",
+                        paddingTop: 1,
+                        minWidth: 72,
+                      }}
+                    >
+                      {k.replace(/_/g, " ")}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: "rgba(244,236,220,0.78)", lineHeight: 1.45 }}>
+                      {typeof v === "object" ? JSON.stringify(v) : String(v ?? "—")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </InspectBlock>
+          )}
+        </InspectSection>
+      )}
+
+      {/* Application Model Snapshot */}
+      {hasAm && (
+        <InspectSection title="Application Model">
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {amName && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: "0 0 72px", fontSize: 11, fontWeight: 600, color: "rgba(244,236,220,0.42)", letterSpacing: "0.06em", paddingTop: 1 }}>
+                  Name
+                </span>
+                <span style={{ fontSize: 12.5, color: "rgba(244,236,220,0.78)" }}>{amName}</span>
+              </div>
+            )}
+            {amIntent && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: "0 0 72px", fontSize: 11, fontWeight: 600, color: "rgba(244,236,220,0.42)", letterSpacing: "0.06em", paddingTop: 1 }}>
+                  Intent
+                </span>
+                <span style={{ fontSize: 12.5, color: "rgba(244,236,220,0.78)", lineHeight: 1.45 }}>{amIntent}</span>
+              </div>
+            )}
+            {amDesc && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: "0 0 72px", fontSize: 11, fontWeight: 600, color: "rgba(244,236,220,0.42)", letterSpacing: "0.06em", paddingTop: 1 }}>
+                  About
+                </span>
+                <span style={{ fontSize: 12.5, color: "rgba(244,236,220,0.78)", lineHeight: 1.45 }}>{amDesc}</span>
+              </div>
+            )}
+            {amPages !== null && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: "0 0 72px", fontSize: 11, fontWeight: 600, color: "rgba(244,236,220,0.42)", letterSpacing: "0.06em", paddingTop: 1 }}>
+                  Pages
+                </span>
+                <span style={{ fontSize: 12.5, color: "rgba(244,236,220,0.78)" }}>
+                  {amPages} defined
+                </span>
+              </div>
+            )}
+            {amEntities !== null && amEntities > 0 && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: "0 0 72px", fontSize: 11, fontWeight: 600, color: "rgba(244,236,220,0.42)", letterSpacing: "0.06em", paddingTop: 1 }}>
+                  Entities
+                </span>
+                <span style={{ fontSize: 12.5, color: "rgba(244,236,220,0.78)" }}>
+                  {amEntities} defined
+                </span>
+              </div>
+            )}
+          </div>
+        </InspectSection>
+      )}
+
+      {!hasDna && !hasAm && (
+        <div
+          style={{
+            fontSize: 12,
+            color: "rgba(244,236,220,0.38)",
+            padding: "12px 2px",
+            lineHeight: 1.5,
+          }}
+        >
+          No DNA or model snapshot was captured at this point. Snapshots become richer as the project matures.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InspectSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: "rgba(244,236,220,0.35)",
+          padding: "0 2px 8px",
+          borderBottom: "1px solid rgba(244,236,220,0.07)",
+          marginBottom: 10,
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function InspectBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: "rgba(244,236,220,0.48)",
+          letterSpacing: "0.06em",
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      {children}
+    </div>
   );
 }
 

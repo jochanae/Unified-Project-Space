@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { logger } from "../lib/logger";
 import Anthropic from "@anthropic-ai/sdk";
 import { logProjectArtifact } from "../lib/artifactLog";
+import { createCheckpoint } from "./checkpoints";
 
 const router = Router();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -318,6 +319,17 @@ router.post("/projects/:id/design-plan/commit", async (req, res): Promise<void> 
       title: `Design Plan v${committed.version}`,
       metadata: { planId: committed.id, committedAt: committed.committedAt?.toISOString() ?? null },
       payload: committed.body as Record<string, unknown>,
+    });
+
+    // Checkpoint: each committed design plan version is a distinct milestone
+    void createCheckpoint({
+      projectId,
+      type: "design",
+      label: `Design Plan v${committed.version} committed`,
+      title: `Design Plan v${committed.version}`,
+      notes: `Committed by user. Plan ID: ${committed.id}.`,
+      createdBy: "system",
+      metadata: { planId: committed.id, version: committed.version },
     });
 
     res.json(serializePlan(committed));

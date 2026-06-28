@@ -63,6 +63,8 @@ export interface CreateCheckpointInput {
   amSnapshot?: Record<string, unknown>;
   buildRef?: string;
   messageRef?: number;
+  /** Extra caller-supplied context — merged into am_snapshot under `_meta` key. */
+  metadata?: Record<string, unknown>;
 }
 
 export async function createCheckpoint(
@@ -82,7 +84,7 @@ export async function createCheckpoint(
       ${input.notes ?? null},
       ${input.createdBy ?? "system"},
       ${JSON.stringify(input.dnaSnapshot ?? {})}::jsonb,
-      ${JSON.stringify(input.amSnapshot ?? {})}::jsonb,
+      ${JSON.stringify({ ...(input.amSnapshot ?? {}), ...(input.metadata ? { _meta: input.metadata } : {}) })}::jsonb,
       ${input.buildRef ?? null},
       ${input.messageRef ?? null},
       now()
