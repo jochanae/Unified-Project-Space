@@ -1820,12 +1820,7 @@ export default function Home() {
   const overviewCloseTimerRef = useRef<number | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(() => {
-    // Restore last active conversation so the thread loader fires on mount,
-    // not just when a new stream comes in. Without this, tabbing away and back
-    // loses the conversation because the effect at line ~2601 sees null and clears.
-    try { return localStorage.getItem("atlas-home-conversation-id"); } catch { return null; }
-  });
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const homeResetGenerationRef = useRef(0);
   const rememberActiveConversationId = useCallback((conversationId: string) => {
     try { localStorage.setItem("atlas-home-conversation-id", conversationId); } catch {}
