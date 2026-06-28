@@ -168,6 +168,16 @@ async function ensureColumns(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, "ensureColumns: project DNA columns failed — server will start anyway");
   }
+
+  try {
+    await db.execute(sql`
+      ALTER TABLE application_models
+        ADD COLUMN IF NOT EXISTS visual_sketches jsonb NOT NULL DEFAULT '[]'::jsonb
+    `);
+    logger.info("ensureColumns: application_models.visual_sketches verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: visual_sketches column failed — server will start anyway");
+  }
 }
 
 async function main() {

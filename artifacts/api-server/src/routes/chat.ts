@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable, applicationModelsTable } from "@workspace/db";
 import { maybeExtractGenome } from "../lib/genomeExtract";
-import { extractAndUpdateApplicationModel } from "../lib/applicationModelExtraction";
+import { extractAndUpdateApplicationModel, extractVisualMemoryFromAttachments } from "../lib/applicationModelExtraction";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -4141,6 +4141,17 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       assistantReply: displayContent,
     }).catch((err) => {
       logger.warn({ err, projectId }, "application model extraction failed — non-fatal");
+    });
+  }
+  // Visual Memory: when the user attached an image, extract design signals from it
+  // and persist them into the AM (experienceIntent + creativePrinciples + visualSketches).
+  if (projectId && allAttachments.length > 0) {
+    void extractVisualMemoryFromAttachments({
+      projectId,
+      attachments: allAttachments,
+      userMessage: message,
+    }).catch((err) => {
+      logger.warn({ err, projectId }, "visual memory extraction failed — non-fatal");
     });
   }
 });

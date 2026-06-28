@@ -318,6 +318,159 @@ async function applyModelPatch(projectId: number, patch: ApplicationModelPatch):
   }
 }
 
+const VISUAL_MEMORY_PROMPT = `You are analyzing an image attached by a product founder — it may be a sketch, wireframe, mockup, photo, moodboard, or any visual artifact.
+
+Your job is to extract design signals that reveal HOW this product should feel, look, and behave — not WHAT it does.
+
+Return a JSON object with ONLY the fields that are clearly signaled by the image. Omit any field with no clear signal.
+
+{
+  "description": "1-2 sentence factual description of what the image shows",
+  "creativePrinciples": [
+    "A design philosophy or constraint revealed by this image — short declarative statement"
+  ],
+  "experienceIntent": {
+    "emotionalRegister": ["calm", "focused"],
+    "interactionPosture": ["quick decisions", "low friction"],
+    "visualLanguage": ["minimal", "high contrast", "monochrome"],
+    "designPrinciples": ["Content-first", "No decorative chrome"],
+    "confidence": 75
+  },
+  "signals": {
+    "emotionalRegister": ["same as experienceIntent.emotionalRegister — for the sketch log"],
+    "visualLanguage": ["same as experienceIntent.visualLanguage — for the sketch log"],
+    "designPrinciples": ["same as experienceIntent.designPrinciples — for the sketch log"]
+  }
+}
+
+Rules:
+- description: always required — describe the artifact type and key visual choices
+- creativePrinciples: only if the layout/style choices reveal a clear product philosophy (e.g. "Density over whitespace", "Single action per screen")
+- experienceIntent: only extract sub-fields that the image clearly signals; confidence = how explicitly (0-100)
+- signals: mirrors emotionalRegister, visualLanguage, designPrinciples from experienceIntent (for the sketch log record)
+- If the image shows no design intent signals (e.g. it's a text screenshot or unrelated photo), return just {"description": "..."}
+
+Respond with ONLY the JSON object, no explanation.`;
+
+export async function extractVisualMemoryFromAttachments({
+  projectId,
+  attachments,
+  userMessage,
+}: {
+  projectId: number;
+  attachments: Array<{ base64: string; mediaType: string; name?: string }>;
+  userMessage?: string;
+}): Promise<void> {
+  if (!projectId || attachments.length === 0) return;
+
+  // Only process image attachments (not PDFs or other binary)
+  const imageAttachments = attachments.filter((a) =>
+    a.mediaType.startsWith("image/") && a.base64.length > 0,
+  );
+  if (imageAttachments.length === 0) return;
+
+  for (const attachment of imageAttachments) {
+    try {
+      const mediaType = attachment.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+      const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      if (!validTypes.includes(mediaType)) continue;
+
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 768,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType, data: attachment.base64 },
+              },
+              {
+                type: "text",
+                text: VISUAL_MEMORY_PROMPT + (userMessage ? `\n\nUser's caption: "${userMessage.slice(0, 300)}"` : ""),
+              },
+            ],
+          },
+        ],
+      });
+
+      const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+      if (!raw) continue;
+
+      const jsonStr = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+      let result: {
+        description?: string;
+        creativePrinciples?: string[];
+        experienceIntent?: {
+          emotionalRegister?: string[];
+          interactionPosture?: string[];
+          visualLanguage?: string[];
+          designPrinciples?: string[];
+          confidence?: number;
+        };
+        signals?: {
+          emotionalRegister?: string[];
+          visualLanguage?: string[];
+          designPrinciples?: string[];
+        };
+      };
+      try {
+        result = JSON.parse(jsonStr);
+      } catch {
+        logger.warn({ raw, projectId }, "visualMemoryExtraction: JSON parse failed");
+        continue;
+      }
+
+      if (!result.description) continue;
+
+      // Build the patch for the AM
+      const patch: ApplicationModelPatch = {};
+      if (result.creativePrinciples?.length) patch.creativePrinciples = result.creativePrinciples;
+      if (result.experienceIntent && Object.keys(result.experienceIntent).length > 0) {
+        patch.experienceIntent = result.experienceIntent;
+      }
+
+      // Append to visualSketches log (no raw pixels — compact summary only)
+      const sketchEntry = {
+        analyzedAt: new Date().toISOString(),
+        description: result.description,
+        signals: {
+          emotionalRegister: result.signals?.emotionalRegister ?? result.experienceIntent?.emotionalRegister ?? [],
+          visualLanguage: result.signals?.visualLanguage ?? result.experienceIntent?.visualLanguage ?? [],
+          designPrinciples: result.signals?.designPrinciples ?? result.experienceIntent?.designPrinciples ?? [],
+        },
+      };
+
+      // Write to AM: merge DNA patch + append sketch entry
+      const current = await db
+        .select()
+        .from(applicationModelsTable)
+        .where(eq(applicationModelsTable.projectId, projectId))
+        .limit(1);
+
+      if (current.length === 0) continue;
+      const row = current[0];
+
+      // Apply DNA signals via existing merge logic
+      if (Object.keys(patch).length > 0) {
+        await applyModelPatch(projectId, patch);
+      }
+
+      // Append sketch entry to visualSketches (separate update to avoid version conflicts)
+      const prevSketches = (row.visualSketches as unknown[]) ?? [];
+      await db
+        .update(applicationModelsTable)
+        .set({ visualSketches: [...prevSketches, sketchEntry] as any })
+        .where(eq(applicationModelsTable.projectId, projectId));
+
+      logger.info({ projectId, description: result.description.slice(0, 80) }, "visual memory: sketch processed");
+    } catch (err) {
+      logger.warn({ err, projectId }, "visual memory extraction: failed for one attachment — non-fatal");
+    }
+  }
+}
+
 export async function extractAndUpdateApplicationModel({
   projectId,
   userMessage,

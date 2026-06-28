@@ -16,6 +16,8 @@ export const applicationModelsTable = pgTable("application_models", {
   // Project DNA layers — Layer 2 (Creative Memory) and Layer 3 (Experience Intent)
   creativePrinciples: jsonb("creative_principles").notNull().default([]),
   experienceIntent: jsonb("experience_intent").notNull().default({}),
+  // Visual Memory — compact log of processed sketches/images (no raw pixels stored)
+  visualSketches: jsonb("visual_sketches").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -143,6 +145,19 @@ export const ApplicationModelDataSchema = z.object({
 //   Each entry is a short declarative statement the product must honour.
 export const CreativePrinciplesSchema = z.array(z.string()).default([]);
 
+// Visual Sketch entry — compact record written when a user-attached image is processed.
+// Raw pixels are never stored here; this is a searchable design-signal log.
+export const VisualSketchEntrySchema = z.object({
+  analyzedAt: z.string(),           // ISO timestamp
+  description: z.string(),          // 1-2 sentence summary of the image
+  signals: z.object({
+    emotionalRegister: z.array(z.string()).default([]),
+    visualLanguage: z.array(z.string()).default([]),
+    designPrinciples: z.array(z.string()).default([]),
+  }),
+});
+export const VisualSketchesSchema = z.array(VisualSketchEntrySchema).default([]);
+
 // Layer 3: Experience Intent — overwritten (with confidence tracking) on each pass.
 //   Captures the emotional + sensory brief that shapes every generated artifact.
 export const ExperienceIntentSchema = z.object({
@@ -173,6 +188,7 @@ export const ApplicationModelSchema = z.object({
   buildState: ApplicationModelBuildStateSchema,
   creativePrinciples: CreativePrinciplesSchema,
   experienceIntent: ExperienceIntentSchema,
+  visualSketches: VisualSketchesSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -187,6 +203,7 @@ export const ApplicationModelPatchSchema = z.object({
   buildState: ApplicationModelBuildStateSchema.optional(),
   creativePrinciples: CreativePrinciplesSchema.optional(),
   experienceIntent: ExperienceIntentSchema.optional(),
+  visualSketches: VisualSketchesSchema.optional(),
   reason: z.string().optional(),
 });
 
