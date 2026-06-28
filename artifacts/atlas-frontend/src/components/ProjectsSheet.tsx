@@ -41,7 +41,7 @@ export function ProjectsSheet({ onClose }: Props) {
     const name = newName.trim() || "New Operation " + Math.floor(Math.random() * 1000);
     setCreating(true);
     setCreateError(null);
-    createProject.mutate({ data: { name } }, {
+    createProject.mutate({ data: { name, status: "committed" } }, {
       onSuccess: (created) => {
         queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
         setNewName("");
