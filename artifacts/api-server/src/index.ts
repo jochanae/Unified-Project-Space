@@ -160,27 +160,6 @@ async function ensureColumns(): Promise<void> {
 
   try {
     await db.execute(sql`
-      ALTER TABLE application_models
-        ADD COLUMN IF NOT EXISTS creative_principles jsonb NOT NULL DEFAULT '[]'::jsonb,
-        ADD COLUMN IF NOT EXISTS experience_intent jsonb NOT NULL DEFAULT '{}'::jsonb
-    `);
-    logger.info("ensureColumns: application_models.creative_principles + experience_intent verified");
-  } catch (err) {
-    logger.warn({ err }, "ensureColumns: project DNA columns failed — server will start anyway");
-  }
-
-  try {
-    await db.execute(sql`
-      ALTER TABLE application_models
-        ADD COLUMN IF NOT EXISTS visual_sketches jsonb NOT NULL DEFAULT '[]'::jsonb
-    `);
-    logger.info("ensureColumns: application_models.visual_sketches verified");
-  } catch (err) {
-    logger.warn({ err }, "ensureColumns: visual_sketches column failed — server will start anyway");
-  }
-
-  try {
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS project_artifacts (
         id serial PRIMARY KEY,
         project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -223,24 +202,47 @@ async function ensureColumns(): Promise<void> {
     logger.warn({ err }, "ensureColumns: project_dna table failed — server will start anyway");
   }
 
+  // Only migrate if the source columns still exist (idempotent — skipped silently on second+ boots)
+  try {
+    const colCheck = await db.execute(sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'application_models' AND column_name = 'creative_principles'
+    `);
+    if ((colCheck as { rows: unknown[] }).rows.length > 0) {
+      await db.execute(sql`
+        INSERT INTO project_dna (project_id, creative_principles, experience_intent, visual_sketches)
+        SELECT
+          am.project_id,
+          COALESCE(am.creative_principles, '[]'::jsonb),
+          COALESCE(am.experience_intent, '{}'::jsonb),
+          COALESCE(am.visual_sketches, '[]'::jsonb)
+        FROM application_models am
+        WHERE
+          am.creative_principles::text <> '[]'
+          OR am.experience_intent::text <> '{}'
+          OR am.visual_sketches::text <> '[]'
+        ON CONFLICT (project_id) DO NOTHING
+      `);
+      logger.info("ensureColumns: project_dna data migration applied");
+    } else {
+      logger.info("ensureColumns: project_dna data migration skipped — already complete");
+    }
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: project_dna data migration failed — non-fatal");
+  }
+
+  // Drop DNA columns from application_models — safe now that project_dna holds the data.
+  // Uses DROP COLUMN IF EXISTS so repeated boots are idempotent.
   try {
     await db.execute(sql`
-      INSERT INTO project_dna (project_id, creative_principles, experience_intent, visual_sketches)
-      SELECT
-        am.project_id,
-        COALESCE(am.creative_principles, '[]'::jsonb),
-        COALESCE(am.experience_intent, '{}'::jsonb),
-        COALESCE(am.visual_sketches, '[]'::jsonb)
-      FROM application_models am
-      WHERE
-        am.creative_principles::text <> '[]'
-        OR am.experience_intent::text <> '{}'
-        OR am.visual_sketches::text <> '[]'
-      ON CONFLICT (project_id) DO NOTHING
+      ALTER TABLE application_models
+        DROP COLUMN IF EXISTS creative_principles,
+        DROP COLUMN IF EXISTS experience_intent,
+        DROP COLUMN IF EXISTS visual_sketches
     `);
-    logger.info("ensureColumns: project_dna data migration verified");
+    logger.info("ensureColumns: legacy DNA columns dropped from application_models");
   } catch (err) {
-    logger.warn({ err }, "ensureColumns: project_dna data migration skipped — non-fatal");
+    logger.warn({ err }, "ensureColumns: legacy DNA column drop failed — non-fatal");
   }
 }
 

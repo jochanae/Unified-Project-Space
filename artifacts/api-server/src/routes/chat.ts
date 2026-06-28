@@ -2667,6 +2667,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     creativePrinciples: unknown;
     experienceIntent: unknown;
     visualSketches: unknown;
+    dnaStatus: unknown;
     identity: unknown;
     intent: unknown;
     buildState: unknown;
@@ -2678,7 +2679,7 @@ router.post("/chat", async (req, res): Promise<void> => {
       const [[amRow], [dnaRow]] = await Promise.all([
         db.select({ identity: applicationModelsTable.identity, intent: applicationModelsTable.intent, buildState: applicationModelsTable.buildState })
           .from(applicationModelsTable).where(eq(applicationModelsTable.projectId, projectId)).limit(1),
-        db.select({ creativePrinciples: projectDnaTable.creativePrinciples, experienceIntent: projectDnaTable.experienceIntent, visualSketches: projectDnaTable.visualSketches })
+        db.select({ creativePrinciples: projectDnaTable.creativePrinciples, experienceIntent: projectDnaTable.experienceIntent, visualSketches: projectDnaTable.visualSketches, status: projectDnaTable.status })
           .from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1),
       ]);
       if (amRow) {
@@ -2689,6 +2690,7 @@ router.post("/chat", async (req, res): Promise<void> => {
           creativePrinciples: dnaRow?.creativePrinciples ?? [],
           experienceIntent: dnaRow?.experienceIntent ?? {},
           visualSketches: dnaRow?.visualSketches ?? [],
+          dnaStatus: dnaRow?.status ?? {},
         };
       }
     } catch { /* non-fatal — DNA enrichment is additive only */ }
@@ -2831,29 +2833,61 @@ HARD RULE: Never answer from the context of a different project unless the user 
   }
 
   // Project DNA: Creative Principles + Experience Intent + Visual Memory sketches
-  // Extracted from conversation after each turn and persisted to the Application Model.
   // Injected here so every response is shaped by the product's accumulated soul.
+  // Status precedence: committed > confirmed (strong constraints) > inferred (suggestions) > guessed (skip)
   if (!isFoundationMode && projectDNARow) {
+    const dnaStatus = (projectDNARow.dnaStatus as Record<string, string>) ?? {};
+    // Tier helper: committed/confirmed = strong; inferred = soft; guessed/missing = skip
+    const tier = (key: string): "strong" | "soft" | "skip" => {
+      const s = dnaStatus[key];
+      if (s === "committed" || s === "confirmed") return "strong";
+      if (s === "inferred") return "soft";
+      return "skip";
+    };
+
     const principles = (projectDNARow.creativePrinciples as string[]) ?? [];
+    const principlesTier = tier("creativePrinciples");
     const ei = (projectDNARow.experienceIntent as Record<string, unknown>) ?? {};
-    const emotionalRegister = (ei.emotionalRegister as string[]) ?? [];
-    const interactionPosture = (ei.interactionPosture as string[]) ?? [];
-    const visualLanguage = (ei.visualLanguage as string[]) ?? [];
-    const designPrinciples = (ei.designPrinciples as string[]) ?? [];
+    const emotionalRegister = (ei.emotionalRegister as string[] | undefined) ?? [];
+    const interactionPosture = (ei.interactionPosture as string[] | undefined) ?? [];
+    const visualLanguage = (ei.visualLanguage as string[] | undefined) ?? [];
+    const designPrinciples = (ei.designPrinciples as string[] | undefined) ?? [];
     const sketches = (projectDNARow.visualSketches as Array<{ description?: string; signals?: { emotionalRegister?: string[]; visualLanguage?: string[]; designPrinciples?: string[] } }>) ?? [];
-    const hasAny = principles.length > 0 || emotionalRegister.length > 0 || interactionPosture.length > 0 || visualLanguage.length > 0 || designPrinciples.length > 0 || sketches.length > 0;
+
+    // Only include fields that are at least "inferred" (skip guessed/unknown)
+    const includePrinciples = principles.length > 0 && principlesTier !== "skip";
+    const includeER = emotionalRegister.length > 0 && tier("emotionalRegister") !== "skip";
+    const includeIP = interactionPosture.length > 0 && tier("interactionPosture") !== "skip";
+    const includeVL = visualLanguage.length > 0 && tier("visualLanguage") !== "skip";
+    const includeDP = designPrinciples.length > 0 && tier("designPrinciples") !== "skip";
+    const hasEI = includeER || includeIP || includeVL || includeDP;
+    const hasAny = includePrinciples || hasEI || sketches.length > 0;
+
     if (hasAny) {
       let dnaBlock = `\n\n--- PROJECT DNA ---`;
-      if (principles.length > 0) {
-        dnaBlock += `\nCREATIVE PRINCIPLES — these define the soul of this product. Every artifact you generate must honour them:\n${principles.map((p) => `• ${p}`).join("\n")}`;
+      if (includePrinciples) {
+        const strength = principlesTier === "strong" ? "CONFIRMED — must be honoured in every artifact" : "inferred from conversation — treat as directional";
+        dnaBlock += `\nCREATIVE PRINCIPLES (${strength}):\n${principles.map((p) => `• ${p}`).join("\n")}`;
       }
-      const hasEI = emotionalRegister.length || interactionPosture.length || visualLanguage.length || designPrinciples.length;
       if (hasEI) {
         dnaBlock += `\n\nEXPERIENCE INTENT — shape every screen, layout, copy, and interaction against this brief:`;
-        if (emotionalRegister.length) dnaBlock += `\n• Feel: ${emotionalRegister.join(", ")}`;
-        if (interactionPosture.length) dnaBlock += `\n• Usage posture: ${interactionPosture.join(", ")}`;
-        if (visualLanguage.length) dnaBlock += `\n• Visual language: ${visualLanguage.join(", ")}`;
-        if (designPrinciples.length) dnaBlock += `\n• Design principles: ${designPrinciples.map((p) => `"${p}"`).join(" | ")}`;
+        if (includeER) {
+          const label = tier("emotionalRegister") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Feel ${label}: ${emotionalRegister.join(", ")}`;
+        }
+        if (includeIP) {
+          const label = tier("interactionPosture") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Usage posture ${label}: ${interactionPosture.join(", ")}`;
+        }
+        if (includeVL) {
+          const label = tier("visualLanguage") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Visual language ${label}: ${visualLanguage.join(", ")}`;
+        }
+        if (includeDP) {
+          const label = tier("designPrinciples") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Design principles ${label}: ${designPrinciples.map((p) => `"${p}"`).join(" | ")}`;
+        }
+        dnaBlock += `\n(confirmed fields are locked constraints; inferred fields are strong suggestions)`;
       }
       if (sketches.length > 0) {
         dnaBlock += `\n\nVISUAL MEMORY — design signals extracted from attachments the founder shared:`;

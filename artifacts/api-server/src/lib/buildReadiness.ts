@@ -94,22 +94,31 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
 
   // ── Check 2: Experience Intent confirmed ───────────────────────────────────
   const experienceIntent = (dna?.experienceIntent as Record<string, unknown>) ?? {};
-  const hasEI = Object.keys(experienceIntent).length > 0;
-  const eiConfirmed = !!(experienceIntent.lastConfirmed);
+  const dnaStatus = (dna?.status as Record<string, string>) ?? {};
+  // Check confirmation via status field (confirmed/committed = explicit user action)
+  // Falls back to lastConfirmed for backwards compatibility with pre-DNA-table records
+  const STRONG_STATUSES = new Set(["confirmed", "committed"]);
+  const eiFieldsConfirmed = ["emotionalRegister", "interactionPosture", "visualLanguage", "designPrinciples"]
+    .some((k) => STRONG_STATUSES.has(dnaStatus[k] ?? ""));
+  const eiConfirmed = eiFieldsConfirmed || !!(experienceIntent.lastConfirmed);
   const eiConfidence = (experienceIntent.confidence as number) ?? 0;
+  const hasEI = (experienceIntent.emotionalRegister as string[] | undefined)?.length ||
+    (experienceIntent.interactionPosture as string[] | undefined)?.length ||
+    (experienceIntent.visualLanguage as string[] | undefined)?.length ||
+    (experienceIntent.designPrinciples as string[] | undefined)?.length;
 
-  if (eiConfirmed && eiConfidence >= 60) {
+  if (eiConfirmed && (hasEI || eiConfidence >= 60)) {
     const register = (experienceIntent.emotionalRegister as string[] | undefined)?.join(", ") ?? "";
     checks.push({
       name: "Experience Intent confirmed",
       status: "pass",
-      explanation: `${register || "aesthetic confirmed"} — confidence ${eiConfidence}%`,
+      explanation: `${register || "aesthetic confirmed"} — user confirmed`,
     });
   } else if (hasEI) {
     checks.push({
       name: "Experience Intent confirmed",
       status: "warn",
-      explanation: `Experience intent inferred but not confirmed (confidence ${eiConfidence}%) — Builder will make visual guesses`,
+      explanation: `Experience intent inferred but not confirmed (${eiConfidence ? `confidence ${eiConfidence}%` : "edit & save in Soul tab to confirm"}) — Builder will make visual guesses`,
     });
   } else {
     checks.push({
