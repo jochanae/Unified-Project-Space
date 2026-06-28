@@ -2,6 +2,14 @@ import { db, projectArtifactsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
+export const ARTIFACT_TYPES = [
+  "design_plan",
+  "blueprint_snapshot",
+  "build_output",
+  "visual_sketch",
+] as const;
+export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
+
 // Shared helper: log a generated artifact for a project.
 // Version is assigned atomically via MAX(version)+1 inside a transaction
 // to prevent duplicate version numbers under concurrent inserts.
@@ -14,12 +22,16 @@ export async function logProjectArtifact({
   payload = {},
 }: {
   projectId: number;
-  type: string;
+  type: ArtifactType;
   version?: number;
   title: string;
   metadata?: Record<string, unknown>;
   payload?: Record<string, unknown>;
 }): Promise<void> {
+  if (!(ARTIFACT_TYPES as readonly string[]).includes(type)) {
+    logger.warn({ projectId, type }, "logProjectArtifact: unknown type — skipping");
+    return;
+  }
   try {
     await db.transaction(async (tx) => {
       let resolvedVersion = version;

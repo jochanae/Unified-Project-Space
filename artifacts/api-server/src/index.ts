@@ -196,6 +196,10 @@ async function ensureColumns(): Promise<void> {
       CREATE INDEX IF NOT EXISTS project_artifacts_project_id_idx
         ON project_artifacts (project_id, created_at DESC)
     `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS project_artifacts_version_uniq
+        ON project_artifacts (project_id, type, version)
+    `);
     logger.info("ensureColumns: project_artifacts table verified");
   } catch (err) {
     logger.warn({ err }, "ensureColumns: project_artifacts table failed — server will start anyway");
