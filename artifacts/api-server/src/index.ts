@@ -204,6 +204,44 @@ async function ensureColumns(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, "ensureColumns: project_artifacts table failed — server will start anyway");
   }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS project_dna (
+        id serial PRIMARY KEY,
+        project_id integer NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+        creative_principles jsonb NOT NULL DEFAULT '[]'::jsonb,
+        experience_intent jsonb NOT NULL DEFAULT '{}'::jsonb,
+        visual_sketches jsonb NOT NULL DEFAULT '[]'::jsonb,
+        confidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+        status jsonb NOT NULL DEFAULT '{}'::jsonb,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    logger.info("ensureColumns: project_dna table verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: project_dna table failed — server will start anyway");
+  }
+
+  try {
+    await db.execute(sql`
+      INSERT INTO project_dna (project_id, creative_principles, experience_intent, visual_sketches)
+      SELECT
+        am.project_id,
+        COALESCE(am.creative_principles, '[]'::jsonb),
+        COALESCE(am.experience_intent, '{}'::jsonb),
+        COALESCE(am.visual_sketches, '[]'::jsonb)
+      FROM application_models am
+      WHERE
+        am.creative_principles::text <> '[]'
+        OR am.experience_intent::text <> '{}'
+        OR am.visual_sketches::text <> '[]'
+      ON CONFLICT (project_id) DO NOTHING
+    `);
+    logger.info("ensureColumns: project_dna data migration verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: project_dna data migration skipped — non-fatal");
+  }
 }
 
 async function main() {

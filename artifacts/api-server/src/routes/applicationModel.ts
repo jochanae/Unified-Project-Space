@@ -5,6 +5,7 @@ import { ApplicationModelPatchSchema, ApplicationModelSchema, ApplicationModelHi
 import { logger } from "../lib/logger";
 import { syncFlowCanvasFromModel } from "../lib/flowMapSync";
 import { logProjectArtifact } from "../lib/artifactLog";
+import { getOrCreateDna, serializeDna } from "./projectDna";
 
 export { syncFlowCanvasFromModel };
 
@@ -36,9 +37,6 @@ function serializeModel(row: typeof applicationModelsTable.$inferSelect) {
     data: row.data ?? { entities: [], relationships: [] },
     logic: row.logic ?? [],
     buildState: row.buildState ?? {},
-    creativePrinciples: row.creativePrinciples ?? [],
-    experienceIntent: row.experienceIntent ?? {},
-    visualSketches: row.visualSketches ?? [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -212,27 +210,35 @@ router.post("/projects/:id/model/approve", async (req, res): Promise<void> => {
 
     const updated = await getOrCreateApplicationModel(projectId);
 
-    // Log full AM snapshot to artifact gallery — fire and forget
-    void logProjectArtifact({
-      projectId,
-      type: "blueprint_snapshot",
-      version: newVersion,
-      title: `Blueprint v${newVersion}`,
-      metadata: { approvedAt: newIntent.approvedAt as string },
-      payload: {
-        identity: updated.identity,
-        intent: updated.intent,
-        pages: updated.pages,
-        components: updated.components,
-        data: updated.data,
-        logic: updated.logic,
-        buildState: updated.buildState,
-        creativePrinciples: updated.creativePrinciples,
-        experienceIntent: updated.experienceIntent,
-        snapshotVersion: newVersion,
-        snapshotAt: new Date().toISOString(),
-      },
-    });
+    // Log full AM snapshot (including DNA) to artifact gallery — fire and forget
+    void (async () => {
+      try {
+        const dna = await getOrCreateDna(projectId);
+        const dnaData = serializeDna(dna);
+        await logProjectArtifact({
+          projectId,
+          type: "blueprint_snapshot",
+          version: newVersion,
+          title: `Blueprint v${newVersion}`,
+          metadata: { approvedAt: newIntent.approvedAt as string },
+          payload: {
+            identity: updated.identity,
+            intent: updated.intent,
+            pages: updated.pages,
+            components: updated.components,
+            data: updated.data,
+            logic: updated.logic,
+            buildState: updated.buildState,
+            creativePrinciples: dnaData.creativePrinciples,
+            experienceIntent: dnaData.experienceIntent,
+            snapshotVersion: newVersion,
+            snapshotAt: new Date().toISOString(),
+          },
+        });
+      } catch (err) {
+        logger.warn({ err, projectId }, "blueprint approve: artifact log failed — non-fatal");
+      }
+    })();
 
     res.json(serializeModel(updated));
   } catch (err) {

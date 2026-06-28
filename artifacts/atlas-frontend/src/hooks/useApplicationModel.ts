@@ -68,25 +68,6 @@ export interface AMBuildState {
   approvedAt?: string | null;
 }
 
-export interface AMExperienceIntent {
-  emotionalRegister?: string[];
-  interactionPosture?: string[];
-  visualLanguage?: string[];
-  designPrinciples?: string[];
-  confidence?: number;
-  lastConfirmed?: string | null;
-}
-
-export interface AMVisualSketch {
-  analyzedAt: string;
-  description: string;
-  signals: {
-    emotionalRegister?: string[];
-    visualLanguage?: string[];
-    designPrinciples?: string[];
-  };
-}
-
 export interface ApplicationModel {
   id: number;
   projectId: number;
@@ -98,16 +79,13 @@ export interface ApplicationModel {
   data: AMData;
   logic: AMLogic[];
   buildState: AMBuildState;
-  creativePrinciples: string[];
-  experienceIntent: AMExperienceIntent;
-  visualSketches: AMVisualSketch[];
   createdAt: string;
   updatedAt: string;
 }
 
 export type ApplicationModelPatch = Partial<Pick<ApplicationModel,
   | "identity" | "intent" | "pages" | "components" | "data" | "logic"
-  | "buildState" | "creativePrinciples" | "experienceIntent" | "visualSketches"
+  | "buildState"
 >> & { reason?: string };
 
 export function useApplicationModel(projectId: number | null) {

@@ -1,4 +1,4 @@
-import { db, applicationModelsTable, designPlansTable } from "@workspace/db";
+import { db, applicationModelsTable, designPlansTable, projectDnaTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 
 export interface ReadinessCheck {
@@ -38,7 +38,7 @@ function tokenize(arr: string[]): string[] {
 }
 
 export async function checkBuildReadiness(projectId: number): Promise<BuildReadinessResult> {
-  const [amRows, planRows] = await Promise.all([
+  const [amRows, planRows, dnaRows] = await Promise.all([
     db
       .select()
       .from(applicationModelsTable)
@@ -50,9 +50,15 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
       .where(eq(designPlansTable.projectId, projectId))
       .orderBy(desc(designPlansTable.version))
       .limit(1),
+    db
+      .select()
+      .from(projectDnaTable)
+      .where(eq(projectDnaTable.projectId, projectId))
+      .limit(1),
   ]);
 
   const model = amRows[0] ?? null;
+  const dna = dnaRows[0] ?? null;
   const plan = planRows[0] ?? null;
   const checks: ReadinessCheck[] = [];
 
@@ -87,7 +93,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
   }
 
   // ── Check 2: Experience Intent confirmed ───────────────────────────────────
-  const experienceIntent = (model?.experienceIntent as Record<string, unknown>) ?? {};
+  const experienceIntent = (dna?.experienceIntent as Record<string, unknown>) ?? {};
   const hasEI = Object.keys(experienceIntent).length > 0;
   const eiConfirmed = !!(experienceIntent.lastConfirmed);
   const eiConfidence = (experienceIntent.confidence as number) ?? 0;
@@ -160,7 +166,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
   }
 
   // ── Check 5: Design principles captured ───────────────────────────────────
-  const creativePrinciples = (model?.creativePrinciples as string[]) ?? [];
+  const creativePrinciples = (dna?.creativePrinciples as string[]) ?? [];
   if (creativePrinciples.length >= 2) {
     checks.push({
       name: "Design principles captured",

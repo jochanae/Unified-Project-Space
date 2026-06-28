@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, applicationModelsTable, designPlansTable, projectsTable } from "@workspace/db";
+import { db, applicationModelsTable, designPlansTable, projectsTable, projectDnaTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
@@ -153,20 +153,20 @@ Rules:
 - Respond with ONLY the JSON object`;
 
 async function generateDesignPlanBody(projectId: number): Promise<Record<string, unknown>> {
-  const rows = await db
-    .select()
-    .from(applicationModelsTable)
-    .where(eq(applicationModelsTable.projectId, projectId))
-    .limit(1);
+  const [rows, dnaRows] = await Promise.all([
+    db.select().from(applicationModelsTable).where(eq(applicationModelsTable.projectId, projectId)).limit(1),
+    db.select().from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1),
+  ]);
 
   if (rows.length === 0) return {};
   const model = rows[0];
+  const dna = dnaRows[0] ?? null;
 
   const modelSummary = {
     identity: model.identity ?? {},
     intent: model.intent ?? {},
-    creativePrinciples: model.creativePrinciples ?? [],
-    experienceIntent: model.experienceIntent ?? {},
+    creativePrinciples: (dna?.creativePrinciples as string[]) ?? [],
+    experienceIntent: (dna?.experienceIntent as Record<string, unknown>) ?? {},
     pages: (model.pages as Array<{ name: string; route?: string }> ?? []).slice(0, 10).map((p) => ({ name: p.name, route: p.route })),
   };
 

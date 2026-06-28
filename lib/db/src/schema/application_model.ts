@@ -13,11 +13,6 @@ export const applicationModelsTable = pgTable("application_models", {
   data: jsonb("data").notNull().default({ entities: [], relationships: [] }),
   logic: jsonb("logic").notNull().default([]),
   buildState: jsonb("build_state").notNull().default({}),
-  // Project DNA layers — Layer 2 (Creative Memory) and Layer 3 (Experience Intent)
-  creativePrinciples: jsonb("creative_principles").notNull().default([]),
-  experienceIntent: jsonb("experience_intent").notNull().default({}),
-  // Visual Memory — compact log of processed sketches/images (no raw pixels stored)
-  visualSketches: jsonb("visual_sketches").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -186,9 +181,6 @@ export const ApplicationModelSchema = z.object({
   data: ApplicationModelDataSchema,
   logic: z.array(ApplicationModelLogicSchema).default([]),
   buildState: ApplicationModelBuildStateSchema,
-  creativePrinciples: CreativePrinciplesSchema,
-  experienceIntent: ExperienceIntentSchema,
-  visualSketches: VisualSketchesSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -201,11 +193,65 @@ export const ApplicationModelPatchSchema = z.object({
   data: ApplicationModelDataSchema.optional(),
   logic: z.array(ApplicationModelLogicSchema).optional(),
   buildState: ApplicationModelBuildStateSchema.optional(),
+  reason: z.string().optional(),
+});
+
+// ── Project DNA ───────────────────────────────────────────────────────────────
+// Graduated from application_models: Creative Principles, Experience Intent,
+// and Visual Memory now live in their own table with per-field confidence/status.
+export const projectDnaTable = pgTable("project_dna", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }).unique(),
+  creativePrinciples: jsonb("creative_principles").notNull().default([]),
+  experienceIntent: jsonb("experience_intent").notNull().default({}),
+  visualSketches: jsonb("visual_sketches").notNull().default([]),
+  // Per-field confidence scores (0-100)
+  confidence: jsonb("confidence").notNull().default({}),
+  // Per-field status: guessed | inferred | confirmed | committed
+  status: jsonb("status").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const DnaFieldStatusSchema = z.enum(["guessed", "inferred", "confirmed", "committed"]);
+export type DnaFieldStatus = z.infer<typeof DnaFieldStatusSchema>;
+
+export const ProjectDnaStatusSchema = z.object({
+  creativePrinciples: DnaFieldStatusSchema.optional(),
+  emotionalRegister: DnaFieldStatusSchema.optional(),
+  interactionPosture: DnaFieldStatusSchema.optional(),
+  visualLanguage: DnaFieldStatusSchema.optional(),
+  designPrinciples: DnaFieldStatusSchema.optional(),
+  visualSketches: DnaFieldStatusSchema.optional(),
+}).default({});
+
+export const ProjectDnaConfidenceSchema = z.object({
+  creativePrinciples: z.number().min(0).max(100).optional(),
+  emotionalRegister: z.number().min(0).max(100).optional(),
+  interactionPosture: z.number().min(0).max(100).optional(),
+  visualLanguage: z.number().min(0).max(100).optional(),
+  designPrinciples: z.number().min(0).max(100).optional(),
+}).default({});
+
+export const ProjectDnaSchema = z.object({
+  id: z.number(),
+  projectId: z.number(),
+  creativePrinciples: CreativePrinciplesSchema,
+  experienceIntent: ExperienceIntentSchema,
+  visualSketches: VisualSketchesSchema,
+  confidence: ProjectDnaConfidenceSchema,
+  status: ProjectDnaStatusSchema,
+  updatedAt: z.string(),
+});
+
+export const ProjectDnaPatchSchema = z.object({
   creativePrinciples: CreativePrinciplesSchema.optional(),
   experienceIntent: ExperienceIntentSchema.optional(),
   visualSketches: VisualSketchesSchema.optional(),
-  reason: z.string().optional(),
+  confidence: ProjectDnaConfidenceSchema.optional(),
+  status: ProjectDnaStatusSchema.optional(),
 });
+
+export type ProjectDna = typeof projectDnaTable.$inferSelect;
 
 export const ApplicationModelHistorySchema = z.object({
   id: z.number(),

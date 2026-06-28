@@ -3,6 +3,8 @@ import { useApplicationModel } from "@/hooks/useApplicationModel";
 import type { AMPage, AMComponent, AMEntity, AMRelationship, AMLogic, ApplicationModelPatch } from "@/hooks/useApplicationModel";
 import { useModelAlignment } from "@/hooks/useModelAlignment";
 import type { AlignmentResult, AlignmentItemResult } from "@/hooks/useModelAlignment";
+import { useProjectDNA } from "@/hooks/useProjectDNA";
+import type { ProjectDNAPatch } from "@/hooks/useProjectDNA";
 import { ExperienceIntentCard } from "./ExperienceIntentCard";
 import { DesignPlanPanel } from "./DesignPlanPanel";
 
@@ -443,12 +445,15 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
   const { model, loading, approve, unapprove, refetch, patch } = useApplicationModel(projectId);
   const [patchSaving, setPatchSaving] = useState(false);
   const { alignment, refetch: refetchAlignment } = useModelAlignment(projectId);
+  const { dna, refetch: refetchDna, patch: dnaPatch } = useProjectDNA(projectId);
+  const [dnaPatchSaving, setDnaPatchSaving] = useState(false);
 
   useEffect(() => {
     if (refreshTrigger === undefined || refreshTrigger === 0) return;
     void refetch();
     void refetchAlignment();
-  }, [refreshTrigger, refetch, refetchAlignment]);
+    void refetchDna();
+  }, [refreshTrigger, refetch, refetchAlignment, refetchDna]);
 
   const handleApprove = useCallback(async () => {
     setApproving(true);
@@ -463,10 +468,10 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
   }, [unapprove]);
 
   const hasSoul = !!(
-    model?.experienceIntent &&
-    ((model.experienceIntent.emotionalRegister?.length ?? 0) > 0 ||
-      (model.experienceIntent.visualLanguage?.length ?? 0) > 0 ||
-      (model.creativePrinciples?.length ?? 0) > 0)
+    dna &&
+    ((dna.experienceIntent.emotionalRegister?.length ?? 0) > 0 ||
+      (dna.experienceIntent.visualLanguage?.length ?? 0) > 0 ||
+      (dna.creativePrinciples?.length ?? 0) > 0)
   );
 
   const handlePatch = useCallback(async (update: ApplicationModelPatch) => {
@@ -474,6 +479,12 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
     await patch(update);
     setPatchSaving(false);
   }, [patch]);
+
+  const handleDnaPatch = useCallback(async (update: ProjectDNAPatch) => {
+    setDnaPatchSaving(true);
+    await dnaPatch(update);
+    setDnaPatchSaving(false);
+  }, [dnaPatch]);
 
   const tabs: { id: BPTab; label: string; dot?: boolean }[] = [
     { id: "spec", label: "Spec" },
@@ -582,14 +593,15 @@ export function BlueprintPanel({ projectId, refreshTrigger }: BlueprintPanelProp
         {!loading && activeTab === "components" && <ComponentsTab model={model} />}
         {!loading && activeTab === "data" && <DataTab model={model} />}
         {!loading && activeTab === "logic" && <LogicTab model={model} />}
-        {!loading && activeTab === "soul" && (
+        {!loading && activeTab === "soul" && dna && (
           <ExperienceIntentCard
-            experienceIntent={model?.experienceIntent ?? {}}
-            creativePrinciples={model?.creativePrinciples ?? []}
-            visualSketches={model?.visualSketches ?? []}
-            onSave={handlePatch}
-            saving={patchSaving}
+            dna={dna}
+            onSave={handleDnaPatch}
+            saving={dnaPatchSaving}
           />
+        )}
+        {!loading && activeTab === "soul" && !dna && (
+          <EmptySlot message="Share how you want this product to feel — Axiom will capture it here." />
         )}
         {activeTab === "design" && <DesignPlanPanel projectId={projectId} />}
       </div>

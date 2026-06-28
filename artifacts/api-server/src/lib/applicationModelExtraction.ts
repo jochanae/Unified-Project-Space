@@ -11,7 +11,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { db, applicationModelsTable, applicationModelHistoryTable } from "@workspace/db";
+import { db, applicationModelsTable, applicationModelHistoryTable, projectDnaTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logProjectArtifact } from "./artifactLog";
 import { logger } from "./logger";
@@ -121,15 +121,15 @@ Rules:
 Respond with ONLY the JSON object, no explanation.`;
 
 async function getCurrentModel(projectId: number): Promise<Record<string, unknown>> {
-  const rows = await db
-    .select()
-    .from(applicationModelsTable)
-    .where(eq(applicationModelsTable.projectId, projectId))
-    .limit(1);
+  const [amRows, dnaRows] = await Promise.all([
+    db.select().from(applicationModelsTable).where(eq(applicationModelsTable.projectId, projectId)).limit(1),
+    db.select().from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1),
+  ]);
 
-  if (rows.length === 0) return {};
+  if (amRows.length === 0) return {};
 
-  const row = rows[0];
+  const row = amRows[0];
+  const dna = dnaRows[0];
   return {
     identity: row.identity ?? {},
     intent: row.intent ?? {},
@@ -137,8 +137,8 @@ async function getCurrentModel(projectId: number): Promise<Record<string, unknow
     components: row.components ?? [],
     data: row.data ?? { entities: [], relationships: [] },
     logic: row.logic ?? [],
-    creativePrinciples: row.creativePrinciples ?? [],
-    experienceIntent: row.experienceIntent ?? {},
+    creativePrinciples: (dna?.creativePrinciples as string[]) ?? [],
+    experienceIntent: (dna?.experienceIntent as Record<string, unknown>) ?? {},
   };
 }
 
@@ -272,43 +272,21 @@ async function applyModelPatch(projectId: number, patch: ApplicationModelPatch):
     }
   }
 
-  // Merge Creative Principles — accumulate, never delete, deduplicate by normalised text
-  if (patch.creativePrinciples?.length) {
-    const prev = (row.creativePrinciples as string[]) ?? [];
-    const prevNorm = new Set(prev.map((p) => p.trim().toLowerCase()));
-    const newPrinciples = patch.creativePrinciples.filter((p) => p && !prevNorm.has(p.trim().toLowerCase()));
-    if (newPrinciples.length > 0) {
-      const merged = [...prev, ...newPrinciples];
-      updates.creativePrinciples = merged;
-      historyRows.push({ projectId, modelVersion: newVersion, fieldChanged: "creativePrinciples", previousValue: prev, newValue: merged, reason: "conversation-extracted" });
-    }
-  }
+  if (historyRows.length === 0 && !patch.creativePrinciples?.length && !patch.experienceIntent) return; // nothing new
 
-  // Merge Experience Intent — overwrite sub-fields present in patch; preserve fields not mentioned
-  if (patch.experienceIntent && Object.keys(patch.experienceIntent).length > 0) {
-    const prev = (row.experienceIntent as Record<string, unknown>) ?? {};
-    const merged: Record<string, unknown> = { ...prev };
-    const ei = patch.experienceIntent;
-    if (ei.emotionalRegister?.length)    merged.emotionalRegister = ei.emotionalRegister;
-    if (ei.interactionPosture?.length)   merged.interactionPosture = ei.interactionPosture;
-    if (ei.visualLanguage?.length)       merged.visualLanguage = ei.visualLanguage;
-    if (ei.designPrinciples?.length)     merged.designPrinciples = ei.designPrinciples;
-    if (ei.confidence != null)           merged.confidence = ei.confidence;
-    merged.lastConfirmed = new Date().toISOString();
-    if (JSON.stringify(merged) !== JSON.stringify(prev)) {
-      updates.experienceIntent = merged;
-      historyRows.push({ projectId, modelVersion: newVersion, fieldChanged: "experienceIntent", previousValue: prev, newValue: merged, reason: "conversation-extracted" });
-    }
-  }
-
-  if (historyRows.length === 0) return; // nothing new
+  // Route DNA fields to project_dna table (not application_models)
+  void upsertDnaFields(projectId, patch).catch((err) =>
+    logger.warn({ err, projectId }, "DNA upsert after AM extraction failed — non-fatal"),
+  );
 
   // Stamp lastExtractedAt in buildState (no history record — operational metadata only)
   const prevBuildState = (row.buildState as Record<string, unknown>) ?? {};
   updates.buildState = { ...prevBuildState, lastExtractedAt: new Date().toISOString() };
 
   await db.update(applicationModelsTable).set(updates as any).where(eq(applicationModelsTable.projectId, projectId));
-  await db.insert(applicationModelHistoryTable).values(historyRows);
+  if (historyRows.length > 0) {
+    await db.insert(applicationModelHistoryTable).values(historyRows);
+  }
 
   // Propagate to Flow Map canvas when pages or data entities changed.
   // Fire-and-forget — safe because extractAndUpdateApplicationModel is already non-blocking.
@@ -316,6 +294,65 @@ async function applyModelPatch(projectId: number, patch: ApplicationModelPatch):
     syncFlowCanvasFromModel(projectId).catch((err) =>
       logger.warn({ err, projectId }, "flow sync after AM extraction failed — non-fatal"),
     );
+  }
+}
+
+// ── DNA upsert helper ────────────────────────────────────────────────────────
+// Writes creativePrinciples and/or experienceIntent to project_dna.
+// Uses INSERT...ON CONFLICT DO UPDATE so it's safe to call for new projects.
+async function upsertDnaFields(projectId: number, patch: ApplicationModelPatch): Promise<void> {
+  const hasPrinciples = (patch.creativePrinciples?.length ?? 0) > 0;
+  const hasEI = patch.experienceIntent && Object.keys(patch.experienceIntent).length > 0;
+  if (!hasPrinciples && !hasEI) return;
+
+  const existing = await db.select().from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1);
+  const updates: Record<string, unknown> = {};
+
+  if (hasPrinciples && patch.creativePrinciples) {
+    const prev = existing.length > 0 ? ((existing[0].creativePrinciples as string[]) ?? []) : [];
+    const prevNorm = new Set(prev.map((p) => p.trim().toLowerCase()));
+    const newPrinciples = patch.creativePrinciples.filter((p) => p && !prevNorm.has(p.trim().toLowerCase()));
+    if (newPrinciples.length > 0) {
+      updates.creativePrinciples = [...prev, ...newPrinciples];
+      const prevStatus = existing.length > 0 ? ((existing[0].status as Record<string, string>) ?? {}) : {};
+      if (!prevStatus.creativePrinciples || prevStatus.creativePrinciples === "guessed") {
+        updates.status = { ...(existing.length > 0 ? ((existing[0].status as Record<string, unknown>) ?? {}) : {}), creativePrinciples: "inferred" };
+      }
+    }
+  }
+
+  if (hasEI && patch.experienceIntent) {
+    const prev = existing.length > 0 ? ((existing[0].experienceIntent as Record<string, unknown>) ?? {}) : {};
+    const merged: Record<string, unknown> = { ...prev };
+    const ei = patch.experienceIntent;
+    if (ei.emotionalRegister?.length)    merged.emotionalRegister = ei.emotionalRegister;
+    if (ei.interactionPosture?.length)   merged.interactionPosture = ei.interactionPosture;
+    if (ei.visualLanguage?.length)       merged.visualLanguage = ei.visualLanguage;
+    if (ei.designPrinciples?.length)     merged.designPrinciples = ei.designPrinciples;
+    if (ei.confidence != null)           merged.confidence = ei.confidence;
+    if (JSON.stringify(merged) !== JSON.stringify(prev)) {
+      updates.experienceIntent = merged;
+      const prevStatus = updates.status as Record<string, unknown> | undefined
+        ?? (existing.length > 0 ? ((existing[0].status as Record<string, unknown>) ?? {}) : {});
+      const newStatus: Record<string, unknown> = { ...prevStatus };
+      const setIfLower = (key: string) => {
+        const cur = newStatus[key] as string | undefined;
+        if (!cur || cur === "guessed") newStatus[key] = "inferred";
+      };
+      if (ei.emotionalRegister?.length)   setIfLower("emotionalRegister");
+      if (ei.interactionPosture?.length)  setIfLower("interactionPosture");
+      if (ei.visualLanguage?.length)      setIfLower("visualLanguage");
+      if (ei.designPrinciples?.length)    setIfLower("designPrinciples");
+      updates.status = newStatus;
+    }
+  }
+
+  if (Object.keys(updates).length === 0) return;
+
+  if (existing.length === 0) {
+    await db.insert(projectDnaTable).values({ projectId, ...updates } as any).onConflictDoNothing();
+  } else {
+    await db.update(projectDnaTable).set(updates as any).where(eq(projectDnaTable.projectId, projectId));
   }
 }
 
@@ -458,12 +495,17 @@ export async function extractVisualMemoryFromAttachments({
         await applyModelPatch(projectId, patch);
       }
 
-      // Append sketch entry to visualSketches (separate update to avoid version conflicts)
-      const prevSketches = (row.visualSketches as unknown[]) ?? [];
-      await db
-        .update(applicationModelsTable)
-        .set({ visualSketches: [...prevSketches, sketchEntry] as any })
-        .where(eq(applicationModelsTable.projectId, projectId));
+      // Append sketch entry to project_dna.visual_sketches
+      const dnaRows = await db.select().from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1);
+      const prevSketches = dnaRows.length > 0 ? ((dnaRows[0].visualSketches as unknown[]) ?? []) : [];
+      const newSketches = [...prevSketches, sketchEntry];
+      if (dnaRows.length === 0) {
+        await db.insert(projectDnaTable).values({ projectId, visualSketches: newSketches as any }).onConflictDoNothing();
+      } else {
+        await db.update(projectDnaTable)
+          .set({ visualSketches: newSketches as any })
+          .where(eq(projectDnaTable.projectId, projectId));
+      }
 
       logger.info({ projectId, description: result.description.slice(0, 80) }, "visual memory: sketch processed");
 

@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable, applicationModelsTable, designPlansTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable, applicationModelsTable, designPlansTable, projectDnaTable } from "@workspace/db";
 import { maybeExtractGenome } from "../lib/genomeExtract";
 import { extractAndUpdateApplicationModel, extractVisualMemoryFromAttachments } from "../lib/applicationModelExtraction";
 import { checkBuildReadiness } from "../lib/buildReadiness";
@@ -2675,19 +2675,22 @@ router.post("/chat", async (req, res): Promise<void> => {
   let latestDesignPlanStatus: string | null = null;
   if (projectId && !isFoundationMode) {
     try {
-      const [amRow] = await db
-        .select({
-          creativePrinciples: applicationModelsTable.creativePrinciples,
-          experienceIntent: applicationModelsTable.experienceIntent,
-          visualSketches: applicationModelsTable.visualSketches,
-          identity: applicationModelsTable.identity,
-          intent: applicationModelsTable.intent,
-          buildState: applicationModelsTable.buildState,
-        })
-        .from(applicationModelsTable)
-        .where(eq(applicationModelsTable.projectId, projectId))
-        .limit(1);
-      projectDNARow = amRow ?? null;
+      const [[amRow], [dnaRow]] = await Promise.all([
+        db.select({ identity: applicationModelsTable.identity, intent: applicationModelsTable.intent, buildState: applicationModelsTable.buildState })
+          .from(applicationModelsTable).where(eq(applicationModelsTable.projectId, projectId)).limit(1),
+        db.select({ creativePrinciples: projectDnaTable.creativePrinciples, experienceIntent: projectDnaTable.experienceIntent, visualSketches: projectDnaTable.visualSketches })
+          .from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1),
+      ]);
+      if (amRow) {
+        projectDNARow = {
+          identity: amRow.identity,
+          intent: amRow.intent,
+          buildState: amRow.buildState,
+          creativePrinciples: dnaRow?.creativePrinciples ?? [],
+          experienceIntent: dnaRow?.experienceIntent ?? {},
+          visualSketches: dnaRow?.visualSketches ?? [],
+        };
+      }
     } catch { /* non-fatal — DNA enrichment is additive only */ }
 
     try {
