@@ -104,7 +104,7 @@ type InlinePreviewLine = { type: "added" | "removed"; line: string };
 
 export type BuildGroupInfo =
   | { type: "intermediate"; roundCount: number }
-  | { type: "final"; roundCount: number; uniqueFiles: string[] };
+  | { type: "final"; roundCount: number; uniqueFiles: string[]; buildVerified?: boolean };
 
 function InlineDiffCard({
   fileEdits,
@@ -404,8 +404,13 @@ function InlineDiffCard({
     let label: string;
     if (buildGroupInfo?.type === "final" && buildGroupInfo.roundCount > 1) {
       const count = buildGroupInfo.uniqueFiles.length;
-      const rounds = buildGroupInfo.roundCount;
-      label = `✓ Applied · ${count} file${count !== 1 ? "s" : ""} · ${rounds} fix round${rounds !== 1 ? "s" : ""}`;
+      const fixRounds = buildGroupInfo.roundCount - 1;
+      const statusSuffix = buildGroupInfo.buildVerified === true
+        ? " · Build verified"
+        : buildGroupInfo.buildVerified === false
+          ? " · Check failed"
+          : "";
+      label = `✓ Applied · ${count} file${count !== 1 ? "s" : ""} · ${fixRounds} fix round${fixRounds !== 1 ? "s" : ""}${statusSuffix}`;
     } else {
       const names = fileEdits.map((e) => e.path?.split("/").pop() ?? e.path).filter(Boolean);
       label = `✓ Auto-applied — ${names.join(", ")}`;

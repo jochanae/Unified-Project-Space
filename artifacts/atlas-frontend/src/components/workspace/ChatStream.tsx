@@ -340,13 +340,24 @@ export function ChatStream(props: ChatStreamProps) {
         const uniqueFiles = [...new Set(allPaths.filter(Boolean))];
         const roundCount = chainIdxs.length;
 
+        // Derive build verification status from the last ledger message content
+        const lastLedgerIdx = chainLedgerIdxs[chainLedgerIdxs.length - 1];
+        const lastLedgerContent = lastLedgerIdx != null ? messages[lastLedgerIdx]?.content ?? "" : "";
+        const buildVerified: boolean | undefined = lastLedgerContent
+          ? lastLedgerContent.includes("AUDIT PASSED")
+            ? true
+            : lastLedgerContent.includes("INTEGRITY FAILURE")
+              ? false
+              : undefined
+          : undefined;
+
         // Only apply deduplication when there are 2+ rounds
         if (roundCount > 1) {
           for (const li of chainLedgerIdxs) supLedger.add(li);
           for (let k = 0; k < chainIdxs.length; k++) {
             bgMap.set(chainIdxs[k], k < chainIdxs.length - 1
               ? { type: "intermediate", roundCount }
-              : { type: "final", roundCount, uniqueFiles }
+              : { type: "final", roundCount, uniqueFiles, buildVerified }
             );
           }
         }
@@ -475,7 +486,9 @@ export function ChatStream(props: ChatStreamProps) {
         const prevMsg = messages[i - 1];
         const isLedgerMsg = msg.role === "user" && isLedgerContent(msg.content);
         const prevWasAssistant = prevMsg?.role === "assistant";
-        if (isLedgerMsg && prevWasAssistant) {
+        // Skip ledger messages that follow an assistant (hoisted below its bubble instead)
+        // Also skip any user message tagged for full suppression as part of a build chain
+        if ((isLedgerMsg && prevWasAssistant) || suppressedLedgerSet.has(i)) {
           return null;
         }
         const nextIsLedger = nextMsg?.role === "user" && isLedgerContent(nextMsg.content);
