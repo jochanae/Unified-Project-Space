@@ -656,6 +656,9 @@ export function AxiomFlow({
   // Hydrate-from-conversations state
   const [hydrateLoading, setHydrateLoading] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
+  // canvasReady: stays false until one rAF after first nodes load so fitMap()
+  // has time to run before the canvas becomes visible (prevents the zoom=1 flash).
+  const [canvasReady, setCanvasReady] = useState(false);
 
 
   // If projectName arrives or changes after mount and the goal node still
@@ -761,6 +764,30 @@ export function AxiomFlow({
       })
       .catch(() => {});
   }, [projectId]);
+
+  // Clear drill + card state when the active project changes so a stale
+  // drillNode from project A never shows as a gold breadcrumb on project B.
+  useEffect(() => {
+    setDrillNode(null);
+    setActiveCardNodeId(null);
+    setEditingDetailsNodeId(null);
+    setPendingDrillId(null);
+    setCanvasReady(false);
+  }, [projectId]);
+
+  // Reveal the canvas only after one animation frame following the first node
+  // load — this gives fitMap() time to compute the correct zoom so nodes never
+  // flash at scale=1 before snapping to the fitted viewport.
+  useEffect(() => {
+    if (!flowLoading && (nodes.length > 0 || flowEmpty)) {
+      let raf2: ReturnType<typeof requestAnimationFrame>;
+      const raf = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setCanvasReady(true));
+      });
+      return () => { cancelAnimationFrame(raf); cancelAnimationFrame(raf2); };
+    }
+    return undefined;
+  }, [flowLoading, flowEmpty, nodes.length]);
 
   const dbSyncedRef = useRef(false);
   useEffect(() => {
@@ -1922,6 +1949,8 @@ export function AxiomFlow({
           position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
           transformOrigin: "0 0",
           transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
+          opacity: canvasReady ? 1 : 0,
+          transition: "opacity 180ms ease",
         }}
       >
         {/* SVG edges */}
@@ -2134,6 +2163,45 @@ export function AxiomFlow({
             }}
           >
             ⊙ Center
+          </button>
+        )}
+        {/* Refresh / re-hydrate button — always accessible even in drill-down mode */}
+        {!flowLoading && projectId && (
+          <button
+            type="button"
+            title={hydrateLoading ? "Hydrating…" : "Refresh flow from conversations"}
+            onClick={(e) => { e.stopPropagation(); void hydrateFlow(); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            disabled={hydrateLoading}
+            style={{
+              width: 22, height: 22,
+              borderRadius: 6,
+              border: `1px solid ${theme === "parchment" ? "rgba(146,64,14,0.22)" : "rgba(201,162,76,0.22)"}`,
+              background: theme === "parchment" ? "rgba(255,252,245,0.70)" : "rgba(10,10,12,0.55)",
+              color: theme === "parchment" ? "rgba(146,64,14,0.72)" : "rgba(201,162,76,0.72)",
+              cursor: hydrateLoading ? "wait" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              backdropFilter: "blur(6px)",
+              opacity: hydrateLoading ? 0.5 : 1,
+              transition: "opacity 120ms ease",
+              flexShrink: 0,
+            }}
+          >
+            {hydrateLoading ? (
+              <div style={{
+                width: 10, height: 10, borderRadius: "50%",
+                border: `1.5px solid ${theme === "parchment" ? "rgba(146,64,14,0.2)" : "rgba(201,162,76,0.2)"}`,
+                borderTopColor: theme === "parchment" ? "rgba(146,64,14,0.8)" : "rgba(201,162,76,0.8)",
+                animation: "axiomFlowSpin 0.8s linear infinite",
+              }} />
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 21h5v-5" />
+              </svg>
+            )}
           </button>
         )}
         {/* Hint icon */}
