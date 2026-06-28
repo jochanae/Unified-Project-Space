@@ -1321,9 +1321,23 @@ export function AssistantBubble({
     return { migrationBlocks: blocks, displayContent: stripped };
   }, [cleanContent]);
 
-  const displayContent = (migrationDisplayContent ?? message.content ?? "")
-    .replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/g, "")
-    .trim();
+  // Strip FILE_EDIT blocks from the visible chat text. These blocks are
+  // applied to the workspace file system and must never appear as raw syntax
+  // in the chat bubble. Two passes are needed:
+  //   1. Complete blocks (FILE_EDIT_START ... FILE_EDIT_END) — always strip.
+  //   2. Partial/open blocks — only during streaming, where FILE_EDIT_END
+  //      hasn't arrived yet. Everything from the last FILE_EDIT_START onward
+  //      is in-progress and should be hidden until the block is closed.
+  const displayContent = (() => {
+    let c = (migrationDisplayContent ?? message.content ?? "")
+      .replace(/!\[.*?\]\(https?:\/\/[^\s)]+\)/g, "")
+      .replace(/\n?FILE_EDIT_START[\s\S]*?FILE_EDIT_END\n?/g, "")
+      .trim();
+    if (message.streaming) {
+      c = c.replace(/\n?FILE_EDIT_START[\s\S]*$/, "").trim();
+    }
+    return c;
+  })();
   const hasImageClarify = (displayContent ?? "").includes("IMAGE_CLARIFY:");
   const cleanedContent = (displayContent ?? "")
     .replace(/^INTENT_TYPE:\s*\S+$/gm, "")
