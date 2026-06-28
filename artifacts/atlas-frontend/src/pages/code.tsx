@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import JSZip from "jszip";
@@ -11,15 +11,14 @@ import { apiUrl } from "@/lib/api";
 import { parseLinkedRepo } from "@/lib/githubRepo";
 import {
   ArrowLeft,
+  ArrowLeftCircle,
   Code2,
+  ExternalLink,
   FileCode2,
-  Folder,
-  FolderOpen,
   GitBranch,
   Github,
   Download,
   RefreshCw,
-  Search,
   Copy,
   Check,
   Clock,
@@ -111,34 +110,6 @@ function getRunIdFromUrl(): string | null {
 }
 
 
-// ── Tree builder ─────────────────────────────────────────────────────────────
-type TreeNode = {
-  name: string;
-  path: string;
-  file?: GeneratedFile;
-  children?: Record<string, TreeNode>;
-};
-
-function buildTree(files: GeneratedFile[]): TreeNode {
-  const root: TreeNode = { name: "", path: "", children: {} };
-  for (const f of files) {
-    const parts = f.path.split("/");
-    let cur = root;
-    parts.forEach((part, i) => {
-      cur.children = cur.children || {};
-      if (!cur.children[part]) {
-        cur.children[part] = {
-          name: part,
-          path: parts.slice(0, i + 1).join("/"),
-          children: i < parts.length - 1 ? {} : undefined,
-        };
-      }
-      if (i === parts.length - 1) cur.children[part].file = f;
-      cur = cur.children[part];
-    });
-  }
-  return root;
-}
 
 // ── Styling helpers ──────────────────────────────────────────────────────────
 const PANEL: React.CSSProperties = {
@@ -152,7 +123,7 @@ const MONO: React.CSSProperties = {
   fontFamily: "var(--app-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)",
 };
 
-type MobilePane = "Files" | "Code" | "Activity";
+type MobilePane = "Changes" | "Code" | "Activity";
 
 function normalizeFileStatus(status: string): "new" | "modified" | "unchanged" | "deleted" {
   if (status === "new" || status === "modified" || status === "unchanged" || status === "deleted") {
@@ -206,89 +177,353 @@ function runTitle(run: GenerationRun) {
   return `${prompt.slice(0, 57).trimEnd()}...`;
 }
 
-// ── File Tree ────────────────────────────────────────────────────────────────
-function FileTree({
-  node, depth, selectedPath, onSelect, openMap, toggleOpen, query, edits,
+// ── Build Changes ─────────────────────────────────────────────────────────────
+type ChangeGroup = {
+  label: string;
+  status: "new" | "modified" | "deleted" | "unchanged";
+  color: string;
+  files: GeneratedFile[];
+};
+
+function DiffView({ previous, current }: { previous: string; current: string }) {
+  const prevLines = previous.split("\n");
+  const currLines = current.split("\n");
+  return (
+    <div style={{ display: "flex", gap: 2, overflow: "auto", flex: 1, minHeight: 0 }}>
+      {/* Previous */}
+      <div style={{ flex: 1, minWidth: 0, overflow: "auto" }}>
+        <div style={{
+          ...MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
+          color: "#FF8A8A", padding: "4px 8px",
+          borderBottom: "1px solid rgba(255,138,138,0.15)",
+        }}>
+          Previous
+        </div>
+        <div style={{ padding: "6px 0" }}>
+          {prevLines.map((line, i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "flex-start", gap: 6,
+              padding: "1px 8px",
+              background: currLines[i] !== line ? "rgba(255,138,138,0.07)" : "transparent",
+            }}>
+              <span style={{ ...MONO, fontSize: 9.5, color: "rgba(255,255,255,0.2)", minWidth: 28, textAlign: "right", userSelect: "none", flexShrink: 0 }}>
+                {i + 1}
+              </span>
+              <span style={{
+                ...MONO, fontSize: 11, color: currLines[i] !== line ? "#FF8A8A" : "var(--atlas-fg)",
+                whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.5,
+              }}>
+                {line || " "}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ width: 1, background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+      {/* Current */}
+      <div style={{ flex: 1, minWidth: 0, overflow: "auto" }}>
+        <div style={{
+          ...MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
+          color: "#7CE3A0", padding: "4px 8px",
+          borderBottom: "1px solid rgba(124,227,160,0.15)",
+        }}>
+          Current
+        </div>
+        <div style={{ padding: "6px 0" }}>
+          {currLines.map((line, i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "flex-start", gap: 6,
+              padding: "1px 8px",
+              background: prevLines[i] !== line ? "rgba(124,227,160,0.07)" : "transparent",
+            }}>
+              <span style={{ ...MONO, fontSize: 9.5, color: "rgba(255,255,255,0.2)", minWidth: 28, textAlign: "right", userSelect: "none", flexShrink: 0 }}>
+                {i + 1}
+              </span>
+              <span style={{
+                ...MONO, fontSize: 11, color: prevLines[i] !== line ? "#7CE3A0" : "var(--atlas-fg)",
+                whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.5,
+              }}>
+                {line || " "}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FileDetailPanel({
+  file,
+  onBack,
+  showDiff,
+  onToggleDiff,
+  projectId,
+  edits,
 }: {
-  node: TreeNode; depth: number; selectedPath: string;
-  onSelect: (f: GeneratedFile) => void;
-  openMap: Record<string, boolean>; toggleOpen: (p: string) => void;
-  query: string;
+  file: GeneratedFile;
+  onBack: () => void;
+  showDiff: boolean;
+  onToggleDiff: () => void;
+  projectId: number | null;
   edits: Record<string, string>;
 }) {
-  if (!node.children) return null;
-  const entries = Object.values(node.children).sort((a, b) => {
-    const aDir = !!a.children, bDir = !!b.children;
-    if (aDir !== bDir) return aDir ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+  const status = normalizeFileStatus(file.status);
+  const color = statusColor(file.status);
+  const fileName = file.path.split("/").pop() ?? file.path;
+  const dirPath = file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "";
+  const currentContent = edits[file.id] ?? file.content;
+  const currentLines = currentContent.split("\n").length;
+  const prevLines = file.previousContent ? file.previousContent.split("\n").length : 0;
+  const lineDelta = status === "new" ? currentLines : status === "deleted" ? -currentLines : currentLines - prevLines;
+  const updatedTime = new Date(file.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const statusLabel = status === "new" ? "Created" : status === "modified" ? "Modified" : status === "deleted" ? "Deleted" : "Unchanged";
+  const hasPrevious = !!file.previousContent;
 
   return (
-    <div>
-      {entries.map((child) => {
-        const isFile = !!child.file;
-        const matches = !query || child.path.toLowerCase().includes(query.toLowerCase());
-        if (!matches && isFile) return null;
-        const isOpen = openMap[child.path] ?? depth < 2;
-        const selected = isFile && selectedPath === child.path;
-        const isEdited = !!child.file && Object.prototype.hasOwnProperty.call(edits, child.file.id);
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      {/* Back button */}
+      <button
+        type="button"
+        onClick={onBack}
+        style={{
+          display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+          background: "transparent", border: "none",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          color: "var(--atlas-muted)", cursor: "pointer", fontSize: 11, ...MONO,
+          textAlign: "left",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--atlas-fg)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--atlas-muted)"; }}
+      >
+        <ArrowLeftCircle size={12} strokeWidth={1.6} />
+        Back to changes
+      </button>
 
+      {/* File info */}
+      <div style={{ padding: "12px 12px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <FileCode2 size={13} strokeWidth={1.6} style={{ color: "var(--atlas-gold)", flexShrink: 0 }} />
+          <span style={{ ...MONO, fontSize: 12, color: "var(--atlas-fg)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {fileName}
+          </span>
+          <span style={{ flex: 1 }} />
+          <span style={{
+            ...MONO, fontSize: 9, padding: "2px 6px", borderRadius: 4,
+            background: `color-mix(in oklab, ${color} 14%, transparent)`,
+            color, letterSpacing: "0.1em", textTransform: "uppercase",
+            border: `1px solid color-mix(in oklab, ${color} 25%, transparent)`,
+            flexShrink: 0,
+          }}>
+            {statusLabel}
+          </span>
+        </div>
+        {dirPath && (
+          <div style={{ ...MONO, fontSize: 10, color: "var(--atlas-muted)", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {dirPath}
+          </div>
+        )}
+
+        {/* Stats row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {lineDelta !== 0 && (
+            <span style={{ ...MONO, fontSize: 11, color: lineDelta > 0 ? "#7CE3A0" : "#FF8A8A", fontWeight: 500 }}>
+              {lineDelta > 0 ? `+${lineDelta}` : lineDelta} lines
+            </span>
+          )}
+          <span style={{ ...MONO, fontSize: 10, color: "var(--atlas-muted)" }}>
+            <Clock size={9} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
+            {statusLabel} {updatedTime}
+          </span>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        {hasPrevious && (
+          <button
+            type="button"
+            onClick={onToggleDiff}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "5px 9px", borderRadius: 7, fontSize: 11, cursor: "pointer", ...MONO,
+              background: showDiff ? "color-mix(in oklab, var(--atlas-gold) 14%, transparent)" : "rgba(255,255,255,0.04)",
+              border: showDiff
+                ? "1px solid color-mix(in oklab, var(--atlas-gold) 30%, transparent)"
+                : "1px solid rgba(255,255,255,0.08)",
+              color: showDiff ? "var(--atlas-gold)" : "var(--atlas-muted)",
+            }}
+          >
+            View Diff
+          </button>
+        )}
+        {projectId != null && (
+          <a
+            href={`/project/${projectId}`}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "5px 9px", borderRadius: 7, fontSize: 11,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "var(--atlas-muted)", textDecoration: "none", ...MONO,
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--atlas-fg)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--atlas-muted)"; }}
+          >
+            <ExternalLink size={10} />
+            Open in Workspace
+          </a>
+        )}
+      </div>
+
+      {/* Diff view */}
+      {showDiff && hasPrevious && (
+        <DiffView previous={file.previousContent!} current={currentContent} />
+      )}
+    </div>
+  );
+}
+
+function BuildChanges({
+  files,
+  selectedFileId,
+  onSelect,
+  projectId,
+  edits,
+  loading,
+}: {
+  files: GeneratedFile[];
+  selectedFileId: string | null;
+  onSelect: (f: GeneratedFile) => void;
+  projectId: number | null;
+  edits: Record<string, string>;
+  loading: boolean;
+}) {
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({ unchanged: true });
+  const [panelView, setPanelView] = useState<"list" | "detail">("list");
+  const [showDiff, setShowDiff] = useState(false);
+
+  const selectedFile = useMemo(() => files.find((f) => f.id === selectedFileId) ?? null, [files, selectedFileId]);
+
+  const prevSelectedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedFileId && selectedFileId !== prevSelectedIdRef.current) {
+      setPanelView("detail");
+      setShowDiff(false);
+    }
+    prevSelectedIdRef.current = selectedFileId;
+  }, [selectedFileId]);
+
+  const groups: ChangeGroup[] = useMemo(() => {
+    const grouped: Record<string, GeneratedFile[]> = { new: [], modified: [], deleted: [], unchanged: [] };
+    for (const f of files) {
+      const s = normalizeFileStatus(f.status);
+      grouped[s].push(f);
+    }
+    return [
+      { label: "Created", status: "new" as const, color: "#7CE3A0", files: grouped.new },
+      { label: "Modified", status: "modified" as const, color: "#E6C687", files: grouped.modified },
+      { label: "Deleted", status: "deleted" as const, color: "#FF8A8A", files: grouped.deleted },
+      { label: "Unchanged", status: "unchanged" as const, color: "rgba(255,255,255,0.35)", files: grouped.unchanged },
+    ].filter((g) => g.files.length > 0);
+  }, [files]);
+
+  if (panelView === "detail" && selectedFile) {
+    return (
+      <FileDetailPanel
+        file={selectedFile}
+        onBack={() => setPanelView("list")}
+        showDiff={showDiff}
+        onToggleDiff={() => setShowDiff((v) => !v)}
+        projectId={projectId}
+        edits={edits}
+      />
+    );
+  }
+
+  if (files.length === 0) {
+    return <EmptyHint label={loading ? "Loading files…" : "No files in this run yet."} />;
+  }
+
+  return (
+    <div style={{ padding: "4px 4px 12px" }}>
+      {groups.map((group) => {
+        const collapsed = collapsedSections[group.status] ?? false;
+        const toggleSection = () => setCollapsedSections((m) => ({ ...m, [group.status]: !collapsed }));
         return (
-          <div key={child.path}>
+          <div key={group.status} style={{ marginBottom: 6 }}>
+            {/* Section header */}
             <button
               type="button"
-              onClick={() => isFile ? onSelect(child.file!) : toggleOpen(child.path)}
+              onClick={toggleSection}
               style={{
                 width: "100%", display: "flex", alignItems: "center", gap: 6,
-                padding: `5px 8px 5px ${8 + depth * 14}px`,
-                background: selected ? "color-mix(in oklab, var(--atlas-gold) 14%, transparent)" : "transparent",
-                border: "none", borderLeft: selected ? "2px solid var(--atlas-gold)" : "2px solid transparent",
-                color: selected ? "var(--atlas-gold)" : "var(--atlas-fg)",
-                cursor: "pointer", textAlign: "left", fontSize: 12.5, ...MONO,
-                borderRadius: 6, marginBottom: 1,
+                padding: "5px 8px", background: "transparent",
+                border: "none", cursor: "pointer", textAlign: "left",
               }}
-              onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
-              onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = "transparent"; }}
             >
-              {isFile ? (
-                <>
-                  <FileCode2 size={13} strokeWidth={1.6} style={{ opacity: 0.7, flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {child.name}
+              {collapsed
+                ? <ChevronRight size={11} strokeWidth={1.8} style={{ opacity: 0.45, color: "var(--atlas-muted)", flexShrink: 0 }} />
+                : <ChevronDown size={11} strokeWidth={1.8} style={{ opacity: 0.45, color: "var(--atlas-muted)", flexShrink: 0 }} />}
+              <span style={{
+                width: 6, height: 6, borderRadius: 99,
+                background: group.color,
+                boxShadow: group.status !== "unchanged" ? `0 0 6px ${group.color}` : "none",
+                flexShrink: 0,
+              }} />
+              <span style={{
+                ...MONO, fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase",
+                color: group.color, flex: 1,
+              }}>
+                {group.label}
+              </span>
+              <span style={{ ...MONO, fontSize: 9.5, color: "var(--atlas-muted)" }}>{group.files.length}</span>
+            </button>
+
+            {/* File rows */}
+            {!collapsed && group.files.map((f) => {
+              const fileName = f.path.split("/").pop() ?? f.path;
+              const selected = f.id === selectedFileId;
+              const isEdited = Object.prototype.hasOwnProperty.call(edits, f.id);
+              const currentContent = edits[f.id] ?? f.content;
+              const currentLines = currentContent.split("\n").length;
+              const prevLineCount = f.previousContent ? f.previousContent.split("\n").length : 0;
+              const lineDelta = group.status === "new" ? currentLines
+                : group.status === "deleted" ? -currentLines
+                : currentLines - prevLineCount;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => { onSelect(f); setPanelView("detail"); setShowDiff(false); }}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 7,
+                    padding: "5px 8px 5px 26px",
+                    background: selected ? "color-mix(in oklab, var(--atlas-gold) 10%, transparent)" : "transparent",
+                    border: "none", borderLeft: selected ? "2px solid var(--atlas-gold)" : "2px solid transparent",
+                    color: selected ? "var(--atlas-gold)" : "var(--atlas-fg)",
+                    cursor: "pointer", textAlign: "left", ...MONO,
+                    borderRadius: 6, marginBottom: 1,
+                  }}
+                  onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                  onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = "transparent"; }}
+                >
+                  <span style={{
+                    width: 6, height: 6, borderRadius: 99, flexShrink: 0,
+                    background: isEdited ? "var(--atlas-gold)" : group.color,
+                    boxShadow: `0 0 5px ${isEdited ? "var(--atlas-gold)" : group.color}`,
+                  }} />
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>
+                    {fileName}
                   </span>
-                  {isEdited && (
-                    <span style={{
-                      ...MONO, fontSize: 9, color: "var(--atlas-gold)", letterSpacing: "0.08em",
-                      textTransform: "uppercase", flexShrink: 0,
-                    }}>
-                      edited
+                  {lineDelta !== 0 && (
+                    <span style={{ ...MONO, fontSize: 10, color: lineDelta > 0 ? "#7CE3A0" : "#FF8A8A", flexShrink: 0 }}>
+                      {lineDelta > 0 ? `+${lineDelta}` : lineDelta}
                     </span>
                   )}
-                  <span style={{
-                    width: 6, height: 6, borderRadius: 99,
-                    background: isEdited ? "var(--atlas-gold)" : statusColor(child.file!.status),
-                    boxShadow: `0 0 8px ${isEdited ? "var(--atlas-gold)" : statusColor(child.file!.status)}`,
-                  }} />
-                </>
-              ) : (
-                <>
-                  {isOpen
-                    ? <ChevronDown size={12} strokeWidth={1.8} style={{ opacity: 0.6 }} />
-                    : <ChevronRight size={12} strokeWidth={1.8} style={{ opacity: 0.6 }} />}
-                  {isOpen
-                    ? <FolderOpen size={13} strokeWidth={1.6} style={{ opacity: 0.7, color: "var(--atlas-gold)" }} />
-                    : <Folder size={13} strokeWidth={1.6} style={{ opacity: 0.7 }} />}
-                  <span style={{ flex: 1 }}>{child.name}</span>
-                </>
-              )}
-            </button>
-            {!isFile && isOpen && (
-              <FileTree
-                node={child} depth={depth + 1}
-                selectedPath={selectedPath} onSelect={onSelect}
-                openMap={openMap} toggleOpen={toggleOpen} query={query} edits={edits}
-              />
-            )}
+                </button>
+              );
+            })}
           </div>
         );
       })}
@@ -774,8 +1009,6 @@ function Stat({ label, value, tint }: { label: string; value: string; tint?: str
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function CodePage() {
   const [, navigate] = useLocation();
-  const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
-  const [query, setQuery] = useState("");
   const [showRail, setShowRail] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [mobilePane, setMobilePane] = useState<MobilePane>("Code");
@@ -907,10 +1140,6 @@ export default function CodePage() {
     return files.find((f) => f.id === selectedFileId) ?? files[0];
   }, [files, selectedFileId]);
 
-  const tree = useMemo(() => buildTree(files), [files]);
-  const toggleOpen = (p: string) =>
-    setOpenMap((m) => ({ ...m, [p]: !(m[p] ?? true) }));
-
   // Loading / error / empty states
   const loading = projectQ.isLoading || runsQ.isLoading || (!!activeRun && filesQ.isLoading);
   const error = projectQ.error || runsQ.error || filesQ.error;
@@ -923,7 +1152,7 @@ export default function CodePage() {
   const handleSelectRun = (id: string) => {
     setSelectedRunId(id);
     setSelectedFileId(null);
-    if (isMobile) setMobilePane("Files");
+    if (isMobile) setMobilePane("Changes");
   };
 
   const selectedFileValue = selectedFile
@@ -1171,7 +1400,7 @@ export default function CodePage() {
             background: "color-mix(in oklab, var(--atlas-surface) 92%, transparent)",
             border: "1px solid color-mix(in oklab, var(--atlas-gold) 14%, transparent)",
           }}>
-            {(["Files", "Code", "Activity"] as MobilePane[]).map((pane) => {
+            {(["Changes", "Code", "Activity"] as MobilePane[]).map((pane) => {
               const active = mobilePane === pane;
               return (
                 <button
@@ -1206,54 +1435,34 @@ export default function CodePage() {
         gridTemplateColumns: isMobile ? "1fr" : showRail ? "260px 1fr 340px" : "260px 1fr",
         gap: 12, padding: 12, position: "relative", zIndex: 1,
       }}>
-        {/* LEFT — file tree */}
-        {(!isMobile || mobilePane === "Files") && (
+        {/* LEFT — changes panel */}
+        {(!isMobile || mobilePane === "Changes") && (
         <aside style={{ ...PANEL, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{
             padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)",
-            display: "flex", alignItems: "center", gap: 8,
+            display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
           }}>
             <Layers size={13} style={{ color: "var(--atlas-gold)" }} />
             <span style={{ ...MONO, fontSize: 10, letterSpacing: "0.14em", color: "var(--atlas-muted)", textTransform: "uppercase" }}>
-              Files
+              Changes
             </span>
             <span style={{ flex: 1 }} />
             <span style={{ ...MONO, fontSize: 10, color: "var(--atlas-muted)" }}>{files.length}</span>
           </div>
-          <div style={{ padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "5px 8px",
-              background: "rgba(255,255,255,0.03)", borderRadius: 7,
-              border: "1px solid rgba(255,255,255,0.04)",
-            }}>
-              <Search size={11} style={{ color: "var(--atlas-muted)" }} />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Find file…"
-                style={{
-                  flex: 1, background: "transparent", border: "none", outline: "none",
-                  color: "var(--atlas-fg)", fontSize: 12, ...MONO,
-                }}
-              />
-            </div>
-          </div>
-          <div style={{ flex: 1, overflow: "auto", padding: "6px 6px 14px" }}>
-            {selectedFile ? (
-              <FileTree
-                node={tree} depth={0}
-                selectedPath={selectedFile.path}
-                onSelect={(f) => setSelectedFileId(f.id)}
-                openMap={openMap} toggleOpen={toggleOpen} query={query} edits={edits}
-              />
-            ) : (
-              <EmptyHint label={loading ? "Loading files…" : "No files in this run yet."} />
-            )}
+          <div style={{ flex: 1, overflow: "auto" }}>
+            <BuildChanges
+              files={files}
+              selectedFileId={selectedFileId}
+              onSelect={(f) => setSelectedFileId(f.id)}
+              projectId={projectId}
+              edits={edits}
+              loading={loading}
+            />
           </div>
           {activeRun && (
             <div style={{
               padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,0.05)",
-              display: "flex", alignItems: "center", gap: 6,
+              display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
               ...MONO, fontSize: 10, color: "var(--atlas-muted)",
             }}>
               <Clock size={10} /> Updated {new Date(runUpdatedAt(activeRun)).toLocaleTimeString()}
