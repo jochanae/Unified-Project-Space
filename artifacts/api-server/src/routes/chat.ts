@@ -3171,6 +3171,37 @@ Make the sensible default for any unspecified choice (framework, styling, etc.) 
 
 Just build it.
 --- END BUILD HANDOFF ---`;
+  } else if (isSelfContainedBuild) {
+    systemPrompt += `\n\n--- SELF-CONTAINED BUILD ---
+The user has sent a build request directly in the workspace. Build it now. Do not ask questions.
+
+DEFAULT PATH — full runnable Vite + React scaffold:
+Emit FILE_EDIT blocks for a COMPLETE project. Every file needed to run must be present:
+  • package.json (with @vitejs/plugin-react in devDependencies, and a "build" script: "vite build")
+  • vite.config.js — REQUIRED. Include the react() plugin and:
+      server: { host: '0.0.0.0', allowedHosts: true, hmr: false }
+      build: { outDir: 'dist' }
+  • index.html with <div id="root"> and <script type="module" src="/src/main.jsx">
+  • src/main.jsx — entry point with ReactDOM.createRoot
+  • src/App.jsx (or split into components as needed)
+  • Any CSS files referenced in the above
+
+If Tailwind is used:
+  • tailwind.config.js
+  • postcss.config.js
+
+REACT ROUTER: always HashRouter, never BrowserRouter.
+
+ALTERNATE PATH — single visual artifact (only when the request is explicitly "show me what it looks like" with no interactive or runnable intent):
+  Emit a single ARTIFACT block (standalone HTML with no build step).
+  At the END of your response, on its own line, emit:
+  BUILD_TYPE: visual-artifact
+  This tells the UI the output is a visual preview only — not a runnable Local Dev project.
+
+DEFAULT is the full scaffold. Only use the alternate path if the request is unambiguously visual-only.
+
+FILE_EDIT blocks for ALL code. No partial snippets. Every file is complete.
+--- END SELF-CONTAINED BUILD ---`;
   } else {
     systemPrompt += `\n\n--- SESSION CONTINUITY ---
 If this is the first assistant message in this session (no prior assistant messages exist in the session history), open naturally — like picking up a real conversation, not filing a status report. DO NOT use the format "Still here. [recap]. What's next:". Instead, read the memory and repo activity and respond the way a sharp collaborator would after being away: reference what actually matters, skip what doesn't, and lead with something useful or ask the right question. One to two sentences max. Never clinical. Never a checklist. Match the energy of someone who was already thinking about this project before the conversation started.

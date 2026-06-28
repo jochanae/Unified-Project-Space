@@ -981,7 +981,9 @@ router.post("/devserver/workspace/:projectId/start", (req, res): void => {
 router.get("/devserver/workspace/:projectId/status", (req, res): void => {
   const projectId = Number(req.params["projectId"]);
   const st = getWsState(projectId);
-  res.json({ status: st.status, port: st.port, logs: st.logs.slice(-50), errorMsg: st.errorMsg });
+  const wsDir = projectWorkspaceDir(projectId);
+  const hasScaffold = existsSync(path.join(wsDir, "package.json"));
+  res.json({ status: st.status, port: st.port, logs: st.logs.slice(-50), errorMsg: st.errorMsg, hasScaffold });
 });
 
 router.post("/devserver/workspace/:projectId/stop", (req, res): void => {

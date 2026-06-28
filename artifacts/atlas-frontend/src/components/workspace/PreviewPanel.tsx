@@ -231,6 +231,8 @@ export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refres
   const [wsDsPort, setWsDsPort] = useState<number | null>(null);
   const [wsDsLogs, setWsDsLogs] = useState<string[]>([]);
   const [wsDsErrorMsg, setWsDsErrorMsg] = useState<string | null>(null);
+  // null = not yet checked, true = package.json found, false = no scaffold (visual artifact only)
+  const [hasScaffold, setHasScaffold] = useState<boolean | null>(null);
   const [wsDsStarting, setWsDsStarting] = useState(false);
   const wsDsLogsEndRef = useRef<HTMLDivElement>(null);
   // Browser console errors captured from the proxied iframe via postMessage
@@ -249,12 +251,13 @@ export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refres
       try {
         const r = await fetch(`/api/devserver/workspace/${projectId}/status`, { credentials: "include" });
         if (!r.ok || cancelled) return;
-        const d = await r.json() as { status: WsDsStatus; port: number | null; logs: string[]; errorMsg: string | null };
+        const d = await r.json() as { status: WsDsStatus; port: number | null; logs: string[]; errorMsg: string | null; hasScaffold?: boolean };
         if (cancelled) return;
         setWsDsStatus(d.status);
         setWsDsPort(d.port);
         setWsDsLogs(d.logs);
         setWsDsErrorMsg(d.errorMsg);
+        if (d.hasScaffold !== undefined) setHasScaffold(d.hasScaffold);
         // Auto-switch to LOCAL DEV only once when the server first becomes running.
         // After that the user can freely switch tabs — do not yank them back on
         // every subsequent poll.
@@ -1450,13 +1453,26 @@ ${t}
                 </div>
               )}
 
+              {/* No scaffold banner — shown before any run attempt when package.json is absent */}
+              {hasScaffold === false && wsDsStatus === "idle" && (
+                <div style={{ flexShrink: 0, padding: "10px 12px", borderBottom: "1px solid var(--atlas-border)", background: "rgba(201,162,76,0.05)", display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.8 }}>
+                    Visual Artifact
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.5 }}>
+                    Atlas generated a visual preview — not a runnable project. No <code style={{ fontSize: 10, color: "var(--atlas-fg)", opacity: 0.6 }}>package.json</code> was emitted. Check the <strong style={{ color: "var(--atlas-fg)", opacity: 0.7 }}>Artifacts</strong> tab to see the output, or ask Atlas to "build a complete runnable project with package.json and Vite config" to get a Local Dev–ready scaffold.
+                  </div>
+                </div>
+              )}
+
               {/* Controls */}
               <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)" }}>
                 {wsDsStatus === "idle" || wsDsStatus === "error" ? (
                   <button
                     onClick={handleWsDsStart}
-                    disabled={wsDsStarting}
-                    style={{ padding: "5px 12px", borderRadius: 5, background: wsDsStarting ? "var(--atlas-glass-bg)" : "var(--atlas-ember)", border: "none", color: wsDsStarting ? "var(--atlas-muted)" : "var(--atlas-fg)", fontSize: 10, ...sMono, letterSpacing: "0.08em", cursor: wsDsStarting ? "not-allowed" : "pointer", transition: "all 140ms ease" }}
+                    disabled={wsDsStarting || hasScaffold === false}
+                    style={{ padding: "5px 12px", borderRadius: 5, background: wsDsStarting || hasScaffold === false ? "var(--atlas-glass-bg)" : "var(--atlas-ember)", border: "none", color: wsDsStarting || hasScaffold === false ? "var(--atlas-muted)" : "var(--atlas-fg)", fontSize: 10, ...sMono, letterSpacing: "0.08em", cursor: wsDsStarting || hasScaffold === false ? "not-allowed" : "pointer", transition: "all 140ms ease" }}
+                    title={hasScaffold === false ? "No runnable scaffold — Atlas built a visual artifact only" : undefined}
                   >
                     {wsDsStarting ? "Starting…" : "Run Project"}
                   </button>

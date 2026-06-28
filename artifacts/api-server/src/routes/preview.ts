@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, sessionsTable, chatMessagesTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
-import { promises as fsp } from "fs";
+import { promises as fsp, existsSync } from "fs";
 import path from "path";
 import { projectWorkspaceDir } from "../lib/projectWorkspace";
 
@@ -391,6 +391,43 @@ router.post("/preview/component", async (req, res): Promise<void> => {
   } catch (err) {
     console.error("Preview error:", err);
     res.status(500).json({ error: "Failed to generate preview" });
+  }
+});
+
+// GET /api/preview/workspace/:projectId/* — serve built dist/ output as a static SPA.
+// Called by the PreviewPanel Local Dev iframe once "Run Project" succeeds.
+router.use("/preview/workspace/:projectId", (req, res): void => {
+  const projectId = Number(req.params["projectId"]);
+  if (!projectId) { res.status(400).send("Invalid projectId"); return; }
+  const wsDir = projectWorkspaceDir(projectId);
+  const distDir = path.join(wsDir, "dist");
+  if (!existsSync(distDir)) {
+    res.status(404).send(`
+      <!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+        body{font-family:monospace;background:#0a0a0f;color:#8B8577;display:flex;align-items:center;
+             justify-content:center;min-height:100vh;margin:0;font-size:13px;text-align:center;}
+      </style></head><body>
+        <div><div style="color:#C9A24C;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px">
+          No Build Output</div>
+          Build output not found — click "Run Project" to install dependencies and build.
+        </div>
+      </body></html>`);
+    return;
+  }
+  // Strip the router prefix so the remaining path is relative to dist/
+  const rawPath = req.path === "/" ? "/index.html" : req.path;
+  // Guard against path traversal
+  const resolved = path.resolve(distDir, rawPath.replace(/^\//, ""));
+  if (!resolved.startsWith(distDir + path.sep) && resolved !== distDir) {
+    res.status(403).send("Forbidden"); return;
+  }
+  if (existsSync(resolved) && !resolved.endsWith("/")) {
+    res.sendFile(resolved);
+  } else {
+    // SPA fallback — serve index.html for all unmatched paths
+    const indexPath = path.join(distDir, "index.html");
+    if (existsSync(indexPath)) res.sendFile(indexPath);
+    else res.status(404).send("index.html not found in build output");
   }
 });
 
