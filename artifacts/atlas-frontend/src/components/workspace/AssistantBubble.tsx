@@ -400,20 +400,22 @@ function InlineDiffCard({
     // Intermediate round in a multi-round build — suppress CommitPill entirely
     if (buildGroupInfo?.type === "intermediate") return null;
 
-    // Determine label: summary pill for multi-round, simple pill for single-round
+    // Determine label: summary pill for multi-round, status-enhanced pill for single-round
     let label: string;
-    if (buildGroupInfo?.type === "final" && buildGroupInfo.roundCount > 1) {
-      const count = buildGroupInfo.uniqueFiles.length;
-      const fixRounds = buildGroupInfo.roundCount - 1;
-      const statusSuffix = buildGroupInfo.buildVerified === true
+    const statusSuffix = buildGroupInfo?.type === "final"
+      ? buildGroupInfo.buildVerified === true
         ? " · Build verified"
         : buildGroupInfo.buildVerified === false
           ? " · Check failed"
-          : "";
+          : ""
+      : "";
+    if (buildGroupInfo?.type === "final" && buildGroupInfo.roundCount > 1) {
+      const count = buildGroupInfo.uniqueFiles.length;
+      const fixRounds = buildGroupInfo.roundCount - 1;
       label = `✓ Applied · ${count} file${count !== 1 ? "s" : ""} · ${fixRounds} fix round${fixRounds !== 1 ? "s" : ""}${statusSuffix}`;
     } else {
       const names = fileEdits.map((e) => e.path?.split("/").pop() ?? e.path).filter(Boolean);
-      label = `✓ Auto-applied — ${names.join(", ")}`;
+      label = `✓ Auto-applied — ${names.join(", ")}${statusSuffix}`;
     }
 
     return (

@@ -310,10 +310,19 @@ export function ChatStream(props: ChatStreamProps) {
       m.role === "user" &&
       (m.displayAs === "autoVerify" || m.content.startsWith("[LOCAL_APPLY_SUCCESS]"));
 
+    // Detects an auto-applied build round for both live messages (autoPushed flag)
+    // and historical messages loaded from DB (no autoPushed — infer from FILE_EDIT_START
+    // content + the fact that the next message is a LOCAL_APPLY_SUCCESS).
+    const isAutoAppliedRound = (m: ChatMessage, nextM: ChatMessage | undefined) =>
+      m.role === "assistant" && (
+        m.autoPushed === true ||
+        (/FILE_EDIT_START/i.test(m.content) && nextM != null && isLocalApply(nextM))
+      );
+
     let i = 0;
     while (i < messages.length) {
       const msg = messages[i];
-      if (msg.role === "assistant" && msg.autoPushed) {
+      if (isAutoAppliedRound(msg, messages[i + 1])) {
         const chainIdxs: number[] = [i];
         const chainLedgerIdxs: number[] = [];
         const allPaths: string[] = [...((msg.fileEdits ?? []).map((e) => e.path ?? ""))];
@@ -323,14 +332,14 @@ export function ChatStream(props: ChatStreamProps) {
           if (isLocalApply(messages[j])) {
             const ledgerIdx = j;
             j++;
-            if (j < messages.length && messages[j].role === "assistant" && messages[j].autoPushed) {
+            if (j < messages.length && isAutoAppliedRound(messages[j], messages[j + 1])) {
               chainIdxs.push(j);
               chainLedgerIdxs.push(ledgerIdx);
               allPaths.push(...((messages[j].fileEdits ?? []).map((e) => e.path ?? "")));
               j++;
               continue;
             } else {
-              // Ledger message after the last autoPushed round — suppress it too
+              // Ledger message after the last auto-applied round — suppress it too
               chainLedgerIdxs.push(ledgerIdx);
             }
           }
@@ -340,7 +349,8 @@ export function ChatStream(props: ChatStreamProps) {
         const uniqueFiles = [...new Set(allPaths.filter(Boolean))];
         const roundCount = chainIdxs.length;
 
-        // Derive build verification status from the last ledger message content
+        // Derive build verification status from the last ledger message content.
+        // Scan all ledger messages so even an intermediate INTEGRITY_FAILURE is detected.
         const lastLedgerIdx = chainLedgerIdxs[chainLedgerIdxs.length - 1];
         const lastLedgerContent = lastLedgerIdx != null ? messages[lastLedgerIdx]?.content ?? "" : "";
         const buildVerified: boolean | undefined = lastLedgerContent
@@ -351,15 +361,18 @@ export function ChatStream(props: ChatStreamProps) {
               : undefined
           : undefined;
 
-        // Only apply deduplication when there are 2+ rounds
-        if (roundCount > 1) {
-          for (const li of chainLedgerIdxs) supLedger.add(li);
-          for (let k = 0; k < chainIdxs.length; k++) {
-            bgMap.set(chainIdxs[k], k < chainIdxs.length - 1
-              ? { type: "intermediate", roundCount }
-              : { type: "final", roundCount, uniqueFiles, buildVerified }
-            );
-          }
+        // Tag all ledger messages in the chain as suppressed — applies to both
+        // single-round (trailing audit message) and multi-round (all inter-round messages)
+        for (const li of chainLedgerIdxs) supLedger.add(li);
+
+        // Set buildGroupInfo for all auto-apply rounds (single and multi).
+        // Multi-round: intermediate rounds suppressed, final gets summary label.
+        // Single-round: final gets build status injected into the existing label.
+        for (let k = 0; k < chainIdxs.length; k++) {
+          bgMap.set(chainIdxs[k], k < chainIdxs.length - 1
+            ? { type: "intermediate", roundCount }
+            : { type: "final", roundCount, uniqueFiles, buildVerified }
+          );
         }
 
         i = j;
