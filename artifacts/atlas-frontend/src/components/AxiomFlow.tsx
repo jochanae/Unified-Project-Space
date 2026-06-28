@@ -659,6 +659,7 @@ export function AxiomFlow({
   // canvasReady: stays false until one rAF after first nodes load so fitMap()
   // has time to run before the canvas becomes visible (prevents the zoom=1 flash).
   const [canvasReady, setCanvasReady] = useState(false);
+  const [centerFlash, setCenterFlash] = useState(false);
 
 
   // If projectName arrives or changes after mount and the goal node still
@@ -2148,18 +2149,31 @@ export function AxiomFlow({
           <button
             type="button"
             title="Center map (double-tap also works)"
-            onClick={(e) => { e.stopPropagation(); resetView(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              haptics.tap();
+              setCenterFlash(true);
+              setTimeout(() => setCenterFlash(false), 350);
+              resetView();
+            }}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               padding: "3px 10px",
               borderRadius: 6,
-              border: `1px solid ${theme === "parchment" ? "rgba(146,64,14,0.22)" : "rgba(201,162,76,0.22)"}`,
-              background: theme === "parchment" ? "rgba(255,252,245,0.70)" : "rgba(10,10,12,0.55)",
-              color: theme === "parchment" ? "rgba(146,64,14,0.72)" : "rgba(201,162,76,0.72)",
+              border: `1px solid ${centerFlash
+                ? (theme === "parchment" ? "rgba(146,64,14,0.7)" : "rgba(201,162,76,0.7)")
+                : (theme === "parchment" ? "rgba(146,64,14,0.22)" : "rgba(201,162,76,0.22)")}`,
+              background: centerFlash
+                ? (theme === "parchment" ? "rgba(255,252,245,0.95)" : "rgba(201,162,76,0.18)")
+                : (theme === "parchment" ? "rgba(255,252,245,0.70)" : "rgba(10,10,12,0.55)"),
+              color: centerFlash
+                ? (theme === "parchment" ? "rgba(146,64,14,1)" : "rgba(201,162,76,1)")
+                : (theme === "parchment" ? "rgba(146,64,14,0.72)" : "rgba(201,162,76,0.72)"),
               fontFamily: "var(--app-font-mono)",
               fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase",
               cursor: "pointer", userSelect: "none",
               backdropFilter: "blur(6px)",
+              transition: "background 200ms ease, border-color 200ms ease, color 200ms ease",
             }}
           >
             ⊙ Center
