@@ -2695,7 +2695,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         project: projectCreated,
         githubRepo,
         githubHtmlUrl,
-        instruction: `Project "${project.name}" created with id ${project.id}.${repoNote} Confirm the project was created. Do NOT include NAVIGATE_TO in your response — navigation is handled automatically via the done event.`,
+        instruction: `Project "${project.name}" created with id ${project.id}.${repoNote} Write ONE short sentence confirming the project was created (e.g. "The Obsidian Ledger is ready — opening the workspace now."). Then STOP. Do NOT write any code, HTML, CSS, files, or file contents. Do NOT start building. Do NOT include NAVIGATE_TO — navigation is handled automatically via the done event. The actual build happens inside the workspace, not here.`,
       };
     } catch (error) {
       const message = error instanceof ProjectLimitReachedError
