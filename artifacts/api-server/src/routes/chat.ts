@@ -4014,7 +4014,22 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     displayContent = displayContent.replace(PROACTIVE_ALERT_RE, "").trim();
   }
   // Strip LENS_DRIFT token before DB persistence (it's a client-side signal only)
-  const persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
+  let persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
+
+  // ── Builder integrity check ───────────────────────────────────────────────
+  // When the BUILD lens is active and the response is substantial but produced
+  // zero FILE_EDIT or LINE_PATCH blocks, the model described changes without
+  // making them. Append a [NO_FILES_WRITTEN] signal so the next session turn
+  // and the user can both see that the workspace was not touched.
+  const isBuildIntegrityFailure =
+    workspaceLens === "build" &&
+    !hasProposedFileChanges &&
+    persistContent.length > 200 &&
+    // Don't flag genuinely short acknowledgments or confirmations
+    !(/^(ok|done|got it|sure|yes|noted|confirmed|created|pushed)\b/i.test(persistContent.trim()));
+  if (isBuildIntegrityFailure) {
+    persistContent += "\n\n⚠️ [NO_FILES_WRITTEN] This response described code changes but emitted no FILE_EDIT blocks. The workspace was NOT modified. Please send your FILE_EDIT blocks now.";
+  }
   const surface = detectSurfaceSignal({
     content: persistContent,
     userMessage: message,

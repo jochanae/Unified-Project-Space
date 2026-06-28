@@ -1,192 +1,65 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import SparklineChart from './components/SparklineChart.jsx'
-import AssetDistribution from './components/AssetDistribution.jsx'
-import AssetList from './components/AssetList.jsx'
-import QuickTransaction from './components/QuickTransaction.jsx'
 import Toast from './components/Toast.jsx'
 
-// ── Initial mock portfolio data ──────────────────────────────────────────────
-const INITIAL_ASSETS = [
-  {
-    id: 1,
-    name: 'Patek Philippe Nautilus 5711',
-    category: 'Watches',
-    value: 148000,
-    acquired: '2021-03',
-    change24h: +2.4,
-    notes: 'Steel, full set'
-  },
-  {
-    id: 2,
-    name: 'Richard Mille RM 011',
-    category: 'Watches',
-    value: 215000,
-    acquired: '2022-07',
-    change24h: -0.8,
-    notes: 'Titanium flyback'
-  },
-  {
-    id: 3,
-    name: 'Basquiat — Untitled (1984)',
-    category: 'Fine Art',
-    value: 390000,
-    acquired: '2020-11',
-    change24h: +1.1,
-    notes: 'Acrylic on canvas, authenticated'
-  },
-  {
-    id: 4,
-    name: 'Kaws — BFF Companion',
-    category: 'Fine Art',
-    value: 62000,
-    acquired: '2023-01',
-    change24h: +0.3,
-    notes: 'Original bronze sculpture'
-  },
-  {
-    id: 5,
-    name: '1986 Chanel Classic Flap',
-    category: 'Fashion',
-    value: 18500,
-    acquired: '2023-08',
-    change24h: +0.9,
-    notes: 'Black lambskin, gold HW'
-  },
-  {
-    id: 6,
-    name: 'Hermès Birkin 35 Himalaya',
-    category: 'Fashion',
-    value: 295000,
-    acquired: '2022-03',
-    change24h: +3.2,
-    notes: 'Niloticus croc, palladium HW'
-  },
-  {
-    id: 7,
-    name: 'Audemars Piguet Royal Oak',
-    category: 'Watches',
-    value: 98000,
-    acquired: '2023-05',
-    change24h: -1.2,
-    notes: 'Rose gold, 41mm'
-  }
-]
-
-// 24-hour sparkline data points (simulated portfolio valuation in thousands)
-const SPARKLINE_DATA = [
-  1218, 1221, 1219, 1224, 1228, 1222, 1226, 1230, 1228, 1235,
-  1232, 1238, 1241, 1237, 1243, 1246, 1244, 1249, 1252, 1248,
-  1255, 1258, 1254, 1262, 1265, 1260, 1268, 1272, 1270, 1226,
-  1231, 1236, 1240, 1244, 1248, 1252, 1256, 1260, 1264, 1268,
-  1274, 1278, 1226, 1230, 1234, 1238, 1226, 1226, 1226, 1226
-]
-
-// ── Natural language parser ──────────────────────────────────────────────────
-function parseTransaction(text) {
-  const lower = text.toLowerCase()
-
-  // Detect category
-  let category = 'Fine Art'
-  if (/watch|rolex|patek|audemars|richard mille|ap |omega|cartier tank|chronograph/i.test(text)) {
-    category = 'Watches'
-  } else if (/bag|handbag|tote|chanel|hermès|hermes|birkin|kelly|louis vuitton|gucci|prada|dior|fashion|clothing|jacket|coat|dress|shoe|sneaker|boots/i.test(text)) {
-    category = 'Fashion'
-  } else if (/art|painting|sculpture|print|canvas|drawing|photograph|basquiat|kaws|hirst|murakami/i.test(text)) {
-    category = 'Fine Art'
-  }
-
-  // Extract value
-  let value = 0
-  const valuePatterns = [
-    /\$\s*([\d,]+(?:\.\d{2})?)\s*k/i,
-    /\$\s*([\d,]+(?:\.\d{2})?)/,
-    /([\d,]+(?:\.\d{2})?)\s*k(?:[\s,]|$)/i,
-    /valued?\s+(?:at\s+)?\$?\s*([\d,]+(?:\.\d{2})?)/i,
-    /(?:worth|cost|price|priced\s+at)\s+\$?\s*([\d,]+(?:\.\d{2})?)/i,
-    /([\d,]+(?:\.\d{2})?)/
-  ]
-
-  for (const pattern of valuePatterns) {
-    const match = text.match(pattern)
-    if (match) {
-      const raw = match[1].replace(/,/g, '')
-      value = parseFloat(raw)
-      if (pattern.source.includes('k')) value *= 1000
-      break
-    }
-  }
-
-  // Extract name — remove "add" prefix and value reference
-  let name = text
-    .replace(/^(?:add|log|record|new|track)\s+/i, '')
-    .replace(/,?\s*valued?\s+at\s+\$?[\d,k.]+/i, '')
-    .replace(/,?\s*(?:worth|cost|price|priced\s+at)\s+\$?[\d,k.]+/i, '')
-    .replace(/\$\s*[\d,k.]+/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  // Capitalize first letter of each meaningful word
-  name = name.replace(/\b\w/g, c => c.toUpperCase())
-  if (!name) name = 'New Asset'
-
-  return { name, category, value, change24h: 0, notes: 'Added via Quick Transaction' }
-}
-
 // ── Format helpers ───────────────────────────────────────────────────────────
-function formatCurrency(value) {
-  if (value >= 1_000_000) {
-    return '$' + (value / 1_000_000).toFixed(2) + 'M'
-  }
+function formatCurrency(cents) {
+  const value = cents / 100
+  if (value >= 1_000_000) return '$' + (value / 1_000_000).toFixed(2) + 'M'
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-function totalPortfolioValue(assets) {
-  return assets.reduce((sum, a) => sum + a.value, 0)
+function buildSparklinePoints(sparklineRows, totalCents) {
+  if (!sparklineRows || sparklineRows.length === 0) {
+    // No transaction history — flat line at current total
+    const v = totalCents / 100 / 1000
+    return Array.from({ length: 24 }, () => v)
+  }
+  // Build running sum across the 24h window
+  const points = sparklineRows.map(r => Number(r.delta_cents))
+  // Prepend current total context
+  const base = (totalCents / 100 / 1000) - points.reduce((s, v) => s + v / 100, 0)
+  let running = base
+  return points.map(delta => { running += delta / 100; return Math.max(0, running) })
 }
 
-// ── App ──────────────────────────────────────────────────────────────────────
+// ── Dashboard (/) ────────────────────────────────────────────────────────────
 export default function App() {
-  const [assets, setAssets] = useState(INITIAL_ASSETS)
-  const [activeCategory, setActiveCategory] = useState(null)
+  const [summary, setSummary] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
-  const nextId = useRef(100)
-
-  const portfolioValue = totalPortfolioValue(assets)
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type, id: Date.now() })
     setTimeout(() => setToast(null), 3200)
   }, [])
 
-  const handleAddAsset = useCallback((text) => {
-    if (!text.trim()) return
-
-    const parsed = parseTransaction(text)
-    if (parsed.value === 0) {
-      showToast('Include a value — e.g. "valued at $4500"', 'error')
-      return
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/ledger/summary', { credentials: 'include' })
+        if (!res.ok) throw new Error('fetch failed')
+        const data = await res.json()
+        setSummary(data)
+      } catch {
+        showToast('Could not load portfolio — check your connection', 'error')
+      } finally {
+        setLoading(false)
+      }
     }
+    load()
+  }, [])
 
-    const newAsset = {
-      id: nextId.current++,
-      acquired: new Date().toISOString().slice(0, 7),
-      ...parsed
-    }
-    setAssets(prev => [newAsset, ...prev])
-    showToast(`${parsed.name} added to ledger`, 'success')
-  }, [showToast])
+  const totalCents = summary?.totalCents ?? 0
+  const assetCount = summary?.assetCount ?? 0
+  const byCategory = summary?.byCategory ?? []
+  const sparklineRows = summary?.sparkline ?? []
+  const sparkPoints = buildSparklinePoints(sparklineRows, totalCents)
 
-  const filteredAssets = activeCategory
-    ? assets.filter(a => a.category === activeCategory)
-    : assets
-
-  const sparklineChange = (() => {
-    const first = SPARKLINE_DATA[0]
-    const last = SPARKLINE_DATA[SPARKLINE_DATA.length - 1]
-    return ((last - first) / first * 100).toFixed(2)
-  })()
-
-  const isUp = parseFloat(sparklineChange) >= 0
+  const sparkChange = sparkPoints.length > 1
+    ? (((sparkPoints[sparkPoints.length - 1] - sparkPoints[0]) / (sparkPoints[0] || 1)) * 100).toFixed(2)
+    : '0.00'
+  const isUp = parseFloat(sparkChange) >= 0
 
   return (
     <div className="obsidian-bg min-h-dvh">
@@ -197,15 +70,12 @@ export default function App() {
           <div>
             <p className="section-label" style={{ letterSpacing: '0.18em' }}>The Obsidian Ledger</p>
             <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.2)' }}>
-              {assets.length} assets tracked
+              {loading ? '—' : `${assetCount} assets tracked`}
             </p>
           </div>
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{
-              background: 'rgba(251,191,36,0.08)',
-              border: '1px solid rgba(251,191,36,0.18)'
-            }}
+            style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)' }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="5" r="3" stroke="#fbbf24" strokeWidth="1.5"/>
@@ -218,25 +88,35 @@ export default function App() {
         <div className="glass-card-elevated p-6 amber-glow-border">
           <div className="flex items-start justify-between mb-1">
             <p className="section-label">Total Portfolio Value</p>
-            <span className={isUp ? 'trend-up' : 'trend-down'}>
-              {isUp ? '↑' : '↓'} {Math.abs(sparklineChange)}% 24h
-            </span>
+            {!loading && (
+              <span className={isUp ? 'trend-up' : 'trend-down'}>
+                {isUp ? '↑' : '↓'} {Math.abs(sparkChange)}% 24h
+              </span>
+            )}
           </div>
 
           <div className="mt-3 mb-5">
-            <span
-              className="value-display amber-glow"
-              style={{ fontSize: 'clamp(2.4rem, 10vw, 3.2rem)', lineHeight: 1 }}
-            >
-              {formatCurrency(portfolioValue)}
-            </span>
-            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              Updated just now · USD
-            </p>
+            {loading ? (
+              <div style={{ height: 48, display: 'flex', alignItems: 'center' }}>
+                <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 14 }}>Loading…</span>
+              </div>
+            ) : (
+              <>
+                <span
+                  className="value-display amber-glow"
+                  style={{ fontSize: 'clamp(2.4rem, 10vw, 3.2rem)', lineHeight: 1 }}
+                >
+                  {formatCurrency(totalCents)}
+                </span>
+                <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Live · USD
+                </p>
+              </>
+            )}
           </div>
 
           {/* Sparkline */}
-          <SparklineChart data={SPARKLINE_DATA} isUp={isUp} />
+          <SparklineChart data={sparkPoints} isUp={isUp} />
 
           <div className="flex justify-between mt-2">
             <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>24h ago</span>
@@ -244,43 +124,48 @@ export default function App() {
           </div>
         </div>
 
-        {/* ── Zone 2: Asset Distribution ── */}
-        <AssetDistribution
-          assets={assets}
-          activeCategory={activeCategory}
-          onCategorySelect={setActiveCategory}
-        />
-
-        {/* ── Asset List ── */}
-        <div className="glass-card px-4 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="section-label">
-              {activeCategory ? activeCategory : 'All Assets'}
-            </p>
-            {activeCategory && (
-              <button
-                onClick={() => setActiveCategory(null)}
-                className="text-xs px-3 py-1 rounded-full"
-                style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: 'rgba(255,255,255,0.5)',
-                  cursor: 'pointer'
-                }}
-              >
-                Clear
-              </button>
-            )}
+        {/* ── Category summary cards ── */}
+        {!loading && byCategory.length > 0 && (
+          <div className="glass-card px-4 py-4">
+            <p className="section-label mb-3">By Category</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {byCategory.map(cat => {
+                const catValue = Number(cat.total_cents) / 100
+                const pct = totalCents > 0 ? Math.round((Number(cat.total_cents) / totalCents) * 100) : 0
+                const colors = { 'Watches': '#fbbf24', 'Fine Art': '#a78bfa', 'Fashion': '#f472b6' }
+                const color = colors[cat.category] ?? '#888'
+                return (
+                  <div key={cat.category}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: color, letterSpacing: '0.08em' }}>
+                        {(cat.category || '').toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                        {pct}% · {cat.count} items
+                      </span>
+                    </div>
+                    <div style={{ height: 2, borderRadius: 2, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: color, opacity: 0.7, borderRadius: 2 }}/>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <AssetList assets={filteredAssets} />
-        </div>
+        )}
 
-        {/* ── Zone 3: Quick Transaction ── */}
-        <QuickTransaction onSubmit={handleAddAsset} />
+        {/* Empty state */}
+        {!loading && assetCount === 0 && (
+          <div className="glass-card px-4 py-8 text-center">
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>No assets yet</p>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', marginTop: 6 }}>
+              Tap + ADD to log your first asset
+            </p>
+          </div>
+        )}
 
       </div>
 
-      {/* Toast */}
       {toast && <Toast key={toast.id} message={toast.message} type={toast.type} />}
     </div>
   )
