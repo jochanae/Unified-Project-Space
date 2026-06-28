@@ -1138,6 +1138,159 @@ function ClarifyCard({
   );
 }
 
+// ── ReadinessGateCard ─────────────────────────────────────────────────────────
+function ReadinessGateCard({
+  result,
+  onBuildAnyway,
+}: {
+  result: {
+    ready: boolean;
+    confidence: number;
+    checks: Array<{ name: string; status: "pass" | "fail" | "warn"; explanation: string }>;
+    summary: string;
+    originalMessage?: string;
+  };
+  onBuildAnyway?: (message: string) => void;
+}) {
+  const statusIcon = (s: "pass" | "fail" | "warn") =>
+    s === "pass" ? (
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="7" fill="rgba(74,222,128,0.12)" stroke="rgba(74,222,128,0.5)" strokeWidth="1.2" />
+        <path d="M4.5 8.5l2.5 2.5 4.5-5" stroke="rgba(134,239,172,0.95)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ) : s === "warn" ? (
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2L14.5 13.5H1.5L8 2Z" fill="rgba(250,204,21,0.1)" stroke="rgba(250,204,21,0.55)" strokeWidth="1.2" strokeLinejoin="round" />
+        <path d="M8 6.5v3M8 11.5v.5" stroke="rgba(253,224,71,0.9)" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    ) : (
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="7" fill="rgba(239,68,68,0.1)" stroke="rgba(239,68,68,0.45)" strokeWidth="1.2" />
+        <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="rgba(252,165,165,0.9)" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+
+  const statusColor = (s: "pass" | "fail" | "warn") =>
+    s === "pass" ? "rgba(134,239,172,0.8)" : s === "warn" ? "rgba(253,224,71,0.8)" : "rgba(252,165,165,0.8)";
+
+  const borderColor = result.ready
+    ? "rgba(74,222,128,0.22)"
+    : result.checks.some(c => c.status === "fail")
+    ? "rgba(239,68,68,0.22)"
+    : "rgba(250,204,21,0.22)";
+
+  const bgColor = result.ready
+    ? "rgba(74,222,128,0.04)"
+    : result.checks.some(c => c.status === "fail")
+    ? "rgba(239,68,68,0.04)"
+    : "rgba(250,204,21,0.04)";
+
+  return (
+    <div style={{
+      marginTop: 12,
+      marginBottom: 12,
+      border: `1px solid ${borderColor}`,
+      borderRadius: 10,
+      background: bgColor,
+      overflow: "hidden",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "10px 14px",
+        borderBottom: `1px solid ${borderColor}`,
+        background: result.ready ? "rgba(74,222,128,0.05)" : "rgba(14,13,11,0.3)",
+      }}>
+        <span style={{
+          fontFamily: "var(--app-font-mono)",
+          fontSize: 9,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          fontWeight: 700,
+          color: result.ready ? "rgba(134,239,172,0.9)" : "rgba(252,165,165,0.85)",
+        }}>
+          {result.ready ? "✓ Build Readiness — Clear" : "Build Readiness — Review Required"}
+        </span>
+        <span style={{
+          marginLeft: "auto",
+          fontFamily: "var(--app-font-mono)",
+          fontSize: 9,
+          color: "var(--atlas-muted)",
+          letterSpacing: "0.08em",
+        }}>
+          {result.confidence}% confidence
+        </span>
+      </div>
+
+      {/* Checks list */}
+      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column" as const, gap: 8 }}>
+        {result.checks.map((check, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <span style={{ marginTop: 1, flexShrink: 0 }}>{statusIcon(check.status)}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 9.5,
+                fontWeight: 600,
+                letterSpacing: "0.06em",
+                color: statusColor(check.status),
+                marginBottom: 2,
+              }}>
+                {check.name}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--atlas-fg)", opacity: 0.72, lineHeight: 1.55 }}>
+                {check.explanation}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer — bypass button when not ready */}
+      {!result.ready && onBuildAnyway && result.originalMessage && (
+        <div style={{
+          padding: "8px 14px 12px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          borderTop: `1px solid ${borderColor}`,
+        }}>
+          <button
+            type="button"
+            onClick={() => onBuildAnyway(result.originalMessage!)}
+            style={{
+              fontFamily: "var(--app-font-mono)",
+              fontSize: 9.5,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              fontWeight: 600,
+              color: "var(--atlas-muted)",
+              background: "transparent",
+              border: "1px solid var(--atlas-border)",
+              borderRadius: 5,
+              padding: "5px 12px",
+              cursor: "pointer",
+              transition: "color 140ms ease, border-color 140ms ease",
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--atlas-fg)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,162,76,0.4)";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--atlas-muted)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--atlas-border)";
+            }}
+          >
+            Build anyway
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AssistantBubble ───────────────────────────────────────────────────────────
 export function AssistantBubble({
   message,
@@ -1167,6 +1320,7 @@ export function AssistantBubble({
   onPlanStateChange,
   onPlanExecutionChange,
   onExecuteHomePlan,
+  onBuildAnyway,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -1195,6 +1349,7 @@ export function AssistantBubble({
   onPlanStateChange?: (messageId: number, state: PlanState) => void;
   onPlanExecutionChange?: (messageId: number, execution: PlanExecution | null) => void;
   onExecuteHomePlan?: (plan: Plan) => void;
+  onBuildAnyway?: (message: string) => void;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
@@ -1865,8 +2020,12 @@ export function AssistantBubble({
           />
         )}
 
-
-
+        {message.readinessResult && (
+          <ReadinessGateCard
+            result={message.readinessResult}
+            onBuildAnyway={onBuildAnyway}
+          />
+        )}
 
         {message.imageGen?.images?.map((img, i) => (
           <SketchReveal

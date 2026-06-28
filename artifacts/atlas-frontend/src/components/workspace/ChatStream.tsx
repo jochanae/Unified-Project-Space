@@ -269,6 +269,9 @@ export interface ChatStreamProps {
   // commit-carryover (ambient thread → committed project): marker + greeting bubble
   // rendered at the tail of the carried thread.
   commitCarryover?: { committedAt: string; greeting?: string | null } | null;
+
+  // Build Readiness Gate: re-send original message bypassing the gate
+  onBuildAnyway?: (message: string) => void;
 }
 
 // Helper alias so we don't re-derive AssistantBubble prop types here.
@@ -293,6 +296,7 @@ export function ChatStream(props: ChatStreamProps) {
     onPushSuccess,
     onWriteFile,
     commitCarryover,
+    onBuildAnyway,
   } = props;
 
   // Match home: parent padding "0 24px" + inner scroller paddingRight 80, paddingTop 56.
@@ -467,6 +471,7 @@ export function ChatStream(props: ChatStreamProps) {
                 onPlanExecutionChange={onPlanExecutionChange}
                 onExecuteHomePlan={onExecuteHomePlan}
                 onPushSuccess={onPushSuccess}
+                onBuildAnyway={onBuildAnyway}
               />
               {Boolean(msg.terminalCmd || msg.terminalResult) && (
                 <div style={{ maxWidth: "80%", marginTop: -18, marginBottom: 24 }}>

@@ -253,6 +253,14 @@ export interface ChatMessage {
   reverted?: boolean;
   /** Atlas-proposed workspace file write — set when Atlas emits WRITE_FILE signal. */
   writeFileProposal?: { path: string };
+  /** Build Readiness Gate — present when intentType === "readiness_gate". */
+  readinessResult?: {
+    ready: boolean;
+    confidence: number;
+    checks: Array<{ name: string; status: "pass" | "fail" | "warn"; explanation: string }>;
+    summary: string;
+    originalMessage?: string;
+  };
 }
 
 export type MemoryChip = { label: string; insight?: string };
@@ -7757,6 +7765,7 @@ export default function Workspace() {
               onExecuteHomePlan: executeHomePlan,
               onPushSuccess: handleReviewPushSuccess,
               commitCarryover,
+              onBuildAnyway: (msg: string) => doSend(msg, sessionId ?? 0, messagesRef.current, undefined, undefined, { buildMode: true, skipReadiness: true }),
             } : null}
             betweenSlot={
               agenticMode && agenticIterCount > 0 ? (

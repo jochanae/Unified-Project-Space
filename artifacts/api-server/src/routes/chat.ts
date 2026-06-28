@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable, applicationModelsTable } from "@workspace/db";
 import { maybeExtractGenome } from "../lib/genomeExtract";
 import { extractAndUpdateApplicationModel, extractVisualMemoryFromAttachments } from "../lib/applicationModelExtraction";
+import { checkBuildReadiness } from "../lib/buildReadiness";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -2390,6 +2391,47 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Keep build-handoff mode active for the first few turns so the audit/completion
   // rounds after LOCAL_APPLY_SUCCESS still run with the BUILD_HANDOFF system prompt.
   const isBuildHandoff = !!(sessionBuildIntent && sessionMessageCount <= 4 && projectId);
+
+  // ── Build Readiness Gate ──────────────────────────────────────────────────
+  // Advisory gate: runs before Builder starts. If gaps exist, returns a
+  // structured readiness report instead of proceeding to the AI call.
+  // Always bypassable via skipReadiness: true ("Build anyway").
+  if (buildMode && projectId && !(body as any).skipReadiness) {
+    try {
+      const readiness = await checkBuildReadiness(projectId);
+      if (!readiness.ready) {
+        const checkLines = readiness.checks
+          .map((c) => {
+            const icon = c.status === "pass" ? "✓" : c.status === "fail" ? "✗" : "⚠";
+            return `${icon} **${c.name}** — ${c.explanation}`;
+          })
+          .join("\n");
+        const content = `Before I build, a few things are worth confirming:\n\n${checkLines}\n\nWant me to proceed anyway, or should we resolve these first?`;
+        res.write(
+          `data: ${JSON.stringify({
+            type: "done",
+            content,
+            modelUsed: "system",
+            terminalCmd: null,
+            terminalResult: null,
+            surface: "system",
+            intentType: "readiness_gate",
+            catchPayload: null,
+            messageId: Date.now(),
+            model: "system",
+            readinessResult: { ...readiness, originalMessage: message },
+          })}\n\n`,
+        );
+        res.end();
+        return;
+      }
+      // Ready path: inject a brief "Building from" note into the system prompt later.
+      // Store on req so the systemPrompt builder below can pick it up.
+      (req as any)._readinessSummary = readiness.summary;
+    } catch (err) {
+      req.log.warn({ err, projectId }, "build readiness check failed — proceeding without gate");
+    }
+  }
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it
