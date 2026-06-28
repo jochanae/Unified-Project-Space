@@ -772,6 +772,21 @@ export function useChatStream(
                       });
                     }
                   } catch { /* ignore malformed image event */ }
+                } else if (evtName === "readiness_preflight") {
+                  // Readiness gate passed — server emits a compact preflight banner
+                  // showing the gate result before the Builder stream starts.
+                  const payload = (typeEmbedded ?? JSON.parse(evtData)) as {
+                    readinessResult?: ChatMessage["readinessResult"];
+                  };
+                  if (payload.readinessResult && placeholderId !== null) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === placeholderId
+                          ? { ...m, readinessResult: payload.readinessResult }
+                          : m
+                      )
+                    );
+                  }
                 } else if (evtName === "error") {
                   // Server error event — clear activity, show message, stop stream.
                   const payload = typeEmbedded ?? JSON.parse(evtData) as unknown;

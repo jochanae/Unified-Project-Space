@@ -2425,8 +2425,14 @@ router.post("/chat", async (req, res): Promise<void> => {
         res.end();
         return;
       }
-      // Ready path: inject a brief "Building from" note into the system prompt later.
-      // Store on req so the systemPrompt builder below can pick it up.
+      // Ready path: emit a compact preflight banner to the client before
+      // the Builder stream starts so the user sees the gate was checked.
+      res.write(
+        `data: ${JSON.stringify({
+          type: "readiness_preflight",
+          readinessResult: { ...readiness, originalMessage: message },
+        })}\n\n`,
+      );
       (req as any)._readinessSummary = readiness.summary;
     } catch (err) {
       req.log.warn({ err, projectId }, "build readiness check failed — proceeding without gate");

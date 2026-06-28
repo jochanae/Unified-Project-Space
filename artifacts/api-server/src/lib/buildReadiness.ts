@@ -15,6 +15,28 @@ export interface BuildReadinessResult {
   originalMessage?: string;
 }
 
+// Known antonym pairs used to detect AM↔DNA tone contradictions
+const ANTONYM_PAIRS: [string, string][] = [
+  ["minimal", "maximalist"],
+  ["minimal", "elaborate"],
+  ["minimal", "complex"],
+  ["dark", "light"],
+  ["dark", "bright"],
+  ["serious", "playful"],
+  ["formal", "casual"],
+  ["formal", "playful"],
+  ["technical", "approachable"],
+  ["technical", "friendly"],
+  ["dense", "spacious"],
+  ["compact", "airy"],
+  ["clinical", "warm"],
+  ["corporate", "playful"],
+];
+
+function tokenize(arr: string[]): string[] {
+  return arr.flatMap((s) => s.toLowerCase().split(/[\s,/-]+/));
+}
+
 export async function checkBuildReadiness(projectId: number): Promise<BuildReadinessResult> {
   const [amRows, planRows] = await Promise.all([
     db
@@ -34,6 +56,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
   const plan = planRows[0] ?? null;
   const checks: ReadinessCheck[] = [];
 
+  // ── Check 1: Requirements present ─────────────────────────────────────────
   const identity = (model?.identity as Record<string, unknown>) ?? {};
   const intent = (model?.intent as Record<string, unknown>) ?? {};
   const hasIdentity = !!(identity.name || identity.purpose);
@@ -63,6 +86,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
     });
   }
 
+  // ── Check 2: Experience Intent confirmed ───────────────────────────────────
   const experienceIntent = (model?.experienceIntent as Record<string, unknown>) ?? {};
   const hasEI = Object.keys(experienceIntent).length > 0;
   const eiConfirmed = !!(experienceIntent.lastConfirmed);
@@ -79,7 +103,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
     checks.push({
       name: "Experience Intent confirmed",
       status: "warn",
-      explanation: `Experience intent inferred but not explicitly confirmed (confidence ${eiConfidence}%) — Builder will make visual guesses`,
+      explanation: `Experience intent inferred but not confirmed (confidence ${eiConfidence}%) — Builder will make visual guesses`,
     });
   } else {
     checks.push({
@@ -89,6 +113,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
     });
   }
 
+  // ── Check 3: Design Plan committed ────────────────────────────────────────
   if (plan?.status === "committed") {
     checks.push({
       name: "Design Plan committed",
@@ -109,6 +134,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
     });
   }
 
+  // ── Check 4: Responsive intent declared ───────────────────────────────────
   const planBody = (plan?.body as Record<string, unknown>) ?? {};
   const responsiveIntent = (planBody.responsiveIntent as Record<string, unknown>) ?? {};
   const hasResponsive = !!(responsiveIntent.mobile || responsiveIntent.desktop);
@@ -133,6 +159,7 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
     });
   }
 
+  // ── Check 5: Design principles captured ───────────────────────────────────
   const creativePrinciples = (model?.creativePrinciples as string[]) ?? [];
   if (creativePrinciples.length >= 2) {
     checks.push({
@@ -154,21 +181,114 @@ export async function checkBuildReadiness(projectId: number): Promise<BuildReadi
     });
   }
 
-  const passCount = checks.filter((c) => c.status === "pass").length;
+  // ── Check 6: AM↔DNA consistency (contradiction detection) ─────────────────
+  // Compares Experience Intent emotional register + Design Plan tone signals.
+  // Detects known antonym pairs that indicate contradictory directives.
+  const eiRegister = tokenize(
+    (experienceIntent.emotionalRegister as string[] | undefined) ?? []
+  );
+  const eiDesignPrinciples = tokenize(
+    (experienceIntent.designPrinciples as string[] | undefined) ?? []
+  );
+  const planTone = tokenize(
+    typeof planBody.tone === "string"
+      ? [planBody.tone]
+      : (planBody.tone as string[] | undefined) ?? []
+  );
+  const planStyle = tokenize(
+    typeof planBody.style === "string"
+      ? [planBody.style]
+      : (planBody.style as string[] | undefined) ?? []
+  );
+  const dnaSide = [...eiRegister, ...eiDesignPrinciples, ...tokenize(creativePrinciples)];
+  const planSide = [...planTone, ...planStyle];
+  const allTerms = [...dnaSide, ...planSide];
+
+  const contradictions = ANTONYM_PAIRS.filter(([a, b]) => {
+    const hasA = allTerms.some((t) => t.includes(a));
+    const hasB = allTerms.some((t) => t.includes(b));
+    if (!hasA || !hasB) return false;
+    const aInDna = dnaSide.some((t) => t.includes(a));
+    const bInDna = dnaSide.some((t) => t.includes(b));
+    const aInPlan = planSide.some((t) => t.includes(a));
+    const bInPlan = planSide.some((t) => t.includes(b));
+    return (aInDna && bInPlan) || (bInDna && aInPlan);
+  });
+
+  if (!model && !plan) {
+    checks.push({
+      name: "AM–DNA consistency",
+      status: "warn",
+      explanation: "No Application Model or Design Plan to verify consistency between",
+    });
+  } else if (contradictions.length > 0) {
+    const pairs = contradictions.map(([a, b]) => `"${a}" vs "${b}"`).join(", ");
+    checks.push({
+      name: "AM–DNA consistency",
+      status: "fail",
+      explanation: `Conflicting tone signals detected: ${pairs}`,
+    });
+  } else if (dnaSide.length === 0 && planSide.length === 0) {
+    checks.push({
+      name: "AM–DNA consistency",
+      status: "warn",
+      explanation: "Cannot verify consistency — tone signals absent from both DNA and Design Plan",
+    });
+  } else if (dnaSide.length === 0 || planSide.length === 0) {
+    checks.push({
+      name: "AM–DNA consistency",
+      status: "warn",
+      explanation:
+        dnaSide.length === 0
+          ? "DNA has no tone signals to verify against the Design Plan"
+          : "Design Plan has no explicit tone signals to verify against DNA",
+    });
+  } else {
+    checks.push({
+      name: "AM–DNA consistency",
+      status: "pass",
+      explanation: "Experience Intent and Design Plan tone signals are consistent",
+    });
+  }
+
+  // ── Readiness decision ─────────────────────────────────────────────────────
+  // All four pillars must be confirmed for a green gate:
+  //   • Requirements present (pass)
+  //   • Experience Intent confirmed (pass)
+  //   • Design Plan committed (pass) — implies responsive intent also present
+  //   • Responsive intent declared (pass)
+  //   • No AM↔DNA contradiction (not "fail")
+  // Any unresolved warn on EI, Design Plan, or responsive intent keeps gate amber.
   const failCount = checks.filter((c) => c.status === "fail").length;
+  const passCount = checks.filter((c) => c.status === "pass").length;
   const total = checks.length;
   const confidence = Math.round((passCount / total) * 100);
-  const ready = failCount === 0 && passCount >= 2;
 
+  const eiStatus = checks.find((c) => c.name === "Experience Intent confirmed")?.status;
+  const designPlanStatus = checks.find((c) => c.name === "Design Plan committed")?.status;
+  const responsiveStatus = checks.find((c) => c.name === "Responsive intent declared")?.status;
+  const consistencyStatus = checks.find((c) => c.name === "AM–DNA consistency")?.status;
+
+  const ready =
+    failCount === 0 &&
+    eiStatus === "pass" &&
+    designPlanStatus === "pass" &&
+    responsiveStatus === "pass" &&
+    consistencyStatus !== "fail";
+
+  // ── Summary for preflight banner ──────────────────────────────────────────
   const lockedParts: string[] = [];
   if (hasIdentity && identity.name) lockedParts.push(identity.name as string);
   if (intent.summary) lockedParts.push((intent.summary as string).slice(0, 60));
   if (plan?.status === "committed") lockedParts.push(`Design Plan v${plan.version}`);
   if (eiConfirmed) {
-    const register = (experienceIntent.emotionalRegister as string[] | undefined)?.slice(0, 2).join(", ");
+    const register = (experienceIntent.emotionalRegister as string[] | undefined)
+      ?.slice(0, 2)
+      .join(", ");
     if (register) lockedParts.push(register);
   }
-  const summary = lockedParts.length > 0 ? lockedParts.join(" · ") : "Building from current context";
+  const summary =
+    lockedParts.length > 0 ? lockedParts.join(" · ") : "Building from current context";
 
   return { ready, confidence, checks, summary };
 }
