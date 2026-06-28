@@ -8,6 +8,7 @@ export const CreateProjectBody = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   entity_type: z.enum(["idea", "project"]).optional(),
+  status: z.enum(["shaping", "committed", "built", "archived"]).optional(),
 });
 
 export const UpdateProjectBody = z.object({

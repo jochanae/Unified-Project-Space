@@ -13,6 +13,7 @@ type CreateProjectForUserInput = {
   description?: string | null;
   entityType?: "project" | "idea";
   memory?: string | null;
+  status?: "shaping" | "committed" | "built" | "archived";
 };
 
 export class ProjectLimitReachedError extends Error {
@@ -59,6 +60,7 @@ export async function createProjectForUser(input: CreateProjectForUserInput) {
       description: input.description ?? null,
       entityType: input.entityType ?? "project",
       userId: input.userId,
+      ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.memory !== undefined ? { memory: input.memory } : {}),
     })
     .returning();

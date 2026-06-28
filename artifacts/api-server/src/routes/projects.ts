@@ -165,6 +165,7 @@ router.post("/projects", async (req, res): Promise<void> => {
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       entityType: parsed.data.entity_type ?? "project",
+      status: parsed.data.status,
     });
     // Auto-initialize local workspace directory so Files tab works without GitHub
     void ensureProjectWorkspaceDir(project.id).catch(() => {/* non-fatal */});
