@@ -3177,18 +3177,26 @@ The user has sent a build request directly in the workspace. Build it now. Do no
 
 DEFAULT PATH — full runnable Vite + React scaffold:
 Emit FILE_EDIT blocks for a COMPLETE project. Every file needed to run must be present:
-  • package.json (with @vitejs/plugin-react in devDependencies, and a "build" script: "vite build")
-  • vite.config.js — REQUIRED. Include the react() plugin and:
-      server: { host: '0.0.0.0', allowedHosts: true, hmr: false }
-      build: { outDir: 'dist' }
-  • index.html with <div id="root"> and <script type="module" src="/src/main.jsx">
-  • src/main.jsx — entry point with ReactDOM.createRoot
-  • src/App.jsx (or split into components as needed)
-  • Any CSS files referenced in the above
 
-If Tailwind is used:
-  • tailwind.config.js
-  • postcss.config.js
+  1. package.json — include @vitejs/plugin-react in devDependencies and "build": "vite build" in scripts
+  2. vite.config.js — THIS FILE IS MANDATORY. Without it vite cannot transpile JSX and the build WILL fail.
+     Use this exact template:
+       import { defineConfig } from 'vite'
+       import react from '@vitejs/plugin-react'
+       export default defineConfig({
+         plugins: [react()],
+         server: { host: '0.0.0.0', allowedHosts: true, hmr: false },
+         build: { outDir: 'dist' },
+       })
+  3. index.html — with <div id="root"> and <script type="module" src="/src/main.jsx">
+  4. src/main.jsx — ReactDOM.createRoot entry point
+  5. src/App.jsx (or split into logical component files)
+  6. Any CSS files referenced by the above
+
+If Tailwind is used — BOTH of these are required or Tailwind directives won't compile:
+  7. tailwind.config.js
+  8. postcss.config.js — THIS FILE IS MANDATORY when using Tailwind:
+       export default { plugins: { tailwindcss: {}, autoprefixer: {} } }
 
 REACT ROUTER: always HashRouter, never BrowserRouter.
 
