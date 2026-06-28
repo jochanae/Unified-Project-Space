@@ -53,6 +53,7 @@ import browserRouter from "./browser";
 import deployRouter from "./deploy";
 import zipRouter from "./zip";
 import searchRouter from "./search";
+import ledgerRouter from "./ledger";
 
 const router: IRouter = Router();
 
@@ -130,6 +131,9 @@ router.use(requireAuth, intelligenceRouter);
 
 // Project file system — local workspace read/write
 router.use(requireAuth, fsRouter);
+
+// Obsidian Ledger — assets + transactions + summary
+router.use(requireAuth, ledgerRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);

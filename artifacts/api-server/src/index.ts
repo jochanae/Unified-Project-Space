@@ -228,6 +228,41 @@ async function ensureColumns(): Promise<void> {
     logger.warn({ err }, "ensureColumns: project_checkpoints table failed — server will start anyway");
   }
 
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS ledger_assets (
+        id          SERIAL PRIMARY KEY,
+        user_id     INTEGER NOT NULL,
+        name        TEXT NOT NULL,
+        category    TEXT NOT NULL DEFAULT 'Other',
+        value_cents BIGINT NOT NULL DEFAULT 0,
+        notes       TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS ledger_transactions (
+        id          SERIAL PRIMARY KEY,
+        user_id     INTEGER NOT NULL,
+        asset_id    INTEGER REFERENCES ledger_assets(id) ON DELETE SET NULL,
+        action      TEXT NOT NULL,
+        amount_cents BIGINT NOT NULL DEFAULT 0,
+        note        TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS ledger_assets_user_idx ON ledger_assets (user_id, created_at DESC)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS ledger_transactions_user_idx ON ledger_transactions (user_id, created_at DESC)
+    `);
+    logger.info("ensureColumns: ledger_assets + ledger_transactions tables verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: ledger tables failed — server will start anyway");
+  }
+
   // Atomic migration: verify ALL source columns exist, copy data, then drop — in one transaction.
   // The DROP only executes if the INSERT succeeds; the transaction rolls back on any error so
   // the legacy columns are never lost without a confirmed successful copy.
