@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable, applicationModelsTable } from "@workspace/db";
 import { maybeExtractGenome } from "../lib/genomeExtract";
 import { extractAndUpdateApplicationModel } from "../lib/applicationModelExtraction";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
@@ -2612,6 +2612,20 @@ router.post("/chat", async (req, res): Promise<void> => {
     (SELF_CONTAINED_VERB_RE.test(message.trim()) && !PROJECT_REFERENCE_RE.test(message))
   );
 
+  // Fetch Project DNA (Creative Principles + Experience Intent) for Builder context.
+  // Non-blocking additive enrichment — never delays the response if it fails.
+  let projectDNARow: { creativePrinciples: unknown; experienceIntent: unknown } | null = null;
+  if (projectId && !isFoundationMode) {
+    try {
+      const [amRow] = await db
+        .select({ creativePrinciples: applicationModelsTable.creativePrinciples, experienceIntent: applicationModelsTable.experienceIntent })
+        .from(applicationModelsTable)
+        .where(eq(applicationModelsTable.projectId, projectId))
+        .limit(1);
+      projectDNARow = amRow ?? null;
+    } catch { /* non-fatal — DNA enrichment is additive only */ }
+  }
+
   // Build layered system prompt — use project data already fetched in the first Promise.all
   let systemPrompt = isFoundationMode ? FOUNDATION_SYSTEM_PROMPT : DEV_SYSTEM_PROMPT;
   // ACTIVE PROJECT is injected FIRST — before platform knowledge — so the model knows
@@ -2629,6 +2643,34 @@ This is your locked context for this entire conversation. Every question, every 
 
 HARD RULE: Never answer from the context of a different project unless the user explicitly names it by asking a cross-project question ("how does this compare to IntoIQ?" / "across all my projects…"). A general question like "what can we do here?" is always about the active project.${projectAlreadyNamedInstruction}
 --- END ACTIVE PROJECT ---`;
+  }
+  // Project DNA: Creative Principles + Experience Intent
+  // Extracted from conversation after each turn and persisted to the Application Model.
+  // Injected here so every response is shaped by the product's accumulated soul.
+  if (!isFoundationMode && projectDNARow) {
+    const principles = (projectDNARow.creativePrinciples as string[]) ?? [];
+    const ei = (projectDNARow.experienceIntent as Record<string, unknown>) ?? {};
+    const emotionalRegister = (ei.emotionalRegister as string[]) ?? [];
+    const interactionPosture = (ei.interactionPosture as string[]) ?? [];
+    const visualLanguage = (ei.visualLanguage as string[]) ?? [];
+    const designPrinciples = (ei.designPrinciples as string[]) ?? [];
+    const hasAny = principles.length > 0 || emotionalRegister.length > 0 || interactionPosture.length > 0 || visualLanguage.length > 0 || designPrinciples.length > 0;
+    if (hasAny) {
+      let dnaBlock = `\n\n--- PROJECT DNA ---`;
+      if (principles.length > 0) {
+        dnaBlock += `\nCREATIVE PRINCIPLES — these define the soul of this product. Every artifact you generate must honour them:\n${principles.map((p) => `• ${p}`).join("\n")}`;
+      }
+      const hasEI = emotionalRegister.length || interactionPosture.length || visualLanguage.length || designPrinciples.length;
+      if (hasEI) {
+        dnaBlock += `\n\nEXPERIENCE INTENT — shape every screen, layout, copy, and interaction against this brief:`;
+        if (emotionalRegister.length) dnaBlock += `\n• Feel: ${emotionalRegister.join(", ")}`;
+        if (interactionPosture.length) dnaBlock += `\n• Usage posture: ${interactionPosture.join(", ")}`;
+        if (visualLanguage.length) dnaBlock += `\n• Visual language: ${visualLanguage.join(", ")}`;
+        if (designPrinciples.length) dnaBlock += `\n• Design principles: ${designPrinciples.map((p) => `"${p}"`).join(" | ")}`;
+      }
+      dnaBlock += `\n--- END PROJECT DNA ---`;
+      systemPrompt += dnaBlock;
+    }
   }
   systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
   if (userId && portfolioRows.length > 0) {

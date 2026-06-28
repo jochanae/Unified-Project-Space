@@ -40,6 +40,15 @@ export interface ApplicationModelPatch {
     relationships?: Array<{ id: string; from: string; to: string; type: string; label?: string }>;
   };
   logic?: Array<{ id: string; name: string; type: string; description?: string }>;
+  // Project DNA layers
+  creativePrinciples?: string[];
+  experienceIntent?: {
+    emotionalRegister?: string[];
+    interactionPosture?: string[];
+    visualLanguage?: string[];
+    designPrinciples?: string[];
+    confidence?: number;
+  };
 }
 
 const EXTRACTION_PROMPT = `You are extracting structured Application Model data from a conversation turn.
@@ -85,7 +94,17 @@ Return a JSON object with ONLY the fields that have new or updated information. 
   },
   "logic": [
     { "id": "slug-id", "name": "Rule Name", "type": "rule", "description": "what it enforces" }
-  ]
+  ],
+  "creativePrinciples": [
+    "Short declarative statement about how this product must behave or feel (a principle, not a feature)"
+  ],
+  "experienceIntent": {
+    "emotionalRegister": ["calm", "focused"],
+    "interactionPosture": ["quick glances", "low friction"],
+    "visualLanguage": ["minimal", "high contrast"],
+    "designPrinciples": ["Show don't tell", "Progressive disclosure"],
+    "confidence": 70
+  }
 }
 
 Rules:
@@ -94,6 +113,8 @@ Rules:
 - For identity and intent text fields, only include if this turn explicitly describes them
 - Use kebab-case for id fields
 - Keep descriptions short (1 sentence max)
+- creativePrinciples: ONLY extract if the conversation explicitly discusses HOW the product should feel or behave as a product philosophy (not a feature list). Each entry is a short statement like "Never interrupt the user's flow" or "Speed is a feature". Do NOT extract if the conversation is purely technical.
+- experienceIntent: ONLY extract if the conversation describes emotional, aesthetic, or interaction qualities (e.g. "it should feel calm", "like a tool not an app", "dark and focused"). confidence is 0-100 reflecting how explicitly these were discussed. Overwrite — this is a living brief.
 - If nothing new was mentioned, return {}
 
 Respond with ONLY the JSON object, no explanation.`;
@@ -115,6 +136,8 @@ async function getCurrentModel(projectId: number): Promise<Record<string, unknow
     components: row.components ?? [],
     data: row.data ?? { entities: [], relationships: [] },
     logic: row.logic ?? [],
+    creativePrinciples: row.creativePrinciples ?? [],
+    experienceIntent: row.experienceIntent ?? {},
   };
 }
 
@@ -245,6 +268,35 @@ async function applyModelPatch(projectId: number, patch: ApplicationModelPatch):
       const merged = [...prev, ...newLogic];
       updates.logic = merged;
       historyRows.push({ projectId, modelVersion: newVersion, fieldChanged: "logic", previousValue: prev, newValue: merged, reason: "conversation-extracted" });
+    }
+  }
+
+  // Merge Creative Principles — accumulate, never delete, deduplicate by normalised text
+  if (patch.creativePrinciples?.length) {
+    const prev = (row.creativePrinciples as string[]) ?? [];
+    const prevNorm = new Set(prev.map((p) => p.trim().toLowerCase()));
+    const newPrinciples = patch.creativePrinciples.filter((p) => p && !prevNorm.has(p.trim().toLowerCase()));
+    if (newPrinciples.length > 0) {
+      const merged = [...prev, ...newPrinciples];
+      updates.creativePrinciples = merged;
+      historyRows.push({ projectId, modelVersion: newVersion, fieldChanged: "creativePrinciples", previousValue: prev, newValue: merged, reason: "conversation-extracted" });
+    }
+  }
+
+  // Merge Experience Intent — overwrite sub-fields present in patch; preserve fields not mentioned
+  if (patch.experienceIntent && Object.keys(patch.experienceIntent).length > 0) {
+    const prev = (row.experienceIntent as Record<string, unknown>) ?? {};
+    const merged: Record<string, unknown> = { ...prev };
+    const ei = patch.experienceIntent;
+    if (ei.emotionalRegister?.length)    merged.emotionalRegister = ei.emotionalRegister;
+    if (ei.interactionPosture?.length)   merged.interactionPosture = ei.interactionPosture;
+    if (ei.visualLanguage?.length)       merged.visualLanguage = ei.visualLanguage;
+    if (ei.designPrinciples?.length)     merged.designPrinciples = ei.designPrinciples;
+    if (ei.confidence != null)           merged.confidence = ei.confidence;
+    merged.lastConfirmed = new Date().toISOString();
+    if (JSON.stringify(merged) !== JSON.stringify(prev)) {
+      updates.experienceIntent = merged;
+      historyRows.push({ projectId, modelVersion: newVersion, fieldChanged: "experienceIntent", previousValue: prev, newValue: merged, reason: "conversation-extracted" });
     }
   }
 

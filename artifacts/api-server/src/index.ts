@@ -157,6 +157,17 @@ async function ensureColumns(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, "ensureColumns: nexus_messages columns failed — server will start anyway");
   }
+
+  try {
+    await db.execute(sql`
+      ALTER TABLE application_models
+        ADD COLUMN IF NOT EXISTS creative_principles jsonb NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS experience_intent jsonb NOT NULL DEFAULT '{}'::jsonb
+    `);
+    logger.info("ensureColumns: application_models.creative_principles + experience_intent verified");
+  } catch (err) {
+    logger.warn({ err }, "ensureColumns: project DNA columns failed — server will start anyway");
+  }
 }
 
 async function main() {

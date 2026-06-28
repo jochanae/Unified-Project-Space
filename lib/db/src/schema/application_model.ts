@@ -13,6 +13,9 @@ export const applicationModelsTable = pgTable("application_models", {
   data: jsonb("data").notNull().default({ entities: [], relationships: [] }),
   logic: jsonb("logic").notNull().default([]),
   buildState: jsonb("build_state").notNull().default({}),
+  // Project DNA layers — Layer 2 (Creative Memory) and Layer 3 (Experience Intent)
+  creativePrinciples: jsonb("creative_principles").notNull().default([]),
+  experienceIntent: jsonb("experience_intent").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -135,6 +138,28 @@ export const ApplicationModelDataSchema = z.object({
   relationships: z.array(ApplicationModelRelationshipSchema).default([]),
 });
 
+// ── Project DNA Layers ────────────────────────────────────────────────────────
+// Layer 2: Creative Principles — accumulated from conversation, never deleted.
+//   Each entry is a short declarative statement the product must honour.
+export const CreativePrinciplesSchema = z.array(z.string()).default([]);
+
+// Layer 3: Experience Intent — overwritten (with confidence tracking) on each pass.
+//   Captures the emotional + sensory brief that shapes every generated artifact.
+export const ExperienceIntentSchema = z.object({
+  emotionalRegister: z.array(z.string()).default([]),   // how the product should feel
+  interactionPosture: z.array(z.string()).default([]),  // how users are expected to use it
+  visualLanguage: z.array(z.string()).default([]),      // aesthetic descriptors
+  designPrinciples: z.array(z.string()).default([]),    // interaction/UX maxims
+  confidence: z.number().min(0).max(100).default(0),
+  lastConfirmed: z.string().nullable().optional(),
+}).default(() => ({
+  emotionalRegister: [],
+  interactionPosture: [],
+  visualLanguage: [],
+  designPrinciples: [],
+  confidence: 0,
+}));
+
 export const ApplicationModelSchema = z.object({
   id: z.number(),
   projectId: z.number(),
@@ -146,6 +171,8 @@ export const ApplicationModelSchema = z.object({
   data: ApplicationModelDataSchema,
   logic: z.array(ApplicationModelLogicSchema).default([]),
   buildState: ApplicationModelBuildStateSchema,
+  creativePrinciples: CreativePrinciplesSchema,
+  experienceIntent: ExperienceIntentSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -158,6 +185,8 @@ export const ApplicationModelPatchSchema = z.object({
   data: ApplicationModelDataSchema.optional(),
   logic: z.array(ApplicationModelLogicSchema).optional(),
   buildState: ApplicationModelBuildStateSchema.optional(),
+  creativePrinciples: CreativePrinciplesSchema.optional(),
+  experienceIntent: ExperienceIntentSchema.optional(),
   reason: z.string().optional(),
 });
 

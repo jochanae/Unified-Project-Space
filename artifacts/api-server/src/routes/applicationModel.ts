@@ -35,6 +35,8 @@ function serializeModel(row: typeof applicationModelsTable.$inferSelect) {
     data: row.data ?? { entities: [], relationships: [] },
     logic: row.logic ?? [],
     buildState: row.buildState ?? {},
+    creativePrinciples: row.creativePrinciples ?? [],
+    experienceIntent: row.experienceIntent ?? {},
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

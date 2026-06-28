@@ -18,6 +18,7 @@
 - [Axiom Flow Vision](axiom-flow-vision.md) — foundational philosophy; graph = Atlas's memory, not user-built canvas; measure every Flow task against this; full doc at .local/axiom-flow-vision.md
 - [Axiom Flow Lens Architecture](flow-lens-architecture.md) — three lenses are genuinely different perspectives, not layouts; Builder=engineering board, Storyteller=narrative chapters, Designer=AxiomFlow canvas
 - [Builder Lens Identity](builder-lens-identity.md) — Builder must stay clinical/schema-aesthetic; status-grouped flat lists erode its identity vs Storyteller
+- [Project DNA Layers](project-dna-layers.md) — creative_principles (accumulate) + experience_intent (overwrite-per-subfield) in application_models; injected into builder prompt when non-empty
 - [Workspace Chat Streaming](chat-streaming.md) — callModel() now streams via .stream()+onToken callback; follow-up calls (FILE_READ/TREE/agentic) stay non-streaming intentionally
 - [Builder Telemetry Loop Fix](builder-telemetry-loop.md) — [LOCAL_APPLY_SUCCESS] must never persist to DB or appear in history; three-layer fix: backend skip, history filter, loop cap
 - [Flow Map model-sync](flow-map-model-sync.md) — AM PATCH auto-triggers merge sync; am-page-/am-entity-/am-rel- node IDs are AM-owned; user nodes never overwritten
