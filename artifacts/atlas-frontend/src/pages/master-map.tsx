@@ -500,9 +500,15 @@ export default function MasterMap() {
 
   useEffect(() => {
     if (loading || !canvasRef.current) return;
+    // Gate: if we have projects, wait for the first stats fetch before building
+    // the scene. Without this, the scene builds twice — once with empty stats
+    // (no node sizes/colors) and again when statsVersion increments — causing a
+    // visible flash/shift on every page open.
+    if (projects.length > 0 && statsVersion === 0) return;
     const canvas = canvasRef.current;
-    const W = canvas.offsetWidth || window.innerWidth;
-    const H = canvas.offsetHeight || window.innerHeight;
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width || canvas.offsetWidth || window.innerWidth;
+    const H = rect.height || canvas.offsetHeight || window.innerHeight;
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -1395,7 +1401,11 @@ export default function MasterMap() {
       layerStackRef.current = null;
       renderer.dispose();
     };
-  }, [loading, theme, statsVersion, tensionsVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, theme, statsVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  // tensionsVersion intentionally omitted: the scene builds once when statsVersion
+  // first becomes non-zero. tensionsRef.current is read at build time — if tensions
+  // loaded before stats they'll appear; if after, the scene won't rebuild for them.
+  // This prevents the double-build flash that caused the visible "shift" on page open.
 
   const isMobile = window.innerWidth < 768;
 
