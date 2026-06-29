@@ -60,6 +60,41 @@ function createSessionCookie(token: string, res: import("express").Response) {
   });
 }
 
+// ── Supabase JWT bridge ──────────────────────────────────────────────────────
+// When Lovable/Supabase sends a Bearer token that isn't in our local session
+// table, validate it against the Supabase auth API and auto-provision a local
+// user record so that all downstream route logic works identically.
+const SUPABASE_URL = (process.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
+
+async function getUserFromSupabaseToken(bearerToken: string): Promise<typeof usersTable.$inferSelect | null> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${bearerToken}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { id?: string; email?: string };
+    if (!data.email) return null;
+    const email = data.email.toLowerCase();
+
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+    if (existing) return existing;
+
+    const role = (SUPER_ADMIN_EMAIL && email === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
+    const [created] = await db.insert(usersTable).values({
+      email,
+      name: email.split("@")[0],
+      passwordHash: null,
+      role,
+      subscriptionTier: role === "super_admin" ? "founder" : "free",
+    }).returning();
+    return created ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getUserFromCookie(req: import("express").Request) {
   // 1. Try cookie first
   const token = req.cookies?.[SESSION_COOKIE];
@@ -68,6 +103,8 @@ export async function getUserFromCookie(req: import("express").Request) {
   const bearerToken = typeof bearer === "string" && bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : null;
   const effectiveToken = token || bearerToken;
   if (!effectiveToken) return null;
+
+  // 3. Local session lookup
   const now = new Date();
   const rows = await db
     .select({ user: usersTable })
@@ -75,7 +112,14 @@ export async function getUserFromCookie(req: import("express").Request) {
     .innerJoin(usersTable, eq(userSessionsTable.userId, usersTable.id))
     .where(and(eq(userSessionsTable.token, effectiveToken), gt(userSessionsTable.expiresAt, now)))
     .limit(1);
-  return rows[0]?.user ?? null;
+  if (rows[0]?.user) return rows[0].user;
+
+  // 4. Supabase JWT fallback — validate against Supabase and auto-provision local user
+  if (bearerToken && bearerToken.split(".").length === 3) {
+    return getUserFromSupabaseToken(bearerToken);
+  }
+
+  return null;
 }
 
 // GET /api/auth/session/exchange
