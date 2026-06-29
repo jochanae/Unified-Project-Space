@@ -90,6 +90,7 @@ function projectIdFromPath(pathname: string): number | null {
 function ShellNavMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (!open) return;
@@ -108,7 +109,7 @@ function ShellNavMenu() {
           <path d="M1 5a2 2 0 012-2h2.5l1.5 2H13a2 2 0 012 2v5a2 2 0 01-2 2H3a2 2 0 01-2-2V5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
         </svg>
       ),
-      action: () => { setOpen(false); window.dispatchEvent(new CustomEvent("axiom:open-projects-drawer")); },
+      action: () => { setOpen(false); window.dispatchEvent(new CustomEvent("axiom:open-nav-drawer")); },
     },
     {
       label: "Dashboard",
@@ -119,7 +120,15 @@ function ShellNavMenu() {
           <rect x="8.5" y="9" width="6.5" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
         </svg>
       ),
-      action: () => { setOpen(false); window.dispatchEvent(new CustomEvent("axiom:open-dashboard")); },
+      action: () => {
+        setOpen(false);
+        if (location === "/home") {
+          window.dispatchEvent(new CustomEvent("axiom:open-dashboard"));
+        } else {
+          setLocation("/home");
+          setTimeout(() => window.dispatchEvent(new CustomEvent("axiom:open-dashboard")), 350);
+        }
+      },
     },
   ];
 
